@@ -1,4 +1,4 @@
 interface:
-  display_name: "Drift Check"
-  short_description: "Check current changes against task scope"
-  default_prompt: "Use $drift-check to check current changes against the active task, generated paths, extension boundaries, and verification requirements."
+  display_name: 'Drift Check'
+  short_description: 'Check current changes against task scope'
+  default_prompt: 'Use $drift-check to check current changes against the active task, generated paths, extension boundaries, and verification requirements.'

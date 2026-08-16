@@ -119,16 +119,16 @@ The `src/events/` system provides type-safe messaging across all Chrome extensio
 
 ### Available Channels
 
-| Channel | Direction | Transport | Type | Defined In |
-|---------|-----------|-----------|------|------------|
-| `cs2cs` | Content Script -> Content Script | In-memory (globalThis) | One-to-one | `contentScript/` |
-| `cs2bg` | Content Script -> Background | `chrome.runtime.sendMessage` | One-to-one | `contentScript/` |
-| `cs2ep` | Content Script -> Extension Page | `chrome.runtime.sendMessage` | One-to-one | `contentScript/` |
-| `bg2bg` | Background -> Background | In-memory (globalThis) | One-to-one | `background/` |
-| `bg2cs` | Background -> Content Script | `chrome.tabs.sendMessage` | One-to-one | `background/` |
-| `bg2ep` | Background -> Extension Page | `chrome.runtime.sendMessage` | One-to-one | `background/` |
-| `ep2bg` | Extension Page -> Background | `chrome.runtime.sendMessage` | One-to-one | `extensionPage/` |
-| `ep2cs` | Extension Page -> Content Script | Port relay via Background | One-to-many | `unified-ep2cs` |
+| Channel | Direction                        | Transport                    | Type        | Defined In       |
+| ------- | -------------------------------- | ---------------------------- | ----------- | ---------------- |
+| `cs2cs` | Content Script -> Content Script | In-memory (globalThis)       | One-to-one  | `contentScript/` |
+| `cs2bg` | Content Script -> Background     | `chrome.runtime.sendMessage` | One-to-one  | `contentScript/` |
+| `cs2ep` | Content Script -> Extension Page | `chrome.runtime.sendMessage` | One-to-one  | `contentScript/` |
+| `bg2bg` | Background -> Background         | In-memory (globalThis)       | One-to-one  | `background/`    |
+| `bg2cs` | Background -> Content Script     | `chrome.tabs.sendMessage`    | One-to-one  | `background/`    |
+| `bg2ep` | Background -> Extension Page     | `chrome.runtime.sendMessage` | One-to-one  | `background/`    |
+| `ep2bg` | Extension Page -> Background     | `chrome.runtime.sendMessage` | One-to-one  | `extensionPage/` |
+| `ep2cs` | Extension Page -> Content Script | Port relay via Background    | One-to-many | `unified-ep2cs`  |
 
 ### How to Define and Use an Event
 

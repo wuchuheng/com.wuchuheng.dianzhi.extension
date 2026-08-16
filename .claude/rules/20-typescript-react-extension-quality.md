@@ -1,12 +1,12 @@
 ---
 paths:
-  - "src/**/*.ts"
-  - "src/**/*.tsx"
-  - "tests/**/*.ts"
-  - "manifest.config.ts"
-  - "vite.config.ts"
-  - "vitest.config.ts"
-  - "playwright.config.ts"
+  - 'src/**/*.ts'
+  - 'src/**/*.tsx'
+  - 'tests/**/*.ts'
+  - 'manifest.config.ts'
+  - 'vite.config.ts'
+  - 'vitest.config.ts'
+  - 'playwright.config.ts'
 ---
 
 # TypeScript React Extension Quality Rules

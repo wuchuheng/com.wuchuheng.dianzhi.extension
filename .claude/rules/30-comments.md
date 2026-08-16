@@ -1,8 +1,8 @@
 ---
 paths:
-  - "src/**/*.ts"
-  - "src/**/*.tsx"
-  - "tests/**/*.ts"
+  - 'src/**/*.ts'
+  - 'src/**/*.tsx'
+  - 'tests/**/*.ts'
 ---
 
 # Comment And Documentation Rules

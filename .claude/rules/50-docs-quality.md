@@ -1,9 +1,9 @@
 ---
 paths:
-  - "docs/**/*.md"
-  - "README.md"
-  - "CLAUDE.md"
-  - ".claude/**/*.md"
+  - 'docs/**/*.md'
+  - 'README.md'
+  - 'CLAUDE.md'
+  - '.claude/**/*.md'
 ---
 
 # Documentation Quality Rules

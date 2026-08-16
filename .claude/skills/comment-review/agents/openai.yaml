@@ -1,4 +1,4 @@
 interface:
-  display_name: "Comment Review"
-  short_description: "Review comments and TSDoc"
-  default_prompt: "Review changed comments and TSDoc for intent, invariants, browser constraints, and usefulness."
+  display_name: 'Comment Review'
+  short_description: 'Review comments and TSDoc'
+  default_prompt: 'Review changed comments and TSDoc for intent, invariants, browser constraints, and usefulness.'

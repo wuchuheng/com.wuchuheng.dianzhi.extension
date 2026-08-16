@@ -1,4 +1,4 @@
 interface:
-  display_name: "Quality Review"
-  short_description: "Review TypeScript extension construction quality"
-  default_prompt: "Review changed TypeScript, React, and Chrome extension code for readability, decomposition, defensive boundaries, context separation, and tests."
+  display_name: 'Quality Review'
+  short_description: 'Review TypeScript extension construction quality'
+  default_prompt: 'Review changed TypeScript, React, and Chrome extension code for readability, decomposition, defensive boundaries, context separation, and tests.'

@@ -9,15 +9,15 @@ Create a single source-of-truth AI instruction file (`CLAUDE.md`) for the projec
 
 ## Decisions
 
-| Decision | Choice |
-|----------|--------|
-| Source-of-truth file | `CLAUDE.md` |
-| Symlink file | `GEMINI.md -> CLAUDE.md` |
-| Other AI tools | Claude Code + Gemini CLI only |
-| Language | English |
-| Scope | Comprehensive guide |
-| Approach | Single file with section anchors (Approach A) |
-| SDLC reference | Reference agent-docs/ from global plugin |
+| Decision             | Choice                                        |
+| -------------------- | --------------------------------------------- |
+| Source-of-truth file | `CLAUDE.md`                                   |
+| Symlink file         | `GEMINI.md -> CLAUDE.md`                      |
+| Other AI tools       | Claude Code + Gemini CLI only                 |
+| Language             | English                                       |
+| Scope                | Comprehensive guide                           |
+| Approach             | Single file with section anchors (Approach A) |
+| SDLC reference       | Reference agent-docs/ from global plugin      |
 
 ## CLAUDE.md Structure
 
@@ -35,6 +35,7 @@ The file will contain these sections:
 ### Section 2 — Development Commands
 
 All npm scripts documented with descriptions:
+
 - `dev`, `build`, `build:debug`, `typecheck`, `lint`, `lint:fix`, `format`, `format:check`
 - `test`, `test:coverage`, `test:e2e`, `test:e2e:ui`, `test:e2e:headed`
 - `watch` (nodemon + Chromium auto-refresh)
@@ -44,6 +45,7 @@ All npm scripts documented with descriptions:
 ### Section 3 — Project Structure
 
 Document `src/` directory layout with each directory's responsibility:
+
 - `popup/`, `sidepanel/`, `options/` — Extension UI pages
 - `content/` — Content scripts with Shadow DOM isolation
 - `background/` — Service worker (Manifest V3)
@@ -54,6 +56,7 @@ Document `src/` directory layout with each directory's responsibility:
 ### Section 4 — Extension Communication Pattern
 
 Document the `src/events/` system:
+
 - Unified `ep2cs` pattern: one API for all extension contexts
 - Runtime environment detection via `ep2cs-env.ts`
 - Internal modules: `factories.ts`, `messaging.ts`, `port-relay.ts`, `callback-map.ts`
@@ -62,6 +65,7 @@ Document the `src/events/` system:
 ### Section 5 — Code Quality & AI Coding Rules
 
 Practical rules:
+
 - TypeScript strict mode, no `any`
 - Functional preference: pure functions over classes
 - Tailwind CSS utility classes

@@ -92,3 +92,5 @@ export const settingsCommand = events.ep2bg<SettingsCommand, DianzhiSettings>(
 export const databaseRequest = events.bg2ep<DatabaseRequest, DatabaseResult>(
   'dianzhi:database-request'
 )
+
+export const databaseReady = events.bg2ep<void, true>('dianzhi:database-ready')

@@ -83,7 +83,11 @@ export type ConversationCommand =
       requestId: string
       payload: { conversationId: number }
     }
-  | { type: 'panel.close'; requestId: string; payload: Record<string, never> }
+  | {
+      type: 'panel.close'
+      requestId: string
+      payload: { conversationId: number }
+    }
 
 export interface ConversationCommandResult {
   accepted: true
@@ -178,6 +182,7 @@ export function parseConversationCommand(value: unknown): ParseResult<Conversati
     case 'stream.stop':
     case 'panel.open':
     case 'panel.rendered':
+    case 'panel.close':
       if (!isPositiveInteger(payload.conversationId)) return invalid('Conversation ID is invalid.')
       return {
         ok: true,
@@ -209,8 +214,6 @@ export function parseConversationCommand(value: unknown): ParseResult<Conversati
           payload: { selectionKey: payload.selectionKey, toolId: payload.toolId },
         },
       }
-    case 'panel.close':
-      return { ok: true, value: { type: value.type, requestId, payload: {} } }
     default:
       return invalid('Conversation command type is invalid.')
   }

@@ -2,7 +2,7 @@
  * Content script event patterns.
  */
 
-import type { OneToOneEvent } from '../types'
+import type { MessageOneToOneEvent, OneToOneEvent } from '../types'
 import { createInMemoryEvent, createMessageEvent } from '../internal/factories'
 import { buildEventName } from '../event-name'
 
@@ -29,7 +29,9 @@ export const cs2cs = <Args = void, Return = void>(name: string): OneToOneEvent<A
  * await event.dispatch('hello') // returns string
  * ```
  */
-export const cs2bg = <Args = void, Return = void>(name: string): OneToOneEvent<Args, Return> =>
+export const cs2bg = <Args = void, Return = void>(
+  name: string
+): MessageOneToOneEvent<Args, Return> =>
   createMessageEvent<Args, Return>(buildEventName('cs2bg', name))
 
 /**

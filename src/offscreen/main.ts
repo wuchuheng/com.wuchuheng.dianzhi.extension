@@ -1,4 +1,4 @@
-import { databaseRequest } from '@/events/config'
+import { databaseReady, databaseRequest } from '@/events/config'
 import { log, logError, Scope } from '@/events/logger'
 import openDB from '@/vendor/web-sqlite'
 import { createDatabaseRpc } from './database/rpc'
@@ -27,6 +27,7 @@ async function initialize(): Promise<void> {
 
   const store = createConversationStore(db, () => new Date().toISOString())
   databaseRequest.handle(createDatabaseRpc(store))
+  databaseReady.handle(async () => true)
   log(Scope.EXTENSION_PAGE, 'Dianzhi OPFS conversation database is ready')
 }
 

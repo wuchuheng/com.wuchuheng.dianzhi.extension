@@ -355,34 +355,34 @@ git commit -m "feat(provider): stream OpenAI-compatible responses"
 - Produces `createOffscreenClient(chromeApi, timers)` with `ensureDocument()` and typed `request(operation, args, options)`.
 - Produces `createConversationManager(dependencies)` with sender-aware command handlers, `connect(port)`, `disconnect(port)`, and `getLiveSnapshot(conversationId)`.
 
-- [ ] **Step 1: Write failing lifecycle and manager tests**
+- [x] **Step 1: Write failing lifecycle and manager tests**
 
 Prove concurrent DB requests create one offscreen document, existing context reuse, out-of-order correlation, timeout mapping, one retry for idempotent reads, no mutation replay, sender-derived tab ID, old-run abort before replacement, lazy tool creation, exact provider history, immediate deltas, serialized checkpoint thresholds, terminal flush ordering, subscriptions, restart state, panel render acknowledgement, and late-event rejection.
 
-- [ ] **Step 2: Run red background tests**
+- [x] **Step 2: Run red background tests**
 
 Run: `pnpm vitest --run tests/unit/background`
 Expected: FAIL because the new clients/managers are missing.
 
-- [ ] **Step 3: Implement single-flight offscreen lifecycle**
+- [x] **Step 3: Implement single-flight offscreen lifecycle**
 
 Use `chrome.runtime.getContexts({ contextTypes: ['OFFSCREEN_DOCUMENT'], documentUrls: [chrome.runtime.getURL('src/offscreen/index.html')] })` and one shared creation promise cleared in `finally`. Use reason `WORKERS` with a database-specific justification.
 
-- [ ] **Step 4: Implement conversation and provider state machines**
+- [x] **Step 4: Implement conversation and provider state machines**
 
 Use maps keyed by numeric IDs for live runs/subscribers and a per-tab record `{ selectionKey, activeToolId, activeConversationId, panelOpen }`. Persist only that record to `chrome.storage.session`. Serialize checkpoints so an older write cannot overwrite newer accumulated content.
 
-- [ ] **Step 5: Implement panel lifecycle**
+- [x] **Step 5: Implement panel lifecycle**
 
 Open from the content user gesture, validate the panel's active-tab claim against a pending handoff, subscribe before database load, send persisted plus live snapshots, and emit handoff-ready only after panel-rendered. Close with `chrome.sidePanel.close({ tabId })`.
 
-- [ ] **Step 6: Wire background entry and run gates**
+- [x] **Step 6: Wire background entry and run gates**
 
 Remove demo test handlers and eager retry logging. Initialize relay, typed commands, ports, session recovery, and meaningful structured logs.
 
 Run: `pnpm vitest --run tests/unit/background && pnpm run typecheck && pnpm run lint`
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/background tests/unit/background

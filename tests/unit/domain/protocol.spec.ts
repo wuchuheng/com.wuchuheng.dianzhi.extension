@@ -40,6 +40,7 @@ describe('parseConversationCommand', () => {
     },
     { type: 'conversation.ensureTool', requestId: 'r1', payload: { selectionKey: 1, toolId: '' } },
     { type: 'panel.open', requestId: 'r1', payload: { conversationId: 1, tabId: 99 } },
+    { type: 'panel.close', requestId: 'r1', payload: {} },
     { type: 'unknown', requestId: 'r1', payload: {} },
   ])('rejects invalid or caller-owned identity payload %#', (value) => {
     expect(parseConversationCommand(value)).toEqual({

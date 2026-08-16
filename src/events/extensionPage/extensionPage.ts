@@ -2,7 +2,7 @@
  * Extension page event patterns.
  */
 
-import type { OneToOneEvent } from '../types'
+import type { MessageOneToOneEvent } from '../types'
 import { createMessageEvent } from '../internal/factories'
 import { buildEventName } from '../event-name'
 
@@ -15,7 +15,9 @@ import { buildEventName } from '../event-name'
  * // In background: event.handle(async () => 'data from background')
  * ```
  */
-export const ep2bg = <Args = void, Return = void>(name: string): OneToOneEvent<Args, Return> =>
+export const ep2bg = <Args = void, Return = void>(
+  name: string
+): MessageOneToOneEvent<Args, Return> =>
   createMessageEvent<Args, Return>(buildEventName('ep2bg', name), {
     senderFilter: (sender) => sender.origin?.startsWith('chrome-extension://') ?? false,
   })

@@ -1,22 +1,249 @@
-import crxLogo from '@/assets/crx.svg'
-import reactLogo from '@/assets/react.svg'
-import viteLogo from '@/assets/vite.svg'
-import HelloWorld from '@/components/HelloWorld'
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { Composer } from '@/dianzhi/ui/Composer'
+import { ConversationStatus } from '@/dianzhi/ui/ConversationStatus'
+import { MessageList } from '@/dianzhi/ui/MessageList'
+import { ToolTabs } from '@/dianzhi/ui/ToolTabs'
+import { DEFAULT_SETTINGS } from '@/dianzhi/domain/settings'
+import type { DianzhiSettings } from '@/dianzhi/domain/types'
+import type { ConversationCommand, ConversationUpdate } from '@/dianzhi/domain/protocol'
+import { SIDEPANEL_PORT_NAME } from '@/dianzhi/domain/protocol'
+import { extensionConversationCommand, settingsCommand } from '@/events/config'
+import {
+  INITIAL_PANEL_STATE,
+  cycleEnabledTool,
+  reducePanelState,
+  type PanelState,
+} from './panel-state'
 import './App.css'
 
-export default function App() {
+export interface SidePanelViewProps {
+  state: PanelState
+  reasoningEnabled: boolean
+  draft: string
+  onDraftChange(value: string): void
+  onToolSelect(toolId: string): void
+  onSend(): void
+  onStop(): void
+  onRetry(): void
+  onClose(): void
+  onOpenSettings(): void
+}
+
+export function SidePanelView({
+  state,
+  reasoningEnabled,
+  draft,
+  onDraftChange,
+  onToolSelect,
+  onSend,
+  onStop,
+  onRetry,
+  onClose,
+  onOpenSettings,
+}: SidePanelViewProps) {
+  const snapshot = state.snapshot
+  const latestAssistant =
+    [...(snapshot?.messages ?? [])].reverse().find((message) => message.role === 'assistant') ??
+    null
+  const streaming = latestAssistant?.status === 'streaming'
+  const retryable = latestAssistant?.status === 'error' || latestAssistant?.status === 'stopped'
+  const needsSettings = latestAssistant?.errorCode === 'PROVIDER_NOT_CONFIGURED'
+
   return (
-    <div>
-      <a href="https://vite.dev" target="_blank" rel="noreferrer">
-        <img src={viteLogo} className="logo" alt="Vite logo" />
-      </a>
-      <a href="https://reactjs.org/" target="_blank" rel="noreferrer">
-        <img src={reactLogo} className="logo react" alt="React logo" />
-      </a>
-      <a href="https://crxjs.dev/vite-plugin" target="_blank" rel="noreferrer">
-        <img src={crxLogo} className="logo crx" alt="crx logo" />
-      </a>
-      <HelloWorld msg="Vite + React + CRXJS" />
+    <div className="dz-panel-page">
+      <header className="dz-panel-header">
+        <div className="dz-brand">
+          <span>点</span>
+          <strong>点知</strong>
+        </div>
+        <button type="button" className="dz-icon-button" aria-label="关闭侧边栏" onClick={onClose}>
+          ×
+        </button>
+      </header>
+      {snapshot ? (
+        <>
+          <ToolTabs
+            tools={snapshot.tools}
+            activeToolId={snapshot.activeToolId}
+            onSelect={onToolSelect}
+          />
+          <main className="dz-panel-history">
+            <MessageList
+              messages={snapshot.messages}
+              mode="chat"
+              reasoningEnabled={reasoningEnabled}
+            />
+            {(state.error || latestAssistant?.errorMessage) && (
+              <div className="dz-error" role="alert">
+                <span>{state.error?.message ?? latestAssistant?.errorMessage}</span>
+                {needsSettings && (
+                  <button type="button" onClick={onOpenSettings}>
+                    打开设置
+                  </button>
+                )}
+              </div>
+            )}
+          </main>
+          <footer className="dz-panel-composer">
+            <ConversationStatus message={latestAssistant} />
+            {streaming && (
+              <button type="button" className="dz-secondary" onClick={onStop}>
+                停止
+              </button>
+            )}
+            {retryable && (
+              <button type="button" className="dz-secondary" onClick={onRetry}>
+                重试
+              </button>
+            )}
+            <Composer value={draft} disabled={streaming} onChange={onDraftChange} onSend={onSend} />
+          </footer>
+        </>
+      ) : (
+        <main className="dz-panel-empty">
+          <div className="dz-empty-mark">点</div>
+          <h1>选择英文文本后，继续在这里对话</h1>
+          <p>{state.connected ? '等待当前标签页的点知会话…' : '连接已断开，请重新打开侧边栏。'}</p>
+        </main>
+      )}
     </div>
+  )
+}
+
+function requestId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+export default function App() {
+  const [state, dispatch] = useReducer(reducePanelState, INITIAL_PANEL_STATE)
+  const [settings, setSettings] = useState<DianzhiSettings>(DEFAULT_SETTINGS)
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const renderedConversation = useRef<number | null>(null)
+
+  const command = useCallback(async (value: ConversationCommand) => {
+    const result = await extensionConversationCommand.dispatch(value)
+    if (result.snapshot) dispatch({ type: 'conversation.sync', snapshot: result.snapshot })
+  }, [])
+
+  useEffect(() => {
+    void settingsCommand
+      .dispatch({ type: 'settings.get', requestId: requestId('settings') })
+      .then(setSettings)
+    const port = chrome.runtime.connect({ name: SIDEPANEL_PORT_NAME })
+    port.onMessage.addListener((value: unknown) => {
+      if (
+        typeof value === 'object' &&
+        value !== null &&
+        typeof (value as { type?: unknown }).type === 'string'
+      ) {
+        dispatch(value as ConversationUpdate)
+      }
+    })
+    port.onDisconnect.addListener(() => dispatch({ type: 'panel.disconnected' }))
+    void chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+      if (tab?.id) port.postMessage({ type: 'ready', tabId: tab.id })
+    })
+    return () => port.disconnect()
+  }, [])
+
+  useEffect(() => {
+    const conversationId = state.snapshot?.conversation.id
+    if (!conversationId || renderedConversation.current === conversationId) return
+    renderedConversation.current = conversationId
+    void command({
+      type: 'panel.rendered',
+      requestId: requestId('rendered'),
+      payload: { conversationId },
+    })
+  }, [command, state.snapshot?.conversation.id])
+
+  const currentTool = state.snapshot?.activeToolId ?? ''
+  const draft = drafts[currentTool] ?? ''
+  const withConversation = useCallback(
+    (build: (id: number) => ConversationCommand) => {
+      const id = state.snapshot?.conversation.id
+      if (id) void command(build(id))
+    },
+    [command, state.snapshot?.conversation.id]
+  )
+  const selectTool = useCallback(
+    (toolId: string) => {
+      const snapshot = state.snapshot
+      if (!snapshot || toolId === snapshot.activeToolId) return
+      void command({
+        type: 'conversation.ensureTool',
+        requestId: requestId('tool'),
+        payload: { selectionKey: snapshot.conversation.selectionKey, toolId },
+      })
+    },
+    [command, state.snapshot]
+  )
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        withConversation((conversationId) => ({
+          type: 'panel.close',
+          requestId: requestId('close'),
+          payload: { conversationId },
+        }))
+      } else if (event.ctrlKey && event.key === '.') {
+        event.preventDefault()
+        withConversation((conversationId) => ({
+          type: 'stream.stop',
+          requestId: requestId('stop'),
+          payload: { conversationId },
+        }))
+      } else if (event.ctrlKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
+        event.preventDefault()
+        const toolId = cycleEnabledTool(state.snapshot, event.key === 'ArrowLeft' ? -1 : 1)
+        if (toolId) selectTool(toolId)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [selectTool, state.snapshot, withConversation])
+
+  return (
+    <SidePanelView
+      state={state}
+      reasoningEnabled={settings.provider.reasoningEnabled}
+      draft={draft}
+      onDraftChange={(value) => setDrafts((current) => ({ ...current, [currentTool]: value }))}
+      onToolSelect={selectTool}
+      onSend={() => {
+        const content = draft.trim()
+        if (!content) return
+        setDrafts((current) => ({ ...current, [currentTool]: '' }))
+        withConversation((conversationId) => ({
+          type: 'conversation.followup',
+          requestId: requestId('followup'),
+          payload: { conversationId, content },
+        }))
+      }}
+      onStop={() =>
+        withConversation((conversationId) => ({
+          type: 'stream.stop',
+          requestId: requestId('stop'),
+          payload: { conversationId },
+        }))
+      }
+      onRetry={() =>
+        withConversation((conversationId) => ({
+          type: 'conversation.retry',
+          requestId: requestId('retry'),
+          payload: { conversationId },
+        }))
+      }
+      onClose={() =>
+        withConversation((conversationId) => ({
+          type: 'panel.close',
+          requestId: requestId('close'),
+          payload: { conversationId },
+        }))
+      }
+      onOpenSettings={() => void chrome.runtime.openOptionsPage()}
+    />
   )
 }

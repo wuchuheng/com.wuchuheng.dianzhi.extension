@@ -122,6 +122,16 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     return snapshot?.conversation.tabId ?? null
   }
 
+  function moveSubscribers(fromConversationId: number, toConversationId: number): void {
+    if (fromConversationId === toConversationId) return
+    const ports = subscribers.get(fromConversationId)
+    if (!ports) return
+    subscribers.delete(fromConversationId)
+    const destination = subscribers.get(toConversationId) ?? new Set<chrome.runtime.Port>()
+    for (const port of ports) destination.add(port)
+    subscribers.set(toConversationId, destination)
+  }
+
   function applyUpdate(update: ConversationUpdate): void {
     const snapshot = liveSnapshots.get(
       'snapshot' in update ? update.snapshot.conversation.id : update.conversationId
@@ -294,10 +304,9 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     })
     await startProvider(snapshot, settings, assistant)
     if (previous?.panelOpen) {
-      const previousSubscribers = subscribers.get(previous.activeConversationId)
+      moveSubscribers(previous.activeConversationId, stored.conversation.id)
+      const previousSubscribers = subscribers.get(stored.conversation.id)
       if (previousSubscribers) {
-        subscribers.delete(previous.activeConversationId)
-        subscribers.set(stored.conversation.id, previousSubscribers)
         const current = liveSnapshots.get(stored.conversation.id)
         if (current) {
           for (const port of previousSubscribers) {
@@ -439,10 +448,12 @@ export function createConversationManager(dependencies: ConversationManagerDepen
         promptSnapshot,
       })
       const snapshot = snapshotFromStored(stored, settings, tool.id)
+      const previousConversationId = state.activeConversationId
       state.activeToolId = tool.id
       state.activeConversationId = stored.conversation.id
       tabStates.set(tabId, state)
       liveSnapshots.set(stored.conversation.id, cloneSnapshot(snapshot))
+      if (state.panelOpen) moveSubscribers(previousConversationId, stored.conversation.id)
       await persistStates()
       await publish({ type: 'conversation.toolChanged', snapshot })
       if (stored.messages.length === 1) {
@@ -507,17 +518,27 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     }
 
     port.onMessage.addListener((message: unknown) => {
-      if (
-        typeof message !== 'object' ||
-        message === null ||
-        (message as { type?: unknown }).type !== 'subscribe' ||
-        !Number.isSafeInteger((message as { conversationId?: unknown }).conversationId)
-      ) {
+      if (typeof message !== 'object' || message === null) return
+      const input = message as { type?: unknown; tabId?: unknown; conversationId?: unknown }
+      if (input.type === 'ready' && Number.isSafeInteger(input.tabId) && Number(input.tabId) > 0) {
+        const pending = [...pendingHandoffs.entries()].find(([, tabId]) => tabId === input.tabId)
+        const state = tabStates.get(Number(input.tabId))
+        const conversationId =
+          pending?.[0] ?? (state?.panelOpen ? state.activeConversationId : null)
+        if (!conversationId) return
+        subscribe(conversationId)
+        if (!liveSnapshots.has(conversationId)) {
+          void dependencies
+            .loadSettings()
+            .then((settings) => loadSnapshot(conversationId, settings))
+            .then((snapshot) => port.postMessage({ type: 'conversation.sync', snapshot }))
+            .catch(() => undefined)
+        }
         return
       }
-      const conversationId = (message as { conversationId: number }).conversationId
-      if (conversationId < 1) return
-      subscribe(conversationId)
+      if (input.type !== 'subscribe' || !Number.isSafeInteger(input.conversationId)) return
+      const conversationId = Number(input.conversationId)
+      if (conversationId > 0) subscribe(conversationId)
     })
     port.onDisconnect.addListener(() => disconnect(port))
   }

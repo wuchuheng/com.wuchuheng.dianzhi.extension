@@ -506,20 +506,20 @@ git commit -m "feat(popover): add anchored Dianzhi conversation UI"
 - Produces `reducePanelState`, `cycleEnabledTool`, and a panel that announces ready/rendered with validated active tab identity.
 - Reuses shared tabs, history, reasoning, composer, and status components.
 
-- [ ] **Step 1: Write failing Side Panel tests**
+- [x] **Step 1: Write failing Side Panel tests**
 
 Cover initial sync, persisted/live reconciliation, active tool/history, click and `Ctrl+←/→`, Enter/Shift+Enter, `Ctrl+.`, `Esc`, streaming/error/stopped states, disconnect behavior, and the absence of new-chat/archive controls.
 
-- [ ] **Step 2: Run red Side Panel tests**
+- [x] **Step 2: Run red Side Panel tests**
 
 Run: `pnpm vitest --run tests/unit/sidepanel`
 Expected: FAIL because panel state and product UI are missing.
 
-- [ ] **Step 3: Implement panel state and UI**
+- [x] **Step 3: Implement panel state and UI**
 
 Query `{ active: true, currentWindow: true }` for the candidate tab ID, let background validate it, announce ready, render the synchronized current selection, then acknowledge rendered. Keep drafts local per active tool but all messages authoritative from background.
 
-- [ ] **Step 4: Run gates and commit**
+- [x] **Step 4: Run gates and commit**
 
 Run: `pnpm vitest --run tests/unit/sidepanel && pnpm run typecheck && pnpm run lint && pnpm run build`
 

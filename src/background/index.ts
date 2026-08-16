@@ -4,6 +4,7 @@ import { createProviderRunner } from './provider-runner'
 import { DianzhiError } from '@/dianzhi/domain/errors'
 import { mergeSettings, validateSettings } from '@/dianzhi/domain/settings'
 import { parseConversationCommand, type SettingsCommand } from '@/dianzhi/domain/protocol'
+import { streamChat } from '@/dianzhi/provider/client'
 import {
   contentConversationCommand,
   conversationUpdateToContent,
@@ -111,6 +112,22 @@ settingsCommand.handle(async (value) => {
       message: validation.errors[0]?.message ?? 'The settings are invalid.',
       context: { field: validation.errors[0]?.path ?? 'settings' },
     })
+  }
+  if (command.type === 'settings.testProvider') {
+    if (!settings.provider.apiKey.trim()) {
+      throw new DianzhiError({
+        code: 'PROVIDER_NOT_CONFIGURED',
+        message: 'API key is required before testing the provider.',
+      })
+    }
+    await streamChat(
+      {
+        provider: settings.provider,
+        messages: [{ role: 'user', content: 'Reply with OK.' }],
+        signal: new AbortController().signal,
+      },
+      { fetch, onDelta: () => undefined, onDone: () => undefined }
+    )
   }
   if (command.type === 'settings.save') await chrome.storage.sync.set({ [SETTINGS_KEY]: settings })
   return settings

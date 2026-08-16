@@ -550,24 +550,24 @@ git commit -m "feat(sidepanel): add native full-history chat"
 - Options loads/saves versioned `DianzhiSettings`, tests provider/tool prompts through background, and blocks invalid saves.
 - Popup reports configured/unconfigured state and opens Options.
 
-- [ ] **Step 1: Write failing options/popup tests**
+- [x] **Step 1: Write failing options/popup tests**
 
 Cover three navigation sections, initial merge, provider fields, API-key reveal, temperature output, reasoning/thinking dependencies, `extraBody`, Save validation/status, provider test stream, built-in rename/enable/no-delete, custom create/reorder/delete, prompt mode/preview/test, shortcut capture, configured popup status, and open-options action.
 
-- [ ] **Step 2: Run red tests**
+- [x] **Step 2: Run red tests**
 
 Run: `pnpm vitest --run tests/unit/options tests/unit/popup`
 Expected: FAIL because scaffold views do not implement Dianzhi.
 
-- [ ] **Step 3: Implement Options**
+- [x] **Step 3: Implement Options**
 
 Use controlled typed form state and domain validation. Save through `chrome.storage.sync`; never log or render the full key outside its password input. Provider/tool tests stream through background but do not persist conversations.
 
-- [ ] **Step 4: Implement Popup and remove demo assets/components**
+- [x] **Step 4: Implement Popup and remove demo assets/components**
 
 Replace Vite/React/CRX branding. Delete `HelloWorld`, `HelloInCSUI`, unused demo assets, demo test-event setup, and unused free-drag shell/hooks only after `rg` proves no Dianzhi code imports them.
 
-- [ ] **Step 5: Run gates and commit**
+- [x] **Step 5: Run gates and commit**
 
 Run: `pnpm vitest --run tests/unit/options tests/unit/popup && pnpm run typecheck && pnpm run lint && pnpm run build`
 

@@ -408,24 +408,24 @@ git commit -m "feat(background): manage persistent AI conversations"
 - Produces `isEnglishSelection(text: string): boolean`, `assembleSelectionContext(selection: Selection, limits): SelectionContext | null`, and `computePlacement(rect, panel, viewport): Placement`.
 - Produces a controller that emits valid `SelectionContext` plus anchor rect and respects `mouseup | alt-mouseup`.
 
-- [ ] **Step 1: Write failing pure and jsdom tests**
+- [x] **Step 1: Write failing pure and jsdom tests**
 
 Cover empty/over-300/punctuation/mixed-script thresholds, nested text offsets, block discovery, alternating neighbors, word/block caps, symmetric trim, no DOM mutation, below/above choice, horizontal clamp, arrow clamp, degenerate rect, wide mode, scroll/resize recomputation, and selection inside the extension host being ignored.
 
-- [ ] **Step 2: Run red selection tests**
+- [x] **Step 2: Run red selection tests**
 
 Run: `pnpm vitest --run tests/unit/content`
 Expected: FAIL because selection modules are missing.
 
-- [ ] **Step 3: Implement English gate and context extraction**
+- [x] **Step 3: Implement English gate and context extraction**
 
 Count Unicode letters with `\p{L}` and Latin letters with `\p{Script=Latin}`. Walk text nodes with `TreeWalker`; never wrap or edit host-page nodes.
 
-- [ ] **Step 4: Implement placement**
+- [x] **Step 4: Implement placement**
 
 Default below with 8 px viewport margin and 6 px arrow gap. Prefer above if below overflows; if neither fits, choose more space and clamp. Arrow center follows selection center but stays at least 24 px from panel corners.
 
-- [ ] **Step 5: Run gates and commit**
+- [x] **Step 5: Run gates and commit**
 
 Run: `pnpm vitest --run tests/unit/content && pnpm run typecheck && pnpm run lint`
 

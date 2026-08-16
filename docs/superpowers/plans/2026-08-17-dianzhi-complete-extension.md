@@ -309,24 +309,24 @@ git commit -m "feat(database): persist Dianzhi conversations in OPFS"
 - Produces `buildChatCompletionsUrl(baseUrl: string): string`, `buildRequestBody(input: ProviderRequestInput): Record<string, unknown>`, `createSseParser(handlers): SseParser`, and `streamChat(input, dependencies): Promise<void>`.
 - Emits normalized `{ kind: 'content' | 'reasoning', delta: string }` and terminal callbacks.
 
-- [ ] **Step 1: Write failing request/SSE/client tests**
+- [x] **Step 1: Write failing request/SSE/client tests**
 
 Cover URL joining, ordered messages, temperature, reasoning default, `enable_thinking` true/false behavior, `extraBody` precedence, chunk-split lines, multiple events per chunk, `[DONE]`, reasoning-only deltas, final unterminated line, non-200 body, malformed provider error objects, network failure, and abort.
 
-- [ ] **Step 2: Run red provider tests**
+- [x] **Step 2: Run red provider tests**
 
 Run: `pnpm vitest --run tests/unit/provider`
 Expected: FAIL because provider modules are missing.
 
-- [ ] **Step 3: Implement pure builder and incremental parser**
+- [x] **Step 3: Implement pure builder and incremental parser**
 
 When `thinkingParam === 'enable_thinking'`, always send `enable_thinking: reasoningEnabled` and omit `reasoning_effort`. Otherwise send `reasoning_effort` only when reasoning is enabled. Merge parsed `extraBody` last.
 
-- [ ] **Step 4: Implement streaming client**
+- [x] **Step 4: Implement streaming client**
 
 Use injected `fetch`, `AbortSignal`, and callbacks. Parse HTTP response text safely on failure. Do not log secrets or full Authorization headers.
 
-- [ ] **Step 5: Run gates and commit**
+- [x] **Step 5: Run gates and commit**
 
 Run: `pnpm vitest --run tests/unit/provider && pnpm run typecheck && pnpm run lint`
 

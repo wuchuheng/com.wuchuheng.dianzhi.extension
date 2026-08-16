@@ -1,51 +1,35 @@
-import { sayHelloFromOffToCS } from '@/events/config'
+import { databaseRequest } from '@/events/config'
+import { log, logError, Scope } from '@/events/logger'
 import openDB from '@/vendor/web-sqlite'
+import { createDatabaseRpc } from './database/rpc'
+import { SCHEMA_RELEASE } from './database/schema'
+import { createConversationStore, type DatabaseConnection } from './database/store'
 
-console.log('[offscreen] Offscreen document loaded')
-
-let dbPromise: ReturnType<typeof openDB> | null = null
-
-async function getDB(): ReturnType<typeof openDB> {
-  if (dbPromise) {
-    return dbPromise
+function assertRuntimeCapabilities(): void {
+  if (!globalThis.crossOriginIsolated) {
+    throw new Error('The offscreen document is not cross-origin isolated.')
   }
-
-  try {
-    dbPromise = openDB('db.sqlite3', {
-      debug: true,
-      releases: [
-        {
-          version: '0.0.1',
-          migrationSQL: `
-            CREATE TABLE IF NOT EXISTS logs (
-              id INTEGER PRIMARY KEY AUTOINCREMENT,
-              level TEXT,
-              message TEXT,
-              agentId TEXT,
-              timestamp TEXT
-            )`,
-        },
-      ],
-    })
-
-    console.log('[offscreen] Initialized database in offscreen')
-
-    return await dbPromise
-  } catch (err) {
-    console.error('Failed to initialize database in offscreen', err)
-    dbPromise = null
-    throw err
+  if (typeof globalThis.SharedArrayBuffer !== 'function') {
+    throw new Error('SharedArrayBuffer is unavailable in the offscreen document.')
+  }
+  if (typeof navigator.storage?.getDirectory !== 'function') {
+    throw new Error('The OPFS directory API is unavailable in the offscreen document.')
   }
 }
 
-// Initialize database on load
-getDB().catch((err) => {
-  console.error('[offscreen] Failed to initialize database:', err)
-})
+async function initialize(): Promise<void> {
+  assertRuntimeCapabilities()
+  const db = (await openDB('dianzhi.sqlite3', {
+    debug: false,
+    releases: [SCHEMA_RELEASE],
+  })) as DatabaseConnection
+  await db.exec('PRAGMA foreign_keys = ON')
 
-let counter = 0
-setInterval(() => {
-  const content = `Hi, ${counter++}`
-  console.log('[offscreen] Sending message to content script:', content)
-  sayHelloFromOffToCS.dispatch(content)
-}, 1000 * 5)
+  const store = createConversationStore(db, () => new Date().toISOString())
+  databaseRequest.handle(createDatabaseRpc(store))
+  log(Scope.EXTENSION_PAGE, 'Dianzhi OPFS conversation database is ready')
+}
+
+void initialize().catch((error: unknown) => {
+  logError(Scope.EXTENSION_PAGE, 'Dianzhi OPFS conversation database failed to initialize', error)
+})

@@ -254,7 +254,7 @@ git commit -m "build(sqlite): package CSP-safe OPFS workers"
 - Produces `createConversationStore(db, clock)` with `createSelection`, `ensureToolConversation`, `getConversation`, `appendAssistant`, `appendTurn`, `checkpointAssistant`, `finalizeAssistant`, and `deleteSelection`.
 - Produces named `DatabaseOperation` request/result mappings; numeric `conversationId`, `messageId`, and `selectionKey` are returned from SQLite.
 
-- [ ] **Step 1: Write a recording fake database and failing CRUD tests**
+- [x] **Step 1: Write a recording fake database and failing CRUD tests**
 
 Assert schema release `1.0.0`, foreign keys, exact two-table schema, parameterized SQL, transaction boundaries, root-key update, message sequencing, lazy-tool uniqueness, cascade deletion, immutable snapshots, and legal status transitions.
 
@@ -269,20 +269,20 @@ const created = await store.createSelection({
 expect(created.conversation).toMatchObject({ id: 41, selectionKey: 41, toolId: 'context' })
 ```
 
-- [ ] **Step 2: Run red store tests**
+- [x] **Step 2: Run red store tests**
 
 Run: `pnpm vitest --run tests/unit/offscreen/store.spec.ts tests/unit/offscreen/rpc.spec.ts`
 Expected: FAIL because store/RPC modules are missing.
 
-- [ ] **Step 3: Implement schema and store**
+- [x] **Step 3: Implement schema and store**
 
 Use the exact SQL from the design. Root selection creation and first user message are one transaction. `appendTurn` inserts the user/completed row and assistant/streaming placeholder atomically. Checkpoint updates require the current status to be `streaming`; finalization permits only `completed | error | stopped`.
 
-- [ ] **Step 4: Implement offscreen initialization and RPC**
+- [x] **Step 4: Implement offscreen initialization and RPC**
 
 Import local vendor `openDB`, assert `crossOriginIsolated`, `SharedArrayBuffer`, `navigator.storage.getDirectory`, and worker startup, then open `dianzhi.sqlite3`. Dispatch only named operations, correlate responses, and cache successful mutation results by request ID for the offscreen document lifetime.
 
-- [ ] **Step 5: Run tests/build and commit**
+- [x] **Step 5: Run tests/build and commit**
 
 Run: `pnpm vitest --run tests/unit/offscreen && pnpm run typecheck && pnpm run build`
 

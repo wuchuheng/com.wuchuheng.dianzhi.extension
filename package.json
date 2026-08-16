@@ -13,12 +13,14 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "vitest",
+    "test": "vitest --run",
+    "test:watch": "vitest",
     "test:coverage": "vitest --coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
-    "watch": "nodemon --watch src --ext ts,tsx --exec \"./start-chromuim.sh refresh\""
+    "watch": "nodemon --watch src --ext ts,tsx --exec \"./start-chromuim.sh refresh\"",
+    "quality": "pnpm run format:check && pnpm run lint && pnpm run test && pnpm run build"
   },
   "dependencies": {
     "nodemon": "^3.1.11",
@@ -26,7 +28,7 @@
     "react-dom": "^19.1.0",
     "react-icons": "^5.5.0",
     "tsx": "^4.21.0",
-    "web-sqlite-js": "^2.3.0"
+    "web-sqlite-js": "2.3.0"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.3",
@@ -49,6 +51,7 @@
     "eslint-plugin-react-refresh": "^0.4.26",
     "eslint-plugin-unused-imports": "^4.3.0",
     "globals": "^17.0.0",
+    "jsdom": "^30.0.1",
     "postcss": "^8.5.6",
     "prettier": "^3.8.0",
     "tailwindcss": "^4.1.18",

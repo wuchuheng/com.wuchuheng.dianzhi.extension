@@ -46,6 +46,7 @@
 ### Task 1: Establish typed Dianzhi domain, presets, and settings
 
 **Files:**
+
 - Create: `src/dianzhi/domain/types.ts`
 - Create: `src/dianzhi/domain/errors.ts`
 - Create: `src/dianzhi/domain/presets.ts`
@@ -56,12 +57,13 @@
 - Modify: `package.json`
 
 **Interfaces:**
+
 - Produces `DianzhiSettings`, `ToolDefinition`, `ProviderSettings`, `ShortcutSettings`, `DEFAULT_SETTINGS`, `mergeSettings(raw: unknown): DianzhiSettings`, `validateSettings(settings: DianzhiSettings): SettingsValidation`, `effectivePrompt(tool: ToolDefinition): string`, and `fillTemplate(prompt: string, values: TemplateValues): string`.
 - Produces `DianzhiErrorCode`, `DianzhiErrorShape`, and `DianzhiError` with `toJSON()`.
 
-- [ ] **Step 1: Normalize package scripts and exact dependency**
+- [x] **Step 1: Normalize package scripts and exact dependency**
 
-Pin `web-sqlite-js` to `"2.3.0"`. Make unit tests terminate in CI:
+Pin `web-sqlite-js` to `"2.3.0"`, add `jsdom` as a development dependency for the configured Vitest environment, and make unit tests terminate in CI:
 
 ```json
 "test": "vitest --run",
@@ -69,24 +71,26 @@ Pin `web-sqlite-js` to `"2.3.0"`. Make unit tests terminate in CI:
 "quality": "pnpm run format:check && pnpm run lint && pnpm run test && pnpm run build"
 ```
 
-- [ ] **Step 2: Write failing settings and template tests**
+- [x] **Step 2: Write failing settings and template tests**
 
 Cover versioned defaults, deep object merge, array replacement, URL/model/temperature/JSON validation, duplicate IDs, built-in deletion protection, enabled default fallback, shortcut grammar, custom prompt validation, single-pass substitution, missing values, and template-looking input.
 
 ```ts
-expect(fillTemplate('{{selected}} / {{context}}', {
-  selected: '{{context}}',
-  context: '<selected>word</selected>',
-})).toBe('{{context}} / <selected>word</selected>')
+expect(
+  fillTemplate('{{selected}} / {{context}}', {
+    selected: '{{context}}',
+    context: '<selected>word</selected>',
+  })
+).toBe('{{context}} / <selected>word</selected>')
 expect(validateSettings(mergeSettings({ provider: { thinkingParam: 'bad' } })).ok).toBe(false)
 ```
 
-- [ ] **Step 3: Run the red tests**
+- [x] **Step 3: Run the red tests**
 
 Run: `pnpm vitest --run tests/unit/domain/settings.spec.ts tests/unit/domain/template.spec.ts`
 Expected: FAIL because the domain modules do not exist.
 
-- [ ] **Step 4: Implement the domain**
+- [x] **Step 4: Implement the domain**
 
 Use discriminated string unions instead of loose strings. Defaults must include the three enabled built-ins, DeepSeek-compatible provider defaults, the four page-level shortcuts, context target/max/block limits, reasoning settings, and `extraBody`.
 
@@ -100,7 +104,7 @@ export const BUILTIN_PROMPTS = {
 } as const
 ```
 
-- [ ] **Step 5: Run tests, format, and commit**
+- [x] **Step 5: Run tests, format, and commit**
 
 Run: `pnpm vitest --run tests/unit/domain/settings.spec.ts tests/unit/domain/template.spec.ts && pnpm run typecheck && pnpm run format:check`
 
@@ -114,6 +118,7 @@ git commit -m "feat(domain): define Dianzhi tools and settings"
 ### Task 2: Add sender-aware typed application events
 
 **Files:**
+
 - Modify: `src/events/types.ts`
 - Modify: `src/events/internal/message-listener.ts`
 - Modify: `src/events/internal/messaging.ts`
@@ -126,6 +131,7 @@ git commit -m "feat(domain): define Dianzhi tools and settings"
 - Create: `tests/unit/domain/protocol.spec.ts`
 
 **Interfaces:**
+
 - Produces `SenderAwareCallback<Args, Return> = (args: Args, sender: chrome.runtime.MessageSender) => Promise<Return>`.
 - Extends one-to-one message events with `handleWithSender(callback)` while preserving existing `.handle(callback)` behavior.
 - Produces typed commands/snapshots/events for conversation, stream, panel, database, and settings families.
@@ -138,7 +144,10 @@ Verify `.handleWithSender` receives the exact sender object, regular `.handle` r
 const sender = { tab: { id: 17 } } as chrome.runtime.MessageSender
 listener({ event: 'cs2bg:test', args: { value: 1 } }, sender, sendResponse)
 await expect(seenSender).resolves.toBe(sender)
-expect(parseConversationCommand({ type: 'sync', conversationId: '17' })).toEqual({ ok: false, error: expect.objectContaining({ code: 'INVALID_EVENT' }) })
+expect(parseConversationCommand({ type: 'sync', conversationId: '17' })).toEqual({
+  ok: false,
+  error: expect.objectContaining({ code: 'INVALID_EVENT' }),
+})
 ```
 
 - [ ] **Step 2: Run the red tests**
@@ -168,6 +177,7 @@ git commit -m "feat(events): add sender-aware Dianzhi protocol"
 ### Task 3: Produce CSP-safe `web-sqlite-js@2.3.0` assets and manifest
 
 **Files:**
+
 - Create: `scripts/vendor-web-sqlite.mts`
 - Create: `src/vendor/web-sqlite/index.js` (generated)
 - Create: `src/vendor/web-sqlite/index.d.ts`
@@ -179,6 +189,7 @@ git commit -m "feat(events): add sender-aware Dianzhi protocol"
 - Modify: `vite.config.ts`
 
 **Interfaces:**
+
 - Produces a local default `openDB` export, its strict TypeScript declaration, and two packaged worker assets.
 - Adds `vendor:sqlite` before build and a deterministic contract test.
 
@@ -200,8 +211,14 @@ Declare only the library surface consumed by the store:
 ```ts
 export type SqliteBindValue = string | number | bigint | null | Uint8Array
 export interface WebSqliteDatabase {
-  exec(sql: string, bind?: readonly SqliteBindValue[]): Promise<{ changes: number; lastInsertRowid: number }>
-  query<Row extends Record<string, unknown>>(sql: string, bind?: readonly SqliteBindValue[]): Promise<Row[]>
+  exec(
+    sql: string,
+    bind?: readonly SqliteBindValue[]
+  ): Promise<{ changes: number; lastInsertRowid: number }>
+  query<Row extends Record<string, unknown>>(
+    sql: string,
+    bind?: readonly SqliteBindValue[]
+  ): Promise<Row[]>
   transaction<T>(work: () => Promise<T>): Promise<T>
   close(): Promise<void>
 }
@@ -209,7 +226,10 @@ export interface OpenDatabaseOptions {
   debug?: boolean
   releases: readonly { version: string; migrationSQL: string }[]
 }
-export default function openDB(name: string, options: OpenDatabaseOptions): Promise<WebSqliteDatabase>
+export default function openDB(
+  name: string,
+  options: OpenDatabaseOptions
+): Promise<WebSqliteDatabase>
 ```
 
 - [ ] **Step 4: Set the manifest contract**
@@ -243,6 +263,7 @@ git commit -m "build(sqlite): package CSP-safe OPFS workers"
 ### Task 4: Implement the offscreen SQLite store and named RPC
 
 **Files:**
+
 - Create: `src/offscreen/database/schema.ts`
 - Create: `src/offscreen/database/store.ts`
 - Create: `src/offscreen/database/rpc.ts`
@@ -251,6 +272,7 @@ git commit -m "build(sqlite): package CSP-safe OPFS workers"
 - Create: `tests/unit/offscreen/rpc.spec.ts`
 
 **Interfaces:**
+
 - Produces `createConversationStore(db, clock)` with `createSelection`, `ensureToolConversation`, `getConversation`, `appendAssistant`, `appendTurn`, `checkpointAssistant`, `finalizeAssistant`, and `deleteSelection`.
 - Produces named `DatabaseOperation` request/result mappings; numeric `conversationId`, `messageId`, and `selectionKey` are returned from SQLite.
 
@@ -296,6 +318,7 @@ git commit -m "feat(database): persist Dianzhi conversations in OPFS"
 ### Task 5: Implement the OpenAI-compatible streaming provider
 
 **Files:**
+
 - Create: `src/dianzhi/provider/request.ts`
 - Create: `src/dianzhi/provider/sse.ts`
 - Create: `src/dianzhi/provider/client.ts`
@@ -304,6 +327,7 @@ git commit -m "feat(database): persist Dianzhi conversations in OPFS"
 - Create: `tests/unit/provider/client.spec.ts`
 
 **Interfaces:**
+
 - Produces `buildChatCompletionsUrl(baseUrl: string): string`, `buildRequestBody(input: ProviderRequestInput): Record<string, unknown>`, `createSseParser(handlers): SseParser`, and `streamChat(input, dependencies): Promise<void>`.
 - Emits normalized `{ kind: 'content' | 'reasoning', delta: string }` and terminal callbacks.
 
@@ -338,6 +362,7 @@ git commit -m "feat(provider): stream OpenAI-compatible responses"
 ### Task 6: Implement offscreen lifecycle and background conversation authority
 
 **Files:**
+
 - Rewrite: `src/background/setUpOffscreen.ts`
 - Create: `src/background/offscreen-client.ts`
 - Create: `src/background/conversation-manager.ts`
@@ -348,6 +373,7 @@ git commit -m "feat(provider): stream OpenAI-compatible responses"
 - Create: `tests/unit/background/provider-runner.spec.ts`
 
 **Interfaces:**
+
 - Produces `createOffscreenClient(chromeApi, timers)` with `ensureDocument()` and typed `request(operation, args, options)`.
 - Produces `createConversationManager(dependencies)` with sender-aware command handlers, `connect(port)`, `disconnect(port)`, and `getLiveSnapshot(conversationId)`.
 
@@ -390,6 +416,7 @@ git commit -m "feat(background): manage persistent AI conversations"
 ### Task 7: Implement selection context and anchored placement
 
 **Files:**
+
 - Create: `src/content/selection/english.ts`
 - Create: `src/content/selection/context.ts`
 - Create: `src/content/selection/controller.ts`
@@ -399,6 +426,7 @@ git commit -m "feat(background): manage persistent AI conversations"
 - Create: `tests/unit/content/placement.spec.ts`
 
 **Interfaces:**
+
 - Produces `isEnglishSelection(text: string): boolean`, `assembleSelectionContext(selection: Selection, limits): SelectionContext | null`, and `computePlacement(rect, panel, viewport): Placement`.
 - Produces a controller that emits valid `SelectionContext` plus anchor rect and respects `mouseup | alt-mouseup`.
 
@@ -433,6 +461,7 @@ git commit -m "feat(content): capture and anchor English selections"
 ### Task 8: Build shared conversation UI and the content popover
 
 **Files:**
+
 - Create: `src/dianzhi/conversation/reducer.ts`
 - Create: `src/dianzhi/ui/ToolTabs.tsx`
 - Create: `src/dianzhi/ui/Markdown.tsx`
@@ -450,6 +479,7 @@ git commit -m "feat(content): capture and anchor English selections"
 - Create: `tests/unit/content/popover.spec.tsx`
 
 **Interfaces:**
+
 - Produces `reduceConversationView(state, event)`, `reconcileMessage(current, incoming)`, shared controlled UI components, and the Shadow DOM `ContentApp`.
 - Consumes authoritative snapshots and stream updates keyed by numeric conversation/message IDs.
 
@@ -484,6 +514,7 @@ git commit -m "feat(popover): add anchored Dianzhi conversation UI"
 ### Task 9: Build the native Side Panel full-history chat
 
 **Files:**
+
 - Rewrite: `src/sidepanel/App.tsx`
 - Rewrite: `src/sidepanel/App.css`
 - Rewrite: `src/sidepanel/index.css`
@@ -493,6 +524,7 @@ git commit -m "feat(popover): add anchored Dianzhi conversation UI"
 - Create: `tests/unit/sidepanel/app.spec.tsx`
 
 **Interfaces:**
+
 - Produces `reducePanelState`, `cycleEnabledTool`, and a panel that announces ready/rendered with validated active tab identity.
 - Reuses shared tabs, history, reasoning, composer, and status components.
 
@@ -523,6 +555,7 @@ git commit -m "feat(sidepanel): add native full-history chat"
 ### Task 10: Build Options and Popup product surfaces
 
 **Files:**
+
 - Rewrite: `src/options/App.tsx`
 - Rewrite: `src/options/App.css`
 - Rewrite: `src/options/index.css`
@@ -535,6 +568,7 @@ git commit -m "feat(sidepanel): add native full-history chat"
 - Create: `tests/unit/popup/app.spec.tsx`
 
 **Interfaces:**
+
 - Options loads/saves versioned `DianzhiSettings`, tests provider/tool prompts through background, and blocks invalid saves.
 - Popup reports configured/unconfigured state and opens Options.
 
@@ -569,6 +603,7 @@ git commit -m "feat(settings): add Dianzhi configuration surfaces"
 ### Task 11: Integration, E2E, documentation, and completion audit
 
 **Files:**
+
 - Create: `tests/integration/conversation-flow.spec.ts`
 - Create: `tests/integration/offscreen-recovery.spec.ts`
 - Create: `tests/e2e/fixtures/reader.html`
@@ -581,6 +616,7 @@ git commit -m "feat(settings): add Dianzhi configuration surfaces"
 - Modify: `docs/superpowers/specs/2026-08-17-dianzhi-complete-extension-design.md` only if verified implementation decisions differ.
 
 **Interfaces:**
+
 - Produces reproducible integration/E2E commands and an operator guide for build, load-unpacked, configure, inspect offscreen/worker/panel, and verify OPFS.
 
 - [ ] **Step 1: Add cross-context integration tests**

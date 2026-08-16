@@ -1,38 +1,28 @@
 import { createRoot } from 'react-dom/client'
 import App from './views/App.tsx'
 import contentCss from './index.css?inline'
-import { setupContentScript } from '@/events/test'
-import { log, Scope } from '@/events/logger'
+import { log, logError, Scope } from '@/events/logger'
 import ErrorBoundary from '@/components/ErrorBoundary'
-import { sayHelloFromOffToCS } from '@/events/config'
 
-log(Scope.CONTENT_SCRIPT, 'Hello world from content script!')
+const existing = document.getElementById('dianzhi-root')
+existing?.remove()
 
-const container = document.createElement('div')
-container.id = 'crxjs-app'
-document.body.appendChild(container)
-
-const shadowRoot = container.attachShadow({ mode: 'open' })
+const host = document.createElement('div')
+host.id = 'dianzhi-root'
+document.documentElement.appendChild(host)
+const shadowRoot = host.attachShadow({ mode: 'open' })
 const style = document.createElement('style')
 style.textContent = contentCss
 shadowRoot.appendChild(style)
-
 const appRoot = document.createElement('div')
 shadowRoot.appendChild(appRoot)
 
 createRoot(appRoot).render(
   <ErrorBoundary
-    onError={(error) => {
-      console.error('[Content Script] Error boundary caught:', error)
-    }}
+    onError={(error) => logError(Scope.CONTENT_SCRIPT, 'Dianzhi popover render failed', error)}
   >
-    <App />
+    <App extensionHost={host} />
   </ErrorBoundary>
 )
 
-setupContentScript()
-
-// Handle messages from offscreen document
-sayHelloFromOffToCS.handle(async (message) => {
-  console.log('[Content Script] Received message from offscreen:', message)
-})
+log(Scope.CONTENT_SCRIPT, 'Dianzhi selection assistant is ready')

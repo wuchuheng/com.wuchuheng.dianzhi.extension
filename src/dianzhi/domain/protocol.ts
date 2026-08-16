@@ -64,6 +64,11 @@ export type ConversationCommand =
       payload: { conversationId: number; content: string }
     }
   | {
+      type: 'conversation.retry'
+      requestId: string
+      payload: { conversationId: number }
+    }
+  | {
       type: 'conversation.ensureTool'
       requestId: string
       payload: { selectionKey: number; toolId: string }
@@ -179,6 +184,7 @@ export function parseConversationCommand(value: unknown): ParseResult<Conversati
         },
       }
     case 'conversation.sync':
+    case 'conversation.retry':
     case 'stream.stop':
     case 'panel.open':
     case 'panel.rendered':

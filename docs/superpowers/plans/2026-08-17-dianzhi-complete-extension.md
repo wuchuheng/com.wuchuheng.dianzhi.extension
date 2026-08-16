@@ -461,24 +461,24 @@ git commit -m "feat(content): capture and anchor English selections"
 - Produces `reduceConversationView(state, event)`, `reconcileMessage(current, incoming)`, shared controlled UI components, and the Shadow DOM `ContentApp`.
 - Consumes authoritative snapshots and stream updates keyed by numeric conversation/message IDs.
 
-- [ ] **Step 1: Write failing reducer and component tests**
+- [x] **Step 1: Write failing reducer and component tests**
 
 Assert snapshot replacement, message upsert/deduplication, stale ID rejection, active pill updates, keyboard cycling, safe Markdown escaping, reasoning collapse/gating, card/chat modes, expand, stop/retry, no-provider settings action, new selection while panel open, and popover hide only after handoff-ready.
 
-- [ ] **Step 2: Run red UI tests**
+- [x] **Step 2: Run red UI tests**
 
 Run: `pnpm vitest --run tests/unit/conversation tests/unit/ui tests/unit/content/popover.spec.tsx`
 Expected: FAIL because shared UI/reducer modules are missing.
 
-- [ ] **Step 3: Implement shared controlled components**
+- [x] **Step 3: Implement shared controlled components**
 
 Components receive state and callbacks; they do not call Chrome APIs. Markdown supports escaped paragraphs, bold, inline code, headings, lists, and blockquotes only. Use tablist semantics, visible focus, labelled icon buttons, polite terminal status, and reduced-motion CSS.
 
-- [ ] **Step 4: Replace demo content mount**
+- [x] **Step 4: Replace demo content mount**
 
 Maintain one `#dianzhi-root` Shadow DOM host. Subscribe to selection controller and background port, dispatch conversation commands, render arrow geometry, reposition on scroll/resize, close on outside pointer/Esc, and keep popover hidden while validated panel state is open.
 
-- [ ] **Step 5: Run gates and commit**
+- [x] **Step 5: Run gates and commit**
 
 Run: `pnpm vitest --run tests/unit/conversation tests/unit/ui tests/unit/content && pnpm run typecheck && pnpm run lint`
 

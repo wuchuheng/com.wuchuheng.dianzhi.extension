@@ -169,7 +169,11 @@ export function createConversationManager(dependencies: ConversationManagerDepen
 
   function providerMessages(messages: readonly MessageRecord[]) {
     return messages
-      .filter((message) => message.role === 'user' || Boolean(message.content))
+      .filter(
+        (message) =>
+          message.role === 'user' ||
+          (Boolean(message.content) && message.status !== 'error' && message.status !== 'stopped')
+      )
       .map(({ role, content }) => ({ role, content }))
   }
 
@@ -289,6 +293,23 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       conversationId: stored.conversation.id,
     })
     await startProvider(snapshot, settings, assistant)
+    if (previous?.panelOpen) {
+      const previousSubscribers = subscribers.get(previous.activeConversationId)
+      if (previousSubscribers) {
+        subscribers.delete(previous.activeConversationId)
+        subscribers.set(stored.conversation.id, previousSubscribers)
+        const current = liveSnapshots.get(stored.conversation.id)
+        if (current) {
+          for (const port of previousSubscribers) {
+            try {
+              port.postMessage({ type: 'conversation.sync', snapshot: cloneSnapshot(current) })
+            } catch {
+              previousSubscribers.delete(port)
+            }
+          }
+        }
+      }
+    }
     return { accepted: true, snapshot: cloneSnapshot(liveSnapshots.get(stored.conversation.id)!) }
   }
 
@@ -369,6 +390,27 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       })
       snapshot.messages.push({ ...turn.user }, { ...turn.assistant })
       await startProvider(snapshot, settings, turn.assistant)
+      return {
+        accepted: true,
+        snapshot: cloneSnapshot(liveSnapshots.get(command.payload.conversationId)!),
+      }
+    }
+
+    if (command.type === 'conversation.retry') {
+      const snapshot = await loadSnapshot(command.payload.conversationId, settings)
+      if (source === 'content' && snapshot.conversation.tabId !== sender.tab?.id) {
+        throw invalid('The conversation does not belong to the sender tab.')
+      }
+      const lastAssistant = [...snapshot.messages]
+        .reverse()
+        .find((message) => message.role === 'assistant')
+      if (!lastAssistant || !['error', 'stopped'].includes(lastAssistant.status)) {
+        throw invalid('Only a failed or stopped response can be retried.')
+      }
+      const assistant = await dependencies.database.request('appendAssistant', {
+        conversationId: command.payload.conversationId,
+      })
+      await startProvider(snapshot, settings, assistant)
       return {
         accepted: true,
         snapshot: cloneSnapshot(liveSnapshots.get(command.payload.conversationId)!),

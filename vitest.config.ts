@@ -13,7 +13,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    include: ['tests/unit/**/*.spec.ts', 'tests/integration/**/*.spec.ts'],
+    include: ['tests/unit/**/*.spec.{ts,tsx}', 'tests/integration/**/*.spec.{ts,tsx}'],
     exclude: ['node_modules', 'dist', 'tests/e2e'],
     coverage: {
       provider: 'v8',

@@ -136,7 +136,7 @@ git commit -m "feat(domain): define Dianzhi tools and settings"
 - Extends one-to-one message events with `handleWithSender(callback)` while preserving existing `.handle(callback)` behavior.
 - Produces typed commands/snapshots/events for conversation, stream, panel, database, and settings families.
 
-- [ ] **Step 1: Write failing sender and protocol tests**
+- [x] **Step 1: Write failing sender and protocol tests**
 
 Verify `.handleWithSender` receives the exact sender object, regular `.handle` remains source-compatible, invalid runtime payloads return `INVALID_EVENT`, and numeric IDs reject strings/UUIDs.
 
@@ -150,20 +150,20 @@ expect(parseConversationCommand({ type: 'sync', conversationId: '17' })).toEqual
 })
 ```
 
-- [ ] **Step 2: Run the red tests**
+- [x] **Step 2: Run the red tests**
 
 Run: `pnpm vitest --run tests/unit/events/sender-aware.spec.ts tests/unit/domain/protocol.spec.ts`
 Expected: FAIL on missing API and protocol module.
 
-- [ ] **Step 3: Extend the event factory without bypassing it**
+- [x] **Step 3: Extend the event factory without bypassing it**
 
 Add the sender-aware handler to message-backed events only. Keep sender filters and standardized response conversion. Do not add raw application-level `chrome.runtime.onMessage` listeners.
 
-- [ ] **Step 4: Define application events in `src/events/config.ts`**
+- [x] **Step 4: Define application events in `src/events/config.ts`**
 
 Declare separate content-to-background and extension-page-to-background commands plus background-to-content/background-to-extension-page update events. Long-lived stream subscribers use named ports `dianzhi:content` and `dianzhi:sidepanel`; port envelopes use the same protocol parsers.
 
-- [ ] **Step 5: Run gates and commit**
+- [x] **Step 5: Run gates and commit**
 
 Run: `pnpm vitest --run tests/unit/events tests/unit/domain/protocol.spec.ts && pnpm run typecheck && pnpm run lint`
 

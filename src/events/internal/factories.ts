@@ -5,6 +5,7 @@
 
 import type {
   CallBack,
+  MessageOneToOneEvent,
   OneToOneEvent,
   OneToManyEvent,
   PortMessageFormat,
@@ -14,6 +15,7 @@ import { CallbackMap } from './callback-map'
 import {
   sendMessage,
   registerMessageListener,
+  registerSenderAwareMessageListener,
   errorToPortResponse,
   EP2CS_TIMEOUT_MS,
 } from './messaging'
@@ -81,12 +83,16 @@ export function createMessageEvent<Args = void, Return = void>(
     dispatch?: (args: Args) => Promise<Return>
     senderFilter?: (sender: chrome.runtime.MessageSender) => boolean
   }
-): OneToOneEvent<Args, Return> {
+): MessageOneToOneEvent<Args, Return> {
   const dispatchFn = options?.dispatch ?? ((args: Args) => sendMessage<Args, Return>(name, args))
   return {
     dispatch: dispatchFn,
     handle: (callback) =>
       registerMessageListener<Args, Return>(name, callback, {
+        senderFilter: options?.senderFilter,
+      }),
+    handleWithSender: (callback) =>
+      registerSenderAwareMessageListener<Args, Return>(name, callback, {
         senderFilter: options?.senderFilter,
       }),
   }

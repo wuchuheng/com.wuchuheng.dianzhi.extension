@@ -19,6 +19,11 @@
  */
 export type CallBack<Args, Return> = (args: Args) => Promise<Return>
 
+export type SenderAwareCallback<Args, Return> = (
+  args: Args,
+  sender: chrome.runtime.MessageSender
+) => Promise<Return>
+
 /**
  * Cancel function type for unregistering event handlers.
  * Call this function to remove an event handler.
@@ -39,6 +44,11 @@ export type OneToOneEvent<Args, Return> = {
   dispatch: (args: Args) => Promise<Return>
   /** Register a handler for this event, returns a cancel function */
   handle: (callback: CallBack<Args, Return>) => Cancel
+}
+
+export type MessageOneToOneEvent<Args, Return> = OneToOneEvent<Args, Return> & {
+  /** Register a message handler that receives trusted Chrome sender metadata. */
+  handleWithSender: (callback: SenderAwareCallback<Args, Return>) => Cancel
 }
 
 /**

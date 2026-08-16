@@ -3,7 +3,7 @@
  * Eliminates duplication across event patterns.
  */
 
-import type { CallBack, MessageFormat } from '../types'
+import type { MessageFormat, SenderAwareCallback } from '../types'
 import { errorToResponse } from './messaging'
 
 export type MessageListenerCallback<Args, Return> = (
@@ -24,13 +24,13 @@ export function createMessageListener<Args = void, Return = void>(
   options?: {
     senderFilter?: (sender: chrome.runtime.MessageSender) => boolean
   }
-): (callback: CallBack<Args, Return>) => MessageListenerCallback<Args, Return> {
-  return (callback: CallBack<Args, Return>) => {
+): (callback: SenderAwareCallback<Args, Return>) => MessageListenerCallback<Args, Return> {
+  return (callback: SenderAwareCallback<Args, Return>) => {
     const listener: MessageListenerCallback<Args, Return> = (request, sender, sendResponse) => {
       if (request.event !== eventName) return false
       if (options?.senderFilter && !options.senderFilter(sender)) return false
 
-      callback(request.args)
+      callback(request.args, sender)
         .then((data) => sendResponse({ success: true, data }))
         .catch((error) => sendResponse({ success: false, error: errorToResponse(error) }))
 

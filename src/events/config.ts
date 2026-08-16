@@ -6,6 +6,13 @@
  */
 
 import * as events from './index'
+import type {
+  ConversationCommand,
+  ConversationCommandResult,
+  ConversationUpdate,
+  SettingsCommand,
+} from '@/dianzhi/domain/protocol'
+import type { DianzhiSettings } from '@/dianzhi/domain/types'
 
 // ============================================================================
 // Configuration
@@ -58,3 +65,25 @@ export const isTest = true
  * ```
  */
 export const sayHelloFromOffToCS = events.ep2cs<string, void>('sayHelloFromOfscreenToContentScript')
+
+export const contentConversationCommand = events.cs2bg<
+  ConversationCommand,
+  ConversationCommandResult
+>('dianzhi:conversation-command')
+
+export const extensionConversationCommand = events.ep2bg<
+  ConversationCommand,
+  ConversationCommandResult
+>('dianzhi:conversation-command')
+
+export const conversationUpdateToContent = events.bg2cs<ConversationUpdate, void>(
+  'dianzhi:conversation-update'
+)
+
+export const conversationUpdateToExtension = events.bg2ep<ConversationUpdate, void>(
+  'dianzhi:conversation-update'
+)
+
+export const settingsCommand = events.ep2bg<SettingsCommand, DianzhiSettings>(
+  'dianzhi:settings-command'
+)

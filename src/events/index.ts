@@ -33,10 +33,12 @@ export type {
   CallBack,
   Cancel,
   MessageFormat,
+  MessageOneToOneEvent,
   OneToManyEvent,
   OneToOneEvent,
   PortMessageFormat,
   PortResponseFormat,
+  SenderAwareCallback,
 } from './types'
 
 // ============================================================================

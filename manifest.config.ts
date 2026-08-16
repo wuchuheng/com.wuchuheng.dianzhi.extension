@@ -3,7 +3,7 @@ import pkg from './package.json'
 
 const crxManifest = defineManifest({
   manifest_version: 3,
-  name: pkg.name,
+  name: '点知 Dianzhi',
   version: pkg.version,
   minimum_chrome_version: '141',
   icons: {
@@ -20,6 +20,7 @@ const crxManifest = defineManifest({
     open_in_tab: true,
   },
   permissions: ['storage', 'offscreen', 'sidePanel'],
+  host_permissions: ['http://*/*', 'https://*/*'],
   background: {
     service_worker: 'src/background/index.ts',
     type: 'module',

@@ -64,9 +64,16 @@ export async function streamChat(
   } catch (error) {
     if (isAbortError(error)) throw error
     if (error instanceof DianzhiError) throw error
+    const reason =
+      error instanceof Error
+        ? redactCredentials(error.message, input.provider.apiKey).trim().slice(0, 240)
+        : ''
     throw new DianzhiError({
       code: 'PROVIDER_STREAM_ERROR',
-      message: 'The provider request could not be started.',
+      message: reason
+        ? `The provider request could not be started: ${reason}`
+        : 'The provider request could not be started.',
+      ...(reason ? { context: { reason } } : {}),
     })
   }
 

@@ -34,6 +34,10 @@ describe('selection controller', () => {
     expect(onSelection).not.toHaveBeenCalled()
     document.dispatchEvent(new MouseEvent('mouseup', { altKey: true }))
     expect(onSelection).toHaveBeenCalledTimes(1)
+
+    host.dispatchEvent(new MouseEvent('mouseup', { altKey: true, bubbles: true, composed: true }))
+    expect(onSelection).toHaveBeenCalledTimes(1)
+
     window.dispatchEvent(new Event('scroll'))
     expect(onAnchorChange).toHaveBeenCalledTimes(1)
 

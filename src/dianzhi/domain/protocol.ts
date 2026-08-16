@@ -121,6 +121,7 @@ export type ConversationUpdate =
       error: DianzhiErrorShape
     }
   | { type: 'panel.handoffReady'; conversationId: number }
+  | { type: 'panel.closed'; conversationId: number }
 
 export type SettingsCommand =
   | { type: 'settings.get'; requestId: string }

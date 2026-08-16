@@ -7,6 +7,7 @@ import { parseConversationCommand, type SettingsCommand } from '@/dianzhi/domain
 import { streamChat } from '@/dianzhi/provider/client'
 import {
   contentConversationCommand,
+  contentSettingsCommand,
   conversationUpdateToContent,
   extensionConversationCommand,
   settingsCommand,
@@ -126,11 +127,25 @@ settingsCommand.handle(async (value) => {
         messages: [{ role: 'user', content: 'Reply with OK.' }],
         signal: new AbortController().signal,
       },
-      { fetch, onDelta: () => undefined, onDone: () => undefined }
+      {
+        fetch: (request, init) => globalThis.fetch(request, init),
+        onDelta: () => undefined,
+        onDone: () => undefined,
+      }
     )
   }
   if (command.type === 'settings.save') await chrome.storage.sync.set({ [SETTINGS_KEY]: settings })
   return settings
+})
+contentSettingsCommand.handle(async (value) => {
+  const command = parseSettingsCommand(value)
+  if (command.type !== 'settings.get') {
+    throw new DianzhiError({
+      code: 'INVALID_EVENT',
+      message: 'Content scripts may only read settings.',
+    })
+  }
+  return loadSettings()
 })
 
 chrome.runtime.onConnect.addListener((port) => manager.connect(port))

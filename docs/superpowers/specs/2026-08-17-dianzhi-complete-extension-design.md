@@ -170,8 +170,11 @@ Event families:
 
 - `conversation.create`, `conversation.sync`, `conversation.followup`, `conversation.ensureTool`, `conversation.toolChanged`.
 - `stream.started`, `stream.delta`, `stream.reasoning`, `stream.done`, `stream.error`, `stream.stopped`, `stream.stop`.
-- `panel.open`, `panel.ready`, `panel.rendered`, `panel.handoffReady`, `panel.close`.
+- `panel.open`, `panel.rendered`, `panel.handoffReady`, `panel.close`.
 - `database.request`, `database.response`, `database.ready`, `database.error`.
+
+The Side Panel readiness handshake uses its validated long-lived port envelope (`{ type: 'ready', tabId }`) rather than a one-shot event so registration and subsequent live updates share one ordered channel.
+
 - `settings.get`, `settings.save`, `settings.testProvider`.
 
 Every request carries a correlation ID. Structured failures contain a stable code, readable message, and safe context. Required codes include `INVALID_EVENT`, `INVALID_SELECTION`, `SETTINGS_INVALID`, `PROVIDER_NOT_CONFIGURED`, `PROVIDER_HTTP_ERROR`, `PROVIDER_STREAM_ERROR`, `CONVERSATION_NOT_FOUND`, `DB_UNAVAILABLE`, `SIDE_PANEL_OPEN_FAILED`, and `SIDE_PANEL_READY_TIMEOUT`.
@@ -180,7 +183,7 @@ Every request carries a correlation ID. Structured failures contain a stable cod
 
 The dependency is pinned exactly to `2.3.0`; executable CDN imports are forbidden. The published distribution creates its SQLite worker and nested OPFS proxy through Blob URLs, which MV3 extension CSP cannot allow. A deterministic build script verifies the pinned upstream artifact and externalizes both workers as packaged local assets. Generated output is not hand-edited.
 
-The manifest includes only required permissions (`storage`, `offscreen`, `sidePanel` plus content access), a native `side_panel`, minimum Chrome 141, extension CSP with `'wasm-unsafe-eval'` and `worker-src 'self'`, COOP `same-origin`, and COEP `require-corp`. Unnecessary `tabs` or `contentSettings` permissions are removed unless concrete implementation evidence requires them.
+The manifest includes only required API permissions (`storage`, `offscreen`, `sidePanel`), HTTPS content access, and `http://*/*` plus `https://*/*` host permissions so the service worker can call the user-configured OpenAI-compatible provider. It also declares a native `side_panel`, minimum Chrome 141, extension CSP with `'wasm-unsafe-eval'` and `worker-src 'self'`, COOP `same-origin`, and COEP `require-corp`. Unnecessary `tabs` or `contentSettings` permissions are removed.
 
 ## 8. UI system
 

@@ -31,6 +31,7 @@ export function createSelectionController(options: SelectionControllerOptions) {
 
   const capture = (event: MouseEvent) => {
     if (options.triggerMode === 'alt-mouseup' && !event.altKey) return
+    if (event.composedPath().includes(options.extensionHost)) return
     const selection = options.document.getSelection()
     if (!selection || selection.rangeCount !== 1 || selection.isCollapsed) return
     const range = selection.getRangeAt(0)

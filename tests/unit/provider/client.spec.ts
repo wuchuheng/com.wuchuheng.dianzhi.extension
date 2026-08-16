@@ -104,4 +104,19 @@ describe('streaming provider client', () => {
       })
     ).rejects.toBe(abort)
   })
+
+  it('redacts credentials from provider startup errors', async () => {
+    const error = await streamChat(input, {
+      fetch: vi.fn(async () => {
+        throw new TypeError('failed to connect with secret-key and Bearer echoed-token')
+      }),
+      onDelta: vi.fn(),
+      onDone: vi.fn(),
+    }).catch((caught: unknown) => caught)
+
+    expect(error).toMatchObject({ code: 'PROVIDER_STREAM_ERROR' })
+    expect(String((error as Error).message)).not.toContain('secret-key')
+    expect(String((error as Error).message)).not.toContain('echoed-token')
+    expect((error as { context?: { reason?: string } }).context?.reason).not.toContain('secret-key')
+  })
 })

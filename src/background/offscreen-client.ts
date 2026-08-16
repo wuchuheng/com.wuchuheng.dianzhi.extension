@@ -72,7 +72,7 @@ export function createOffscreenClient(
 
   async function waitUntilReady(): Promise<void> {
     let lastError: unknown
-    for (let attempt = 0; attempt < 20; attempt += 1) {
+    for (let attempt = 0; attempt < 200; attempt += 1) {
       try {
         await dispatchReady()
         ready = true

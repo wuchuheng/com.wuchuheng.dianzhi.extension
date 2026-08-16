@@ -113,7 +113,11 @@ export function createProviderRunner(dependencies: ProviderRunnerDependencies) {
             messages: input.messages,
             signal: controller.signal,
           },
-          { fetch: globalThis.fetch, onDelta: publishDelta, onDone: () => undefined }
+          {
+            fetch: (request, init) => globalThis.fetch(request, init),
+            onDelta: publishDelta,
+            onDone: () => undefined,
+          }
         )
         if (!isCurrent()) return
         if (timer !== null) cancel(timer)

@@ -599,17 +599,33 @@ git commit -m "feat(settings): add Dianzhi configuration surfaces"
 
 - [ ] **Step 1: Add cross-context integration tests**
 
+Current automated coverage verifies reducer reconciliation across synchronization, streaming,
+handoff, and replacement; manager tests cover stream termination and panel lifecycle; and an
+offscreen integration test covers idempotent recovery. It does not yet exercise this entire list
+as one cross-context integration harness, so this checkbox intentionally remains incomplete.
+
 Execute selection create → initial stream → midstream panel handoff → follow-up → tool switch/lazy conversation → stop → offscreen recreation → new selection replacement. Assert database operation order, terminal flush ordering, no duplicate IDs/deltas, and per-tab isolation.
 
-- [ ] **Step 2: Add the real extension Playwright fixture**
+- [x] **Step 2: Add the real extension Playwright fixture**
+
+Automated evidence covers unpacked-extension loading, Options, HTTPS selection, offscreen/OPFS
+startup, a genuinely midstream SSE handoff, active tool switching, native `SIDE_PANEL` context
+creation, rendered handoff, popover dismissal, terminal OPFS-backed message persistence, captured
+page/worker error consoles, and temporary-profile cleanup. Side Panel follow-up/shortcut behavior
+is implemented and partially covered at the reducer/manager level, but direct native-panel keyboard,
+follow-up, reload, and headed two-tab interaction remain on the manual checklist.
 
 Launch persistent Chromium with the built extension and mock OpenAI SSE server. Select English fixture text, inspect the Shadow DOM popover, switch tabs, open native Side Panel, continue the conversation, exercise shortcuts, replace the selection, reload the extension context, and assert clean service-worker/page console collection.
 
-- [ ] **Step 3: Rewrite product documentation**
+- [x] **Step 3: Rewrite product documentation**
 
 Document Dianzhi purpose, architecture, data ownership, permissions/security impact, exact settings, build/test commands, unpacked loading, Chrome 141 requirement, database location semantics, troubleshooting stable errors, and real-browser verification steps. Remove WareFlow and generic CRXJS product claims.
 
-- [ ] **Step 4: Run the complete automated gate**
+- [x] **Step 4: Run the complete automated gate**
+
+Fresh final evidence: formatting, lint, TypeScript, 30 Vitest files / 116 tests, production build,
+unpacked-extension Playwright, diff whitespace, and deterministic SQLite vendoring all pass. Vite
+continues to report the upstream Tailwind sourcemap notice; no changed-code warning was introduced.
 
 Run:
 
@@ -629,7 +645,11 @@ Expected: all commands pass with no warnings attributable to changed code. Run `
 
 Load `dist` unpacked in Chrome 141 or newer and record evidence for: provider setup, selection gate/context, arrow/flip, active tabs, reasoning on/off, card/chat/expand, native Side Panel, midstream handoff, full history/follow-up, `Ctrl+←/→`, `Ctrl+.`, `Esc`, new selection replacement, offscreen/service-worker recreation, OPFS persistence, two-tab isolation, and zero CSP/Blob-worker/network/console errors.
 
-- [ ] **Step 6: Perform completion audit and commit**
+- [x] **Step 6: Perform completion audit and commit**
+
+The source, generated manifest, packaged SQLite assets, automated runtime evidence, and final
+independent review were compared. The broader all-in-one integration harness and headed manual
+checklist remain explicitly unchecked below rather than being reported as completed evidence.
 
 Compare every design section and plan checkbox to source, tests, generated manifest, and runtime evidence. Any missing or indirect evidence remains incomplete and must be implemented or verified before this commit.
 
@@ -642,8 +662,8 @@ git commit -m "test: verify complete Dianzhi extension workflows"
 
 ## Final review gate
 
-- [ ] No WareFlow/demo UI, Vite/React branding, injected sidebar, ribbon, new-chat button, archive browser, UUID record ID, arbitrary SQL event, remote executable code, Blob worker, or silent database fallback remains.
-- [ ] Manifest permissions, CSP, COOP/COEP, Side Panel path, content matches, and Chrome floor match the design.
-- [ ] Every cross-context boundary validates untrusted input and uses typed events; background derives tab identity from sender metadata.
-- [ ] Every persistent stream reaches a terminal database status and no late event can update a replaced conversation.
+- [x] No WareFlow/demo UI, Vite/React branding, injected sidebar, ribbon, new-chat button, archive browser, UUID record ID, arbitrary SQL event, remote executable code, Blob worker, or silent database fallback remains.
+- [x] Manifest permissions, CSP, COOP/COEP, Side Panel path, content matches, and Chrome floor match the design.
+- [x] Every cross-context boundary validates untrusted input and uses typed events; background derives tab identity from sender metadata.
+- [x] Every persistent stream reaches a terminal database status and no late event can update a replaced conversation.
 - [ ] All automated gates and the real-Chrome two-tab checklist have fresh evidence.

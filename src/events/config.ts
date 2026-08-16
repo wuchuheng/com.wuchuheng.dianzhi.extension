@@ -41,6 +41,10 @@ export const settingsCommand = events.ep2bg<SettingsCommand, DianzhiSettings>(
   'dianzhi:settings-command'
 )
 
+export const contentSettingsCommand = events.cs2bg<SettingsCommand, DianzhiSettings>(
+  'dianzhi:settings-command'
+)
+
 export const databaseRequest = events.bg2ep<DatabaseRequest, DatabaseResult>(
   'dianzhi:database-request'
 )

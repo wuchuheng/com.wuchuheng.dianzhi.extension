@@ -28,4 +28,5 @@ CLAUDE.local.md
 *.sw?
 .chromiumCache/
 playwright-report/
+test-results/
 .worktrees/

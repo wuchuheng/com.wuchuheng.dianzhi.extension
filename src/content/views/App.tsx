@@ -14,8 +14,8 @@ import { MessageList } from '@/dianzhi/ui/MessageList'
 import { ToolTabs } from '@/dianzhi/ui/ToolTabs'
 import {
   contentConversationCommand,
+  contentSettingsCommand,
   conversationUpdateToContent,
-  settingsCommand,
 } from '@/events/config'
 import { createSelectionController } from '../selection/controller'
 import { computePlacement, type AnchorRect, type Placement } from '../popover/placement'
@@ -240,7 +240,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
   )
 
   useEffect(() => {
-    void settingsCommand
+    void contentSettingsCommand
       .dispatch({ type: 'settings.get', requestId: requestId('settings') })
       .then(setSettings)
       .catch((error: unknown) => dispatch({ type: 'view.error', error: errorShape(error) }))

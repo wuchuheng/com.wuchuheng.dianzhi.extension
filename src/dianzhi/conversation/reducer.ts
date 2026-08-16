@@ -81,7 +81,7 @@ export function reduceConversationView(
   if (event.type === 'conversation.sync' || event.type === 'conversation.toolChanged') {
     return {
       ...state,
-      visible: true,
+      visible: !state.panelOpen,
       snapshot: cloneSnapshot(event.snapshot),
       error: null,
     }
@@ -91,6 +91,10 @@ export function reduceConversationView(
   if (event.type === 'panel.handoffReady') {
     if (currentConversationId !== event.conversationId) return state
     return { ...state, visible: false, panelOpen: true }
+  }
+  if (event.type === 'panel.closed') {
+    if (currentConversationId !== event.conversationId) return state
+    return { ...state, visible: false, panelOpen: false }
   }
   if (!state.snapshot || currentConversationId !== event.conversationId) return state
 

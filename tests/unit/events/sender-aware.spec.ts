@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DianzhiError } from '@/dianzhi/domain/errors'
+import { isPrivilegedExtensionSender } from '@/events/background/background'
 import { createMessageEvent } from '@/events/internal/factories'
 
 type RuntimeListener = (
@@ -18,6 +19,7 @@ beforeEach(() => {
   sendMessage.mockReset()
   vi.stubGlobal('chrome', {
     runtime: {
+      id: 'extension-id',
       onMessage: { addListener, removeListener },
       sendMessage,
     },
@@ -25,6 +27,28 @@ beforeEach(() => {
 })
 
 describe('sender-aware message events', () => {
+  it('allows privileged extension contexts but rejects content-script tab senders', () => {
+    expect(
+      isPrivilegedExtensionSender({ id: 'extension-id' } as chrome.runtime.MessageSender)
+    ).toBe(true)
+    expect(
+      isPrivilegedExtensionSender({
+        id: 'extension-id',
+        origin: 'chrome-extension://extension-id',
+      } as chrome.runtime.MessageSender)
+    ).toBe(true)
+    expect(
+      isPrivilegedExtensionSender({
+        id: 'extension-id',
+        origin: 'https://reader.example',
+        tab: { id: 17 },
+      } as chrome.runtime.MessageSender)
+    ).toBe(false)
+    expect(
+      isPrivilegedExtensionSender({ id: 'another-extension' } as chrome.runtime.MessageSender)
+    ).toBe(false)
+  })
+
   it('passes the exact Chrome sender to handleWithSender', async () => {
     const event = createMessageEvent<{ value: number }, number>('cs2bg:test')
     const sender = { tab: { id: 17 } } as chrome.runtime.MessageSender

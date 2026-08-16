@@ -26,6 +26,14 @@ export interface ConversationSessionStore {
   save(state: Record<string, TabConversationState>): Promise<void>
 }
 
+interface PendingHandoff {
+  tabId: number
+  resolve(): void
+  reject(error: unknown): void
+  timeout: ReturnType<typeof globalThis.setTimeout> | null
+  superseded: boolean
+}
+
 export interface ConversationManagerDependencies {
   database: OffscreenClient
   loadSettings(): Promise<DianzhiSettings>
@@ -39,7 +47,14 @@ export interface ConversationManagerDependencies {
     open(tabId: number): Promise<void>
     close(tabId: number): Promise<void>
   }
+  setTimeout?(callback: () => void, milliseconds: number): ReturnType<typeof globalThis.setTimeout>
+  clearTimeout?(handle: ReturnType<typeof globalThis.setTimeout>): void
+  sidePanelReadyTimeoutMs?: number
+  sidePanelDisconnectGraceMs?: number
 }
+
+const DEFAULT_SIDE_PANEL_READY_TIMEOUT_MS = 5_000
+const DEFAULT_SIDE_PANEL_DISCONNECT_GRACE_MS = 500
 
 function cloneSnapshot(snapshot: ConversationSnapshot): ConversationSnapshot {
   return {
@@ -62,8 +77,32 @@ export function createConversationManager(dependencies: ConversationManagerDepen
   const liveSnapshots = new Map<number, ConversationSnapshot>()
   const liveRuns = new Map<number, ProviderRunHandle>()
   const subscribers = new Map<number, Set<chrome.runtime.Port>>()
-  const pendingHandoffs = new Map<number, number>()
+  const pendingHandoffs = new Map<number, PendingHandoff>()
+  const panelTabs = new Map<chrome.runtime.Port, number>()
+  const pendingPanelCloses = new Map<number, ReturnType<typeof globalThis.setTimeout>>()
+  const schedule = dependencies.setTimeout ?? globalThis.setTimeout
+  const cancel = dependencies.clearTimeout ?? globalThis.clearTimeout
+  const sidePanelReadyTimeoutMs =
+    dependencies.sidePanelReadyTimeoutMs ?? DEFAULT_SIDE_PANEL_READY_TIMEOUT_MS
+  const sidePanelDisconnectGraceMs =
+    dependencies.sidePanelDisconnectGraceMs ?? DEFAULT_SIDE_PANEL_DISCONNECT_GRACE_MS
   let saveChain = Promise.resolve()
+
+  function takePendingHandoff(conversationId: number, expected?: PendingHandoff) {
+    const pending = pendingHandoffs.get(conversationId)
+    if (!pending || (expected && pending !== expected)) return null
+    pendingHandoffs.delete(conversationId)
+    if (pending.timeout !== null) cancel(pending.timeout)
+    pending.timeout = null
+    return pending
+  }
+
+  function cancelPendingPanelClose(tabId: number): void {
+    const timeout = pendingPanelCloses.get(tabId)
+    if (timeout === undefined) return
+    pendingPanelCloses.delete(tabId)
+    cancel(timeout)
+  }
 
   function persistStates(): Promise<void> {
     const serialized = Object.fromEntries(
@@ -132,6 +171,25 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     subscribers.set(toConversationId, destination)
   }
 
+  async function stopSelectionRuns(
+    tabId: number,
+    selectionKey: number,
+    fallbackConversationId: number
+  ): Promise<void> {
+    const handles = [...liveRuns.entries()]
+      .filter(([conversationId]) => {
+        const conversation = liveSnapshots.get(conversationId)?.conversation
+        return conversation?.tabId === tabId && conversation.selectionKey === selectionKey
+      })
+      .map(([, handle]) => handle)
+    if (handles.length === 0) {
+      dependencies.providerRunner.stop?.(fallbackConversationId)
+      return
+    }
+    for (const handle of handles) handle.stop()
+    await Promise.all(handles.map((handle) => handle.done.catch(() => undefined)))
+  }
+
   function applyUpdate(update: ConversationUpdate): void {
     const snapshot = liveSnapshots.get(
       'snapshot' in update ? update.snapshot.conversation.id : update.conversationId
@@ -175,6 +233,14 @@ export function createConversationManager(dependencies: ConversationManagerDepen
         subscribers.get(conversationId)?.delete(port)
       }
     }
+  }
+
+  async function markPanelClosed(tabId: number, conversationId: number): Promise<void> {
+    const state = tabStates.get(tabId)
+    if (!state?.panelOpen) return
+    state.panelOpen = false
+    await persistStates()
+    await publish({ type: 'panel.closed', conversationId })
   }
 
   function providerMessages(messages: readonly MessageRecord[]) {
@@ -271,13 +337,7 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     if (!tool) throw invalid('No enabled tool is available.')
     const previous = tabStates.get(tabId)
     if (previous) {
-      const previousRun = liveRuns.get(previous.activeConversationId)
-      if (previousRun) {
-        previousRun.stop()
-        await previousRun.done.catch(() => undefined)
-      } else {
-        dependencies.providerRunner.stop?.(previous.activeConversationId)
-      }
+      await stopSelectionRuns(tabId, previous.selectionKey, previous.activeConversationId)
     }
     const promptSnapshot = fillTemplate(effectivePrompt(tool), {
       selected: command.payload.selectedText,
@@ -338,7 +398,42 @@ export function createConversationManager(dependencies: ConversationManagerDepen
         throw invalid('Only a content-script user gesture can open the Side Panel.')
       const tabId = sender.tab?.id
       if (!tabId) throw invalid('The Side Panel must be opened from a content-script user gesture.')
-      pendingHandoffs.set(command.payload.conversationId, tabId)
+      let resolveReady!: () => void
+      let rejectReady!: (error: unknown) => void
+      const ready = new Promise<void>((resolve, reject) => {
+        resolveReady = resolve
+        rejectReady = reject
+      })
+      void ready.catch(() => undefined)
+      const pending: PendingHandoff = {
+        tabId,
+        resolve: resolveReady,
+        reject: rejectReady,
+        timeout: null,
+        superseded: false,
+      }
+      for (const [conversationId, existing] of pendingHandoffs) {
+        if (conversationId !== command.payload.conversationId && existing.tabId !== tabId) continue
+        existing.superseded = true
+        takePendingHandoff(conversationId, existing)?.reject(
+          new DianzhiError({
+            code: 'SIDE_PANEL_OPEN_FAILED',
+            message: 'A newer Side Panel handoff replaced this request.',
+            context: { tabId, conversationId },
+          })
+        )
+      }
+      pendingHandoffs.set(command.payload.conversationId, pending)
+      pending.timeout = schedule(() => {
+        const expired = takePendingHandoff(command.payload.conversationId, pending)
+        expired?.reject(
+          new DianzhiError({
+            code: 'SIDE_PANEL_READY_TIMEOUT',
+            message: 'The Side Panel did not render the conversation in time.',
+            context: { tabId, conversationId: command.payload.conversationId },
+          })
+        )
+      }, sidePanelReadyTimeoutMs)
       let opened = false
       try {
         await dependencies.sidePanel.open(tabId)
@@ -348,16 +443,23 @@ export function createConversationManager(dependencies: ConversationManagerDepen
         if (snapshot.conversation.tabId !== tabId) {
           throw invalid('The conversation does not belong to this tab.')
         }
-        const state = tabStates.get(tabId)
-        if (state) {
-          state.panelOpen = true
-          await persistStates()
-        }
+        await ready
         return { accepted: true, snapshot }
       } catch (error) {
-        pendingHandoffs.delete(command.payload.conversationId)
-        if (opened) await dependencies.sidePanel.close(tabId).catch(() => undefined)
-        throw error
+        takePendingHandoff(command.payload.conversationId, pending)
+        if (opened && !pending.superseded) {
+          await dependencies.sidePanel.close(tabId).catch(() => undefined)
+        }
+        if (error instanceof DianzhiError) throw error
+        throw new DianzhiError({
+          code: 'SIDE_PANEL_OPEN_FAILED',
+          message: 'The Side Panel could not be opened.',
+          context: {
+            tabId,
+            reason:
+              error instanceof Error ? error.message.slice(0, 160) : String(error).slice(0, 160),
+          },
+        })
       }
     }
 
@@ -467,23 +569,43 @@ export function createConversationManager(dependencies: ConversationManagerDepen
 
     if (command.type === 'panel.rendered') {
       if (source !== 'extension') throw invalid('Only the Side Panel can acknowledge rendering.')
-      const tabId = pendingHandoffs.get(command.payload.conversationId)
-      if (!tabId) throw invalid('No matching Side Panel handoff is pending.')
-      const snapshot = await loadSnapshot(command.payload.conversationId, settings)
-      await publish({ type: 'panel.handoffReady', conversationId: command.payload.conversationId })
-      pendingHandoffs.delete(command.payload.conversationId)
-      return { accepted: true, snapshot }
+      const pending = takePendingHandoff(command.payload.conversationId)
+      if (!pending) {
+        const tabId = tabForConversation(command.payload.conversationId)
+        const state = tabId === null ? null : tabStates.get(tabId)
+        if (!state?.panelOpen || state.activeConversationId !== command.payload.conversationId) {
+          throw invalid('No matching Side Panel handoff is pending.')
+        }
+        return {
+          accepted: true,
+          snapshot: await loadSnapshot(command.payload.conversationId, settings),
+        }
+      }
+      try {
+        const snapshot = await loadSnapshot(command.payload.conversationId, settings)
+        const state = tabStates.get(pending.tabId)
+        if (state) {
+          state.panelOpen = true
+          await persistStates()
+        }
+        await publish({
+          type: 'panel.handoffReady',
+          conversationId: command.payload.conversationId,
+        })
+        pending.resolve()
+        return { accepted: true, snapshot }
+      } catch (error) {
+        pending.reject(error)
+        throw error
+      }
     }
 
     if (source !== 'extension') throw invalid('Only the Side Panel can request panel closure.')
     const tabId = tabForConversation(command.payload.conversationId)
     if (tabId === null) throw invalid('The Side Panel conversation is not associated with a tab.')
+    cancelPendingPanelClose(tabId)
     await dependencies.sidePanel.close(tabId)
-    const state = tabStates.get(tabId)
-    if (state) {
-      state.panelOpen = false
-      await persistStates()
-    }
+    await markPanelClosed(tabId, command.payload.conversationId)
     return {
       accepted: true,
       snapshot: await loadSnapshot(command.payload.conversationId, settings),
@@ -503,7 +625,9 @@ export function createConversationManager(dependencies: ConversationManagerDepen
 
     const senderTabId = port.sender?.tab?.id
     if (senderTabId) {
-      const pending = [...pendingHandoffs.entries()].find(([, tabId]) => tabId === senderTabId)
+      const pending = [...pendingHandoffs.entries()].find(
+        ([, handoff]) => handoff.tabId === senderTabId
+      )
       if (pending) {
         const [conversationId] = pending
         subscribe(conversationId)
@@ -521,8 +645,13 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       if (typeof message !== 'object' || message === null) return
       const input = message as { type?: unknown; tabId?: unknown; conversationId?: unknown }
       if (input.type === 'ready' && Number.isSafeInteger(input.tabId) && Number(input.tabId) > 0) {
-        const pending = [...pendingHandoffs.entries()].find(([, tabId]) => tabId === input.tabId)
-        const state = tabStates.get(Number(input.tabId))
+        const tabId = Number(input.tabId)
+        cancelPendingPanelClose(tabId)
+        panelTabs.set(port, tabId)
+        const pending = [...pendingHandoffs.entries()].find(
+          ([, handoff]) => handoff.tabId === tabId
+        )
+        const state = tabStates.get(tabId)
         const conversationId =
           pending?.[0] ?? (state?.panelOpen ? state.activeConversationId : null)
         if (!conversationId) return
@@ -548,6 +677,28 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       ports.delete(port)
       if (ports.size === 0) subscribers.delete(conversationId)
     }
+    const tabId = panelTabs.get(port)
+    panelTabs.delete(port)
+    if (!tabId) return
+    const pending = [...pendingHandoffs.entries()].find(([, handoff]) => handoff.tabId === tabId)
+    const conversationId = pending?.[0] ?? tabStates.get(tabId)?.activeConversationId
+    if (!conversationId) return
+    cancelPendingPanelClose(tabId)
+    const timeout = schedule(() => {
+      if (pendingPanelCloses.get(tabId) !== timeout) return
+      pendingPanelCloses.delete(tabId)
+      if (pending) {
+        takePendingHandoff(conversationId, pending[1])?.reject(
+          new DianzhiError({
+            code: 'SIDE_PANEL_READY_TIMEOUT',
+            message: 'The Side Panel closed before the conversation was ready.',
+            context: { tabId, conversationId },
+          })
+        )
+      }
+      void markPanelClosed(tabId, conversationId)
+    }, sidePanelDisconnectGraceMs)
+    pendingPanelCloses.set(tabId, timeout)
   }
 
   function getLiveSnapshot(conversationId: number): ConversationSnapshot | null {

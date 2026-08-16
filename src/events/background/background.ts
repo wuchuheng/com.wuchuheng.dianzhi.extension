@@ -58,6 +58,14 @@ export const bg2cs = <Args = void, Return = void>(name: string) => {
   return event
 }
 
+export function isPrivilegedExtensionSender(sender: chrome.runtime.MessageSender): boolean {
+  return (
+    sender.id === chrome.runtime.id &&
+    !sender.tab &&
+    (!sender.origin || sender.origin.startsWith('chrome-extension://'))
+  )
+}
+
 /**
  * Background to extension page (chrome.runtime.sendMessage).
  * @example
@@ -69,7 +77,7 @@ export const bg2cs = <Args = void, Return = void>(name: string) => {
  */
 export const bg2ep = <Args = void, Return = void>(name: string): OneToOneEvent<Args, Return> =>
   createMessageEvent<Args, Return>(buildEventName('bg2ep', name), {
-    senderFilter: (sender) => sender.origin?.startsWith('chrome-extension://') ?? false,
+    senderFilter: isPrivilegedExtensionSender,
   })
 
 /**

@@ -118,7 +118,7 @@ export default function App() {
   const [state, dispatch] = useReducer(reducePanelState, INITIAL_PANEL_STATE)
   const [settings, setSettings] = useState<DianzhiSettings>(DEFAULT_SETTINGS)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
-  const renderedConversation = useRef<number | null>(null)
+  const handoffAcknowledged = useRef(false)
 
   const command = useCallback(async (value: ConversationCommand) => {
     const result = await extensionConversationCommand.dispatch(value)
@@ -129,31 +129,54 @@ export default function App() {
     void settingsCommand
       .dispatch({ type: 'settings.get', requestId: requestId('settings') })
       .then(setSettings)
-    const port = chrome.runtime.connect({ name: SIDEPANEL_PORT_NAME })
-    port.onMessage.addListener((value: unknown) => {
-      if (
-        typeof value === 'object' &&
-        value !== null &&
-        typeof (value as { type?: unknown }).type === 'string'
-      ) {
-        dispatch(value as ConversationUpdate)
-      }
-    })
-    port.onDisconnect.addListener(() => dispatch({ type: 'panel.disconnected' }))
-    void chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
-      if (tab?.id) port.postMessage({ type: 'ready', tabId: tab.id })
-    })
-    return () => port.disconnect()
+    let disposed = false
+    let port: chrome.runtime.Port | null = null
+    let reconnectTimer: number | null = null
+
+    const connect = () => {
+      if (disposed) return
+      const current = chrome.runtime.connect({ name: SIDEPANEL_PORT_NAME })
+      port = current
+      dispatch({ type: 'panel.connected' })
+      current.onMessage.addListener((value: unknown) => {
+        if (
+          typeof value === 'object' &&
+          value !== null &&
+          typeof (value as { type?: unknown }).type === 'string'
+        ) {
+          dispatch(value as ConversationUpdate)
+        }
+      })
+      current.onDisconnect.addListener(() => {
+        if (disposed || port !== current) return
+        port = null
+        dispatch({ type: 'panel.disconnected' })
+        reconnectTimer = window.setTimeout(connect, 100)
+      })
+      void chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
+        if (!disposed && port === current && tab?.id)
+          current.postMessage({ type: 'ready', tabId: tab.id })
+      })
+    }
+
+    connect()
+    return () => {
+      disposed = true
+      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
+      port?.disconnect()
+    }
   }, [])
 
   useEffect(() => {
     const conversationId = state.snapshot?.conversation.id
-    if (!conversationId || renderedConversation.current === conversationId) return
-    renderedConversation.current = conversationId
+    if (!conversationId || handoffAcknowledged.current) return
+    handoffAcknowledged.current = true
     void command({
       type: 'panel.rendered',
       requestId: requestId('rendered'),
       payload: { conversationId },
+    }).catch(() => {
+      handoffAcknowledged.current = false
     })
   }, [command, state.snapshot?.conversation.id])
 

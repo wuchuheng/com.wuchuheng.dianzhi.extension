@@ -5,8 +5,10 @@ import { dianzhiManifest as manifest } from '../../../manifest.config'
 
 describe('Dianzhi manifest security contract', () => {
   it('uses Chrome 141 native Side Panel and minimal permissions', () => {
+    expect(manifest.name).toBe('点知 Dianzhi')
     expect(manifest.minimum_chrome_version).toBe('141')
     expect(manifest.permissions).toEqual(['storage', 'offscreen', 'sidePanel'])
+    expect(manifest.host_permissions).toEqual(['http://*/*', 'https://*/*'])
     expect(manifest.side_panel).toEqual({ default_path: 'src/sidepanel/index.html' })
   })
 

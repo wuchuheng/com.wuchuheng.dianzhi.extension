@@ -6,6 +6,7 @@ import { defineConfig } from 'vite'
 import zip from 'vite-plugin-zip-pack'
 import manifest from './manifest.config.js'
 import { name, version } from './package.json'
+import { sqliteRuntimeAssetsPlugin } from './scripts/sqlite-runtime-assets.js'
 
 export default defineConfig({
   resolve: {
@@ -15,13 +16,24 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    sqliteRuntimeAssetsPlugin(__dirname),
     crx({ manifest }),
     tailwindcss(),
     zip({ outDir: 'release', outFileName: `crx-${name}-${version}.zip` }),
   ],
   server: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
     cors: {
       origin: [/chrome-extension:\/\//],
+    },
+  },
+  preview: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
     },
   },
   build: {

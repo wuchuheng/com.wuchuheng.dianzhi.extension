@@ -179,6 +179,7 @@ git commit -m "feat(events): add sender-aware Dianzhi protocol"
 **Files:**
 
 - Create: `scripts/vendor-web-sqlite.mts`
+- Create: `scripts/sqlite-runtime-assets.ts`
 - Create: `src/vendor/web-sqlite/index.js` (generated)
 - Create: `src/vendor/web-sqlite/index.d.ts`
 - Create: `src/vendor/web-sqlite/web-sqlite-worker.js` (generated)
@@ -187,52 +188,29 @@ git commit -m "feat(events): add sender-aware Dianzhi protocol"
 - Modify: `package.json`
 - Modify: `manifest.config.ts`
 - Modify: `vite.config.ts`
+- Modify: `src/offscreen/main.ts`
 
 **Interfaces:**
 
 - Produces a local default `openDB` export, its strict TypeScript declaration, and two packaged worker assets.
 - Adds `vendor:sqlite` before build and a deterministic contract test.
 
-- [ ] **Step 1: Write the failing vendor contract test**
+- [x] **Step 1: Write the failing vendor contract test**
 
 Assert exact package version, upstream `dist/index.js` SHA-256 `97ab499174918ff700f17213c9493ad325af6c0cc7bf29c6eb1eae04789c4784`, all three assets, local worker URLs, and no `createObjectURL(new Blob`, `data:text/javascript`, or executable HTTP import in any emitted asset.
 
-- [ ] **Step 2: Run the red test**
+- [x] **Step 2: Run the red test**
 
 Run: `pnpm vitest --run tests/unit/vendor/web-sqlite.spec.ts`
 Expected: FAIL because local vendor assets are missing.
 
-- [ ] **Step 3: Implement deterministic extraction**
+- [x] **Step 3: Implement deterministic extraction**
 
 Read only `node_modules/web-sqlite-js/dist/index.js` after hash verification. Parse JavaScript string literals without evaluating arbitrary package code, decode only the isolated validated string literal, extract the outer SQLite worker and nested OPFS proxy, replace each Blob factory exactly once with a local `new URL(...)`, and fail if counts or forbidden patterns differ.
 
-Declare only the library surface consumed by the store:
+Copy the pinned package's `dist/index.d.ts` verbatim beside the generated main module. This preserves the actual transaction callback, named-parameter, log, and development-tool signatures while TypeScript resolves the local runtime bundle.
 
-```ts
-export type SqliteBindValue = string | number | bigint | null | Uint8Array
-export interface WebSqliteDatabase {
-  exec(
-    sql: string,
-    bind?: readonly SqliteBindValue[]
-  ): Promise<{ changes: number; lastInsertRowid: number }>
-  query<Row extends Record<string, unknown>>(
-    sql: string,
-    bind?: readonly SqliteBindValue[]
-  ): Promise<Row[]>
-  transaction<T>(work: () => Promise<T>): Promise<T>
-  close(): Promise<void>
-}
-export interface OpenDatabaseOptions {
-  debug?: boolean
-  releases: readonly { version: string; migrationSQL: string }[]
-}
-export default function openDB(
-  name: string,
-  options: OpenDatabaseOptions
-): Promise<WebSqliteDatabase>
-```
-
-- [ ] **Step 4: Set the manifest contract**
+- [x] **Step 4: Set the manifest contract**
 
 Use:
 
@@ -249,7 +227,7 @@ cross_origin_embedder_policy: { value: 'require-corp' },
 
 Keep HTTPS content-script matches and remove `contentSettings` and `tabs` unless a later real-Chrome failure proves a permission is required.
 
-- [ ] **Step 5: Generate twice, test, build, and commit**
+- [x] **Step 5: Generate twice, test, build, and commit**
 
 Run: `pnpm run vendor:sqlite && pnpm vitest --run tests/unit/vendor/web-sqlite.spec.ts && pnpm run vendor:sqlite && git diff --exit-code src/vendor/web-sqlite && pnpm run build`
 

@@ -1,5 +1,5 @@
 import { sayHelloFromOffToCS } from '@/events/config'
-import { openDB } from 'web-sqlite-js'
+import openDB from '@/vendor/web-sqlite'
 
 console.log('[offscreen] Offscreen document loaded')
 

@@ -1,7 +1,7 @@
 # Dianzhi SQLite Tools and Options Testing Design
 
 **Date:** 2026-08-17  
-**Status:** Approved in discussion; awaiting written-spec review  
+**Status:** Approved
 **Base:** Dianzhi extension at commit `379a0f1`
 
 ## 1. Goal

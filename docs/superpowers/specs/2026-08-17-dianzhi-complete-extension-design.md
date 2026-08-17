@@ -26,7 +26,7 @@ This is a clean TypeScript implementation of the approved Dianzhi behavior. It r
 
 ### 2.1 Selection lookup
 
-1. On configured `mouseup` or `Alt+mouseup`, accept trimmed text only when it is 1–300 characters, contains at least one Latin letter, and Latin letters comprise at least 70% of all Unicode letters.
+1. On configured `mouseup` or `Alt+mouseup`, accept trimmed text only when it is 1–300 characters, contains at least two Unicode letters, and Latin letters comprise at least 80% of all Unicode letters.
 2. Assemble bounded surrounding context without mutating the host page. The selected range is represented as `<selected>…</selected>`.
 3. Create the default tool's persistent conversation through the background worker.
 4. Open a Shadow DOM popover anchored to the selection and stream the first assistant response.

@@ -103,17 +103,19 @@ export function SidePanelView({
           </main>
           <footer className="dz-panel-composer">
             <ConversationStatus message={latestAssistant} />
-            {streaming && (
-              <button type="button" className="dz-secondary" onClick={onStop}>
-                停止
-              </button>
-            )}
             {retryable && (
               <button type="button" className="dz-secondary" onClick={onRetry}>
                 重试
               </button>
             )}
-            <Composer value={draft} disabled={streaming} onChange={onDraftChange} onSend={onSend} />
+            <Composer
+              value={draft}
+              disabled={streaming}
+              streaming={streaming}
+              onChange={onDraftChange}
+              onSend={onSend}
+              onStop={onStop}
+            />
           </footer>
         </>
       ) : (

@@ -165,11 +165,6 @@ export function ContentApp({
         <footer className="dz-footer">
           <ConversationStatus message={latestAssistant} />
           <div className="dz-footer-actions">
-            {streaming && (
-              <button type="button" className="dz-secondary" onClick={onStop}>
-                停止
-              </button>
-            )}
             {canRetry && (
               <button type="button" className="dz-secondary" onClick={onRetry}>
                 重试
@@ -180,8 +175,10 @@ export function ContentApp({
             <Composer
               value={composerValue}
               disabled={streaming}
+              streaming={streaming}
               onChange={onComposerChange}
               onSend={onSend}
+              onStop={onStop}
               inputRef={composerRef}
             />
           )}

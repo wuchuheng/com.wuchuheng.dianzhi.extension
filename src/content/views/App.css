@@ -1,16 +1,66 @@
+/*
+ * Content popover theme.
+ *
+ * Runs inside a Shadow DOM, so :host mirrors the design tokens from
+ * src/styles/tokens.css (custom properties do not cross the shadow boundary
+ * from a plain webpage). Keep the values below in sync with tokens.css.
+ *
+ * Visual family follows the Options/Side Panel warm terracotta identity:
+ * brand #c85f32 / #963f1e, cream surfaces, terracotta borders.
+ */
 :host {
-  --dz-bg: #ffffff;
-  --dz-canvas: #f6f7f9;
-  --dz-text: #172033;
-  --dz-muted: #667085;
-  --dz-border: #e4e7ec;
-  --dz-blue: #2764ff;
-  --dz-blue-soft: #edf3ff;
-  --dz-danger: #d92d20;
-  color: var(--dz-text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  /* surfaces */
+  --d-bg: #f5f2ec;
+  --d-surface: #ffffff;
+  --d-surface-soft: #faf8f4;
+  --d-surface-brand: #f3ded1;
+  --d-surface-hover: #fff9f6;
+
+  /* borders */
+  --d-border: #ded8ce;
+  --d-border-strong: #d5cec4;
+  --d-border-faint: #e5dfd6;
+  --d-border-brand: #e3c3ae;
+
+  /* text */
+  --d-text: #292622;
+  --d-text-secondary: #5e574f;
+  --d-text-muted: #6f675e;
+  --d-text-faint: #8d847a;
+  --d-text-on-brand: #ffffff;
+
+  /* brand */
+  --d-brand: #c85f32;
+  --d-brand-strong: #963f1e;
+
+  /* feedback */
+  --d-danger: #a03e31;
+  --d-danger-strong: #983b2f;
+  --d-danger-soft: #fff1ed;
+  --d-danger-border: #e1b4a9;
+  --d-disabled: #c4bcb1;
+
+  /* focus */
+  --d-focus: #c85f32;
+
+  /* radius */
+  --d-radius-lg: 14px;
+  --d-radius-md: 9px;
+  --d-radius-sm: 8px;
+  --d-radius-xs: 6px;
+
+  color: var(--d-text);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
   font-size: 13px;
   line-height: 1.5;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
 }
 
 *,
@@ -35,9 +85,9 @@ textarea {
   max-height: min(560px, calc(100vh - 16px));
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--dz-border);
+  border: 1px solid var(--d-border);
   border-radius: 14px;
-  background: var(--dz-bg);
+  background: var(--d-surface);
   box-shadow:
     0 18px 50px rgb(16 24 40 / 0.18),
     0 3px 12px rgb(16 24 40 / 0.08);
@@ -47,8 +97,8 @@ textarea {
   position: fixed;
   width: 12px;
   height: 12px;
-  border: 1px solid var(--dz-border);
-  background: var(--dz-bg);
+  border: 1px solid var(--d-border);
+  background: var(--d-surface);
   transform: rotate(45deg);
   pointer-events: none;
 }
@@ -65,7 +115,7 @@ textarea {
   min-height: 46px;
   align-items: center;
   gap: 8px;
-  border-bottom: 1px solid var(--dz-border);
+  border-bottom: 1px solid var(--d-border);
   padding: 7px 9px;
 }
 .dz-brand {
@@ -74,9 +124,9 @@ textarea {
   height: 28px;
   flex: 0 0 auto;
   place-items: center;
-  border-radius: 8px;
-  background: var(--dz-text);
-  color: white;
+  border-radius: var(--d-radius-sm);
+  background: var(--d-brand);
+  color: var(--d-text-on-brand);
   font-weight: 700;
 }
 .dz-header-main {
@@ -95,26 +145,27 @@ textarea {
   min-height: 30px;
   white-space: nowrap;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--d-radius-sm);
   background: transparent;
-  color: var(--dz-muted);
+  color: var(--d-text-secondary);
   padding: 5px 9px;
   cursor: pointer;
 }
 .dz-tab:hover {
-  background: var(--dz-canvas);
-  color: var(--dz-text);
+  background: var(--d-surface-soft);
+  color: var(--d-text);
 }
 .dz-tab.is-active {
-  background: var(--dz-blue-soft);
-  color: var(--dz-blue);
+  background: var(--d-surface-brand);
+  color: var(--d-brand-strong);
   font-weight: 650;
 }
 .dz-tab:focus-visible,
 .dz-actions button:focus-visible,
 .dz-footer button:focus-visible,
-.dz-composer textarea:focus-visible {
-  outline: 3px solid rgb(39 100 255 / 0.28);
+.dz-composer textarea:focus-visible,
+.dz-composer button:focus-visible {
+  outline: 2px solid var(--d-focus);
   outline-offset: 1px;
 }
 .dz-tab-new {
@@ -123,7 +174,7 @@ textarea {
   height: 5px;
   margin-left: 5px;
   border-radius: 50%;
-  background: #98a2b3;
+  background: var(--d-text-faint);
   vertical-align: middle;
 }
 .dz-actions {
@@ -136,14 +187,14 @@ textarea {
   height: 29px;
   place-items: center;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--d-radius-xs);
   background: transparent;
-  color: var(--dz-muted);
+  color: var(--d-text-muted);
   cursor: pointer;
 }
 .dz-actions button:hover {
-  background: var(--dz-canvas);
-  color: var(--dz-text);
+  background: var(--d-surface-soft);
+  color: var(--d-text);
 }
 .dz-body {
   min-height: 100px;
@@ -159,13 +210,13 @@ textarea {
 }
 .dz-message.is-user {
   margin-left: 28px;
-  border-radius: 10px;
-  background: var(--dz-canvas);
+  border-radius: var(--d-radius-md);
+  background: var(--d-surface-brand);
   padding: 9px 10px;
 }
 .dz-message-role {
   margin-bottom: 4px;
-  color: var(--dz-muted);
+  color: var(--d-text-muted);
   font-size: 11px;
   font-weight: 650;
 }
@@ -174,7 +225,7 @@ textarea {
 }
 .dz-markdown {
   overflow-wrap: anywhere;
-  color: var(--dz-text);
+  color: var(--d-text);
 }
 .dz-markdown :first-child {
   margin-top: 0;
@@ -208,22 +259,22 @@ textarea {
   padding-left: 19px;
 }
 .dz-markdown code {
-  border-radius: 4px;
-  background: #f2f4f7;
+  border-radius: var(--d-radius-xs);
+  background: var(--d-surface-soft);
   padding: 1px 4px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.92em;
 }
 .dz-markdown blockquote {
-  border-left: 3px solid #b9c9ff;
-  color: var(--dz-muted);
+  border-left: 3px solid var(--d-border-brand);
+  color: var(--d-text-muted);
   padding-left: 9px;
 }
 .dz-reasoning {
   margin-top: 9px;
-  border-radius: 8px;
-  background: #f8f9fb;
-  color: var(--dz-muted);
+  border-radius: var(--d-radius-sm);
+  background: var(--d-surface-soft);
+  color: var(--d-text-muted);
   padding: 7px 9px;
 }
 .dz-reasoning summary {
@@ -233,14 +284,14 @@ textarea {
 }
 .dz-reasoning .dz-markdown {
   margin-top: 7px;
-  color: var(--dz-muted);
+  color: var(--d-text-muted);
   font-size: 12px;
 }
 .dz-empty {
   display: grid;
   min-height: 90px;
   place-items: center;
-  color: var(--dz-muted);
+  color: var(--d-text-muted);
 }
 .dz-thinking {
   display: flex;
@@ -251,7 +302,7 @@ textarea {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #98a2b3;
+  background: var(--d-text-faint);
   animation: dz-pulse 1.1s infinite ease-in-out;
 }
 .dz-thinking span:nth-child(2) {
@@ -262,7 +313,7 @@ textarea {
 }
 .dz-message-error,
 .dz-error {
-  color: var(--dz-danger);
+  color: var(--d-danger);
 }
 .dz-error {
   display: flex;
@@ -270,20 +321,20 @@ textarea {
   justify-content: space-between;
   gap: 8px;
   margin-top: 10px;
-  border-radius: 8px;
-  background: #fef3f2;
+  border-radius: var(--d-radius-sm);
+  background: var(--d-danger-soft);
   padding: 8px 9px;
   font-size: 12px;
 }
 .dz-error button {
   border: 0;
   background: transparent;
-  color: var(--dz-danger);
+  color: var(--d-danger);
   font-weight: 650;
   cursor: pointer;
 }
 .dz-footer {
-  border-top: 1px solid var(--dz-border);
+  border-top: 1px solid var(--d-border);
   padding: 8px 10px 10px;
 }
 .dz-footer:empty {
@@ -294,17 +345,17 @@ textarea {
   justify-content: flex-end;
 }
 .dz-status {
-  color: var(--dz-muted);
+  color: var(--d-text-muted);
   font-size: 11px;
 }
 .dz-status.is-error {
-  color: var(--dz-danger);
+  color: var(--d-danger);
 }
 .dz-secondary {
-  border: 1px solid var(--dz-border);
-  border-radius: 7px;
-  background: white;
-  color: var(--dz-muted);
+  border: 1px solid var(--d-border-strong);
+  border-radius: var(--d-radius-xs);
+  background: var(--d-surface);
+  color: var(--d-text-secondary);
   padding: 4px 9px;
   cursor: pointer;
 }
@@ -318,21 +369,32 @@ textarea {
   min-height: 54px;
   flex: 1;
   resize: none;
-  border: 1px solid var(--dz-border);
-  border-radius: 9px;
-  background: #fbfcfd;
-  color: var(--dz-text);
+  border: 1px solid var(--d-border);
+  border-radius: var(--d-radius-md);
+  background: var(--d-surface);
+  color: var(--d-text);
   padding: 8px 9px;
   outline: 0;
 }
+.dz-composer textarea:disabled {
+  background: var(--d-surface-soft);
+  cursor: default;
+}
 .dz-composer button {
-  width: 31px;
-  height: 31px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
   border: 0;
-  border-radius: 8px;
-  background: var(--dz-blue);
-  color: white;
+  border-radius: var(--d-radius-md);
+  background: var(--d-brand);
+  color: var(--d-text-on-brand);
   cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.dz-composer button:hover:not(:disabled),
+.dz-composer button[data-state='stop']:hover {
+  background: var(--d-brand-strong);
 }
 .dz-composer button:disabled {
   cursor: default;
@@ -354,5 +416,8 @@ textarea {
 @media (prefers-reduced-motion: reduce) {
   .dz-thinking span {
     animation: none;
+  }
+  .dz-composer button {
+    transition: none;
   }
 }

@@ -180,6 +180,7 @@ textarea {
 .dz-actions {
   display: flex;
   gap: 2px;
+  align-items: center;
 }
 .dz-actions button {
   display: grid;
@@ -191,10 +192,20 @@ textarea {
   background: transparent;
   color: var(--d-text-muted);
   cursor: pointer;
+  transition: background-color 120ms ease;
 }
 .dz-actions button:hover {
   background: var(--d-surface-soft);
   color: var(--d-text);
+}
+.dz-actions button:active {
+  transform: scale(0.93);
+}
+.dz-actions-divider {
+  width: 1px;
+  height: 16px;
+  margin: 0 3px;
+  background: var(--d-border);
 }
 .dz-body {
   min-height: 100px;
@@ -333,6 +344,24 @@ textarea {
   font-weight: 650;
   cursor: pointer;
 }
+.dz-card-cta {
+  width: 100%;
+  margin-top: 12px;
+  border: 1px solid var(--d-brand);
+  border-radius: var(--d-radius-sm);
+  background: var(--d-surface);
+  color: var(--d-brand-strong);
+  font-weight: 650;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+.dz-card-cta:hover {
+  background: var(--d-surface-brand);
+}
+.dz-card-cta:active {
+  transform: scale(0.98);
+}
 .dz-footer {
   border-top: 1px solid var(--d-border);
   padding: 8px 10px 10px;
@@ -417,7 +446,14 @@ textarea {
   .dz-thinking span {
     animation: none;
   }
-  .dz-composer button {
+  .dz-composer button,
+  .dz-actions button,
+  .dz-card-cta {
     transition: none;
+  }
+  .dz-composer button:active,
+  .dz-actions button:active,
+  .dz-card-cta:active {
+    transform: none;
   }
 }

@@ -22,6 +22,75 @@ import { computePlacement, type AnchorRect, type Placement } from '../popover/pl
 import { formatShortcut, matchesShortcut } from './shortcuts'
 import './App.css'
 
+/* Header action glyphs — inline SVG (no emoji/text-as-icon), one stroke
+ * family matching Phosphor's 24-box outline style. */
+function actionSvgProps() {
+  return {
+    viewBox: '0 0 24 24',
+    width: 16,
+    height: 16,
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    'aria-hidden': true,
+  } as const
+}
+
+function IconExpand() {
+  return (
+    <svg {...actionSvgProps()}>
+      <path d="M9 6V3H3v6M15 6V3h6v6M9 18v3H3v-6M21 15v6h-6" />
+    </svg>
+  )
+}
+
+function IconCollapse() {
+  return (
+    <svg {...actionSvgProps()}>
+      <path d="M6 3v3H3M18 3v3h3M6 21v-3H3M18 21v-3h3" />
+    </svg>
+  )
+}
+
+function IconCardGrid() {
+  return (
+    <svg {...actionSvgProps()}>
+      <rect x="4" y="4" width="7" height="7" rx="1.5" />
+      <rect x="13" y="4" width="7" height="7" rx="1.5" />
+      <rect x="4" y="13" width="7" height="7" rx="1.5" />
+      <rect x="13" y="13" width="7" height="7" rx="1.5" />
+    </svg>
+  )
+}
+
+function IconChatBubble() {
+  return (
+    <svg {...actionSvgProps()}>
+      <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H9.5L5 20.5v-3.9A2.5 2.5 0 0 1 4 14z" />
+      <path d="M8 10h.01M12 10h.01M16 10h.01" strokeWidth={2.6} />
+    </svg>
+  )
+}
+
+function IconPanelRight() {
+  return (
+    <svg {...actionSvgProps()}>
+      <rect x="4" y="4" width="16" height="16" rx="2.5" />
+      <path d="M14 4v16" />
+    </svg>
+  )
+}
+
+function IconClose() {
+  return (
+    <svg {...actionSvgProps()}>
+      <path d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  )
+}
+
 export interface ContentAppProps {
   state: ConversationViewState
   placement: Placement
@@ -77,9 +146,7 @@ export function ContentApp({
     latestAssistant?.errorCode === 'PROVIDER_NOT_CONFIGURED'
   const arrowTop = placement.direction === 'below' ? placement.y - 6 : placement.y + panelHeight - 6
   const shortcutTip = (shortcut: string) => ` (${formatShortcut(shortcut)})`
-  const modeLabel = state.mode === 'card' ? '展开对话' : '显示卡片'
   const expandLabel = state.expanded ? '收起宽屏' : '展开宽屏'
-
   return (
     <div className="dz-layer" data-dianzhi-popover="true">
       <div
@@ -97,49 +164,52 @@ export function ContentApp({
           <div className="dz-brand" aria-label="点知">
             <span>点</span>
           </div>
-          <div className="dz-header-main">
-            {snapshot?.tools.length ? (
+          {snapshot?.tools.length ? (
+            <div className="dz-header-main">
               <ToolTabs
                 tools={snapshot.tools}
                 activeToolId={snapshot.activeToolId}
                 onSelect={onToolSelect}
               />
-            ) : (
-              <strong>点知</strong>
-            )}
-          </div>
+            </div>
+          ) : (
+            /* Brand identity is carried by the logo block alone; the duplicated
+             * text fallback is intentional redundancy removal. */
+            <div className="dz-header-main" />
+          )}
           <div className="dz-actions">
             <button
               type="button"
-              aria-label={`${modeLabel}${shortcutTip(shortcuts.toggleChat)}`}
-              title={`${modeLabel}${shortcutTip(shortcuts.toggleChat)}`}
+              aria-label={state.mode === 'card' ? '展开对话' : '显示卡片'}
+              title={`${state.mode === 'card' ? '展开对话' : '显示卡片'}${shortcutTip(shortcuts.toggleChat)}`}
               onClick={() => onModeChange(state.mode === 'card' ? 'chat' : 'card')}
             >
-              {state.mode === 'card' ? '◫' : '▣'}
+              {state.mode === 'card' ? <IconChatBubble /> : <IconCardGrid />}
             </button>
             <button
               type="button"
-              aria-label={`${expandLabel}${shortcutTip(shortcuts.expand)}`}
+              aria-label={expandLabel}
               title={`${expandLabel}${shortcutTip(shortcuts.expand)}`}
               onClick={onExpand}
             >
-              {state.expanded ? '↙' : '↗'}
+              {state.expanded ? <IconCollapse /> : <IconExpand />}
             </button>
             <button
               type="button"
-              aria-label={`在侧边栏继续${shortcutTip(shortcuts.dock)}`}
-              title={`在侧边栏继续${shortcutTip(shortcuts.dock)}`}
+              aria-label="切换侧边面板"
+              title={`切换侧边面板${shortcutTip(shortcuts.dock)}`}
               onClick={onDock}
             >
-              ⇥
+              <IconPanelRight />
             </button>
+            <span className="dz-actions-divider" aria-hidden="true" />
             <button
               type="button"
-              aria-label={`关闭${shortcutTip(shortcuts.close)}`}
+              aria-label="关闭"
               title={`关闭${shortcutTip(shortcuts.close)}`}
               onClick={onClose}
             >
-              ×
+              <IconClose />
             </button>
           </div>
         </header>
@@ -150,6 +220,11 @@ export function ContentApp({
             mode={state.mode}
             reasoningEnabled={reasoningEnabled}
           />
+          {state.mode === 'card' && (
+            <button type="button" className="dz-card-cta" onClick={() => onModeChange('chat')}>
+              继续对话{shortcutTip(shortcuts.toggleChat)}
+            </button>
+          )}
           {(state.error || latestAssistant?.errorMessage) && (
             <div className="dz-error" role="alert">
               <span>{state.error?.message ?? latestAssistant?.errorMessage}</span>
@@ -162,16 +237,16 @@ export function ContentApp({
           )}
         </main>
 
-        <footer className="dz-footer">
-          <ConversationStatus message={latestAssistant} />
-          <div className="dz-footer-actions">
+        {state.mode === 'chat' && (
+          <footer className="dz-footer">
+            <ConversationStatus message={latestAssistant} />
             {canRetry && (
-              <button type="button" className="dz-secondary" onClick={onRetry}>
-                重试
-              </button>
+              <div className="dz-footer-actions">
+                <button type="button" className="dz-secondary" onClick={onRetry}>
+                  重试
+                </button>
+              </div>
             )}
-          </div>
-          {state.mode === 'chat' && (
             <Composer
               value={composerValue}
               disabled={streaming}
@@ -181,8 +256,8 @@ export function ContentApp({
               onStop={onStop}
               inputRef={composerRef}
             />
-          )}
-        </footer>
+          </footer>
+        )}
       </div>
     </div>
   )
@@ -245,6 +320,13 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
     },
     [sendCommand, state.snapshot?.conversation.id]
   )
+  const togglePanel = useCallback(() => {
+    withConversation((conversationId) => ({
+      type: 'panel.toggle',
+      requestId: requestId('panel'),
+      payload: { conversationId },
+    }))
+  }, [requestId, withConversation])
 
   useEffect(() => {
     void contentSettingsCommand
@@ -295,11 +377,23 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       .find((message) => message.role === 'assistant') ?? null
   const streaming = latestAssistant?.status === 'streaming'
 
+  // Closing the popover returns focus to the page instead of leaving it
+  // stuck on a removed node (WCAG focus management).
+  const closePopover = useCallback(() => {
+    if (
+      document.activeElement instanceof HTMLElement &&
+      extensionHost.contains(document.activeElement)
+    ) {
+      document.activeElement.blur()
+    }
+    dispatch({ type: 'view.closed' })
+  }, [extensionHost])
+
   useLayoutEffect(() => {
     if (!state.visible || state.mode !== 'chat') return
     if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
-    // The composer is disabled while streaming, so defer focusing until the
-    // stream ends; the effect re-runs because `streaming` flips to false.
+    // Defer focusing until the stream ends; `streaming` flips to false so this
+    // effect re-runs once the reply completes.
     if (streaming) return
     composerRef.current?.focus()
   }, [state.visible, state.mode, streaming])
@@ -326,13 +420,13 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
       if (state.visible && event.target instanceof Node && !extensionHost.contains(event.target)) {
-        dispatch({ type: 'view.closed' })
+        closePopover()
       }
     }
     const onKeyDown = (event: KeyboardEvent) => {
       if (matchesShortcut(event, settings.shortcuts.close)) {
         event.preventDefault()
-        dispatch({ type: 'view.closed' })
+        closePopover()
         return
       }
       if (!state.snapshot) return
@@ -348,11 +442,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       }
       if (matchesShortcut(event, settings.shortcuts.dock)) {
         event.preventDefault()
-        withConversation((conversationId) => ({
-          type: 'panel.open',
-          requestId: requestId('panel'),
-          payload: { conversationId },
-        }))
+        togglePanel()
         return
       }
       if (
@@ -373,7 +463,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       document.removeEventListener('pointerdown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown)
     }
-  }, [extensionHost, requestId, selectTool, settings.shortcuts, state, withConversation])
+  }, [closePopover, extensionHost, requestId, selectTool, settings.shortcuts, state, togglePanel])
 
   return (
     <ContentApp
@@ -390,14 +480,8 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       onToolSelect={(toolId) => void selectTool(toolId)}
       onModeChange={(mode) => dispatch({ type: 'view.mode', mode })}
       onExpand={() => dispatch({ type: 'view.expanded', expanded: !state.expanded })}
-      onClose={() => dispatch({ type: 'view.closed' })}
-      onDock={() =>
-        withConversation((conversationId) => ({
-          type: 'panel.open',
-          requestId: requestId('panel'),
-          payload: { conversationId },
-        }))
-      }
+      onClose={closePopover}
+      onDock={togglePanel}
       onSend={() => {
         const content = composer.trim()
         if (!content) return

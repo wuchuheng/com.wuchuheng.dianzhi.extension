@@ -257,18 +257,25 @@ export function OptionsView(props: OptionsViewProps) {
                   onChange={(e) => updateUi({ contextMaxBlocks: Number(e.target.value) })}
                 />
               </label>
-              {(['tabLeft', 'tabRight', 'toggleChat', 'dock', 'expand', 'close'] as const).map(
-                (key) => (
-                  <label key={key}>
-                    {key}
-                    <input
-                      {...fieldProps(`shortcuts.${key}`)}
-                      value={settings.shortcuts[key]}
-                      onChange={(e) => updateShortcuts({ [key]: e.target.value })}
-                    />
-                  </label>
-                )
-              )}
+              {(
+                [
+                  { key: 'tabLeft', label: '上一个工具' },
+                  { key: 'tabRight', label: '下一个工具' },
+                  { key: 'toggleChat', label: '继续对话(卡片/对话)' },
+                  { key: 'dock', label: '侧边面板(开/关)' },
+                  { key: 'expand', label: '展开/收起宽屏' },
+                  { key: 'close', label: '关闭浮层' },
+                ] as const
+              ).map(({ key, label }) => (
+                <label key={key}>
+                  {label}
+                  <input
+                    {...fieldProps(`shortcuts.${key}`)}
+                    value={settings.shortcuts[key]}
+                    onChange={(e) => updateShortcuts({ [key]: e.target.value })}
+                  />
+                </label>
+              ))}
             </div>
           </section>
         )}

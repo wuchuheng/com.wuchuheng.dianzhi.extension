@@ -85,6 +85,13 @@ export type ConversationCommand =
       payload: { conversationId: number }
     }
   | {
+      /** Content-script shortcut: opens the Side Panel, or closes it when it
+       *  is already open and showing this conversation (toggle). */
+      type: 'panel.toggle'
+      requestId: string
+      payload: { conversationId: number }
+    }
+  | {
       type: 'panel.rendered'
       requestId: string
       payload: { conversationId: number }
@@ -264,6 +271,7 @@ export function parseConversationCommand(value: unknown): ParseResult<Conversati
     case 'conversation.retry':
     case 'stream.stop':
     case 'panel.open':
+    case 'panel.toggle':
     case 'panel.rendered':
     case 'panel.close':
       if (!isPositiveInteger(payload.conversationId)) return invalid('Conversation ID is invalid.')

@@ -400,11 +400,30 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       return handleCreate(command, sender)
     }
 
-    if (command.type === 'panel.open') {
+    if (command.type === 'panel.open' || command.type === 'panel.toggle') {
       if (source !== 'content')
-        throw invalid('Only a content-script user gesture can open the Side Panel.')
+        throw invalid('Only a content-script user gesture can open or toggle the Side Panel.')
       const tabId = sender.tab?.id
-      if (!tabId) throw invalid('The Side Panel must be opened from a content-script user gesture.')
+      if (!tabId)
+        throw invalid('The Side Panel must be toggled from a content-script user gesture.')
+
+      // Toggle-close: the panel is already open and showing this conversation.
+      if (command.type === 'panel.toggle') {
+        const panelState = tabStates.get(tabId)
+        if (
+          panelState?.panelOpen &&
+          panelState.activeConversationId === command.payload.conversationId
+        ) {
+          cancelPendingPanelClose(tabId)
+          await dependencies.sidePanel.close(tabId)
+          await markPanelClosed(tabId, command.payload.conversationId)
+          const settings = await dependencies.loadSettings()
+          return {
+            accepted: true,
+            snapshot: await loadSnapshot(command.payload.conversationId, settings),
+          }
+        }
+      }
       let resolveReady!: () => void
       let rejectReady!: (error: unknown) => void
       const ready = new Promise<void>((resolve, reject) => {

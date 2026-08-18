@@ -76,7 +76,6 @@ describe('SidePanelView', () => {
         onSend={() => undefined}
         onStop={() => undefined}
         onRetry={() => undefined}
-        onClose={() => undefined}
         onOpenSettings={() => undefined}
       />
     )
@@ -84,6 +83,7 @@ describe('SidePanelView', () => {
     expect(html).toContain('选择英文文本后')
     expect(html).not.toContain('新建对话')
     expect(html).not.toContain('历史记录')
+    expect(html).not.toContain('关闭侧边栏')
   })
 
   it('renders the active tool, full history, reasoning, and follow-up composer', () => {
@@ -97,7 +97,6 @@ describe('SidePanelView', () => {
         onSend={() => undefined}
         onStop={() => undefined}
         onRetry={() => undefined}
-        onClose={() => undefined}
         onOpenSettings={() => undefined}
       />
     )
@@ -108,5 +107,7 @@ describe('SidePanelView', () => {
     expect(html).toContain('思考过程')
     expect(html).toContain('continue here')
     expect(html).not.toContain('新建对话')
+    expect(html).not.toContain('dz-panel-header')
+    expect(html).not.toContain('关闭侧边栏')
   })
 })

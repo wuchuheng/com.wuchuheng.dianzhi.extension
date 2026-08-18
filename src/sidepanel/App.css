@@ -1,25 +1,10 @@
 .dz-panel-page {
   min-height: 100vh;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   background: #f7f4ee;
   color: #22201d;
 }
-.dz-panel-header {
-  min-height: 54px;
-  padding: 10px 12px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid #ded8ce;
-  background: rgba(255, 255, 255, 0.72);
-}
-.dz-brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-.dz-brand span,
 .dz-empty-mark {
   display: grid;
   place-items: center;
@@ -30,7 +15,6 @@
   background: #c85f32;
   font-weight: 750;
 }
-.dz-icon-button,
 .dz-secondary,
 .dz-error button {
   border: 1px solid #d8d0c4;
@@ -38,11 +22,6 @@
   background: #fff;
   color: #49433c;
   cursor: pointer;
-}
-.dz-icon-button {
-  width: 30px;
-  height: 30px;
-  font-size: 20px;
 }
 .dz-tabs {
   display: flex;
@@ -211,6 +190,7 @@
 }
 .dz-panel-empty {
   display: grid;
+  grid-row: 1 / -1;
   place-items: center;
   align-content: center;
   padding: 38px 24px;

@@ -14,6 +14,7 @@ import {
   reducePanelState,
   type PanelState,
 } from './panel-state'
+import { isNearBottom } from './scroll-pin'
 import './App.css'
 
 export interface SidePanelViewProps {
@@ -25,7 +26,6 @@ export interface SidePanelViewProps {
   onSend(): void
   onStop(): void
   onRetry(): void
-  onClose(): void
   onOpenSettings(): void
 }
 
@@ -38,7 +38,6 @@ export function SidePanelView({
   onSend,
   onStop,
   onRetry,
-  onClose,
   onOpenSettings,
 }: SidePanelViewProps) {
   const snapshot = state.snapshot
@@ -49,17 +48,35 @@ export function SidePanelView({
   const retryable = latestAssistant?.status === 'error' || latestAssistant?.status === 'stopped'
   const needsSettings = latestAssistant?.errorCode === 'PROVIDER_NOT_CONFIGURED'
 
+  const historyRef = useRef<HTMLDivElement | null>(null)
+  const pinnedRef = useRef(true)
+  const viewKey = `${snapshot?.conversation.id ?? ''}:${snapshot?.activeToolId ?? ''}`
+  const previousViewKey = useRef(viewKey)
+
+  useEffect(() => {
+    // Opening the panel or switching tools starts pinned to the latest message.
+    if (previousViewKey.current !== viewKey) {
+      previousViewKey.current = viewKey
+      pinnedRef.current = true
+    }
+  }, [viewKey])
+
+  const messages = snapshot?.messages
+  useEffect(() => {
+    // Follow the bottom while pinned so new streamed messages stay visible.
+    const container = historyRef.current
+    if (container && messages && messages.length > 0 && pinnedRef.current) {
+      container.scrollTop = container.scrollHeight
+    }
+  }, [messages])
+
+  const onHistoryScroll = useCallback(() => {
+    const container = historyRef.current
+    if (container) pinnedRef.current = isNearBottom(container)
+  }, [])
+
   return (
     <div className="dz-panel-page">
-      <header className="dz-panel-header">
-        <div className="dz-brand">
-          <span>点</span>
-          <strong>点知</strong>
-        </div>
-        <button type="button" className="dz-icon-button" aria-label="关闭侧边栏" onClick={onClose}>
-          ×
-        </button>
-      </header>
       {snapshot ? (
         <>
           <ToolTabs
@@ -67,7 +84,7 @@ export function SidePanelView({
             activeToolId={snapshot.activeToolId}
             onSelect={onToolSelect}
           />
-          <main className="dz-panel-history">
+          <main className="dz-panel-history" ref={historyRef} onScroll={onHistoryScroll}>
             <MessageList
               messages={snapshot.messages}
               mode="chat"
@@ -256,13 +273,6 @@ export default function App() {
         withConversation((conversationId) => ({
           type: 'conversation.retry',
           requestId: requestId('retry'),
-          payload: { conversationId },
-        }))
-      }
-      onClose={() =>
-        withConversation((conversationId) => ({
-          type: 'panel.close',
-          requestId: requestId('close'),
           payload: { conversationId },
         }))
       }

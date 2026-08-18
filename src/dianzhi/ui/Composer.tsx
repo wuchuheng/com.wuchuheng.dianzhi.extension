@@ -1,13 +1,14 @@
-import type { KeyboardEvent } from 'react'
+import type { KeyboardEvent, RefObject } from 'react'
 
 export interface ComposerProps {
   value: string
   disabled?: boolean
+  inputRef?: RefObject<HTMLTextAreaElement | null>
   onChange(value: string): void
   onSend(): void
 }
 
-export function Composer({ value, disabled, onChange, onSend }: ComposerProps) {
+export function Composer({ value, disabled, onChange, onSend, inputRef }: ComposerProps) {
   const submit = () => {
     if (!disabled && value.trim()) onSend()
   }
@@ -21,6 +22,7 @@ export function Composer({ value, disabled, onChange, onSend }: ComposerProps) {
     <div className="dz-composer">
       <textarea
         aria-label="继续对话"
+        ref={inputRef}
         rows={2}
         value={value}
         disabled={disabled}

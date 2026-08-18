@@ -6,7 +6,7 @@ import {
 } from '@/dianzhi/conversation/reducer'
 import { DianzhiError, type DianzhiErrorShape } from '@/dianzhi/domain/errors'
 import { DEFAULT_SETTINGS } from '@/dianzhi/domain/settings'
-import type { DianzhiSettings } from '@/dianzhi/domain/types'
+import type { DianzhiSettings, ShortcutSettings } from '@/dianzhi/domain/types'
 import type { ConversationCommand, ConversationUpdate } from '@/dianzhi/domain/protocol'
 import { Composer } from '@/dianzhi/ui/Composer'
 import { ConversationStatus } from '@/dianzhi/ui/ConversationStatus'
@@ -19,20 +19,8 @@ import {
 } from '@/events/config'
 import { createSelectionController } from '../selection/controller'
 import { computePlacement, type AnchorRect, type Placement } from '../popover/placement'
+import { formatShortcut, matchesShortcut } from './shortcuts'
 import './App.css'
-
-function matchesShortcut(event: KeyboardEvent, shortcut: string): boolean {
-  const parts = shortcut.split('+')
-  const key = parts[parts.length - 1]?.toLowerCase()
-  if (!key) return false
-  return (
-    event.ctrlKey === parts.includes('Control') &&
-    event.altKey === parts.includes('Alt') &&
-    event.shiftKey === parts.includes('Shift') &&
-    event.metaKey === parts.includes('Meta') &&
-    event.key.toLowerCase() === key
-  )
-}
 
 export interface ContentAppProps {
   state: ConversationViewState
@@ -40,6 +28,9 @@ export interface ContentAppProps {
   panelHeight?: number
   reasoningEnabled: boolean
   composerValue?: string
+  shortcuts: ShortcutSettings
+  composerRef?: React.RefObject<HTMLTextAreaElement | null>
+  bodyRef?: React.RefObject<HTMLDivElement | null>
   onComposerChange?(value: string): void
   onToolSelect(toolId: number): void
   onModeChange(mode: 'card' | 'chat'): void
@@ -59,6 +50,9 @@ export function ContentApp({
   panelHeight = 280,
   reasoningEnabled,
   composerValue = '',
+  shortcuts,
+  composerRef,
+  bodyRef,
   onComposerChange = () => undefined,
   onToolSelect,
   onModeChange,
@@ -82,6 +76,9 @@ export function ContentApp({
     state.error?.code === 'PROVIDER_NOT_CONFIGURED' ||
     latestAssistant?.errorCode === 'PROVIDER_NOT_CONFIGURED'
   const arrowTop = placement.direction === 'below' ? placement.y - 6 : placement.y + panelHeight - 6
+  const shortcutTip = (shortcut: string) => ` (${formatShortcut(shortcut)})`
+  const modeLabel = state.mode === 'card' ? '展开对话' : '显示卡片'
+  const expandLabel = state.expanded ? '收起宽屏' : '展开宽屏'
 
   return (
     <div className="dz-layer" data-dianzhi-popover="true">
@@ -114,30 +111,40 @@ export function ContentApp({
           <div className="dz-actions">
             <button
               type="button"
-              aria-label={state.mode === 'card' ? '展开对话' : '显示卡片'}
-              title={state.mode === 'card' ? '展开对话' : '显示卡片'}
+              aria-label={`${modeLabel}${shortcutTip(shortcuts.toggleChat)}`}
+              title={`${modeLabel}${shortcutTip(shortcuts.toggleChat)}`}
               onClick={() => onModeChange(state.mode === 'card' ? 'chat' : 'card')}
             >
               {state.mode === 'card' ? '◫' : '▣'}
             </button>
             <button
               type="button"
-              aria-label={state.expanded ? '收起宽屏' : '展开宽屏'}
-              title={state.expanded ? '收起宽屏' : '展开宽屏'}
+              aria-label={`${expandLabel}${shortcutTip(shortcuts.expand)}`}
+              title={`${expandLabel}${shortcutTip(shortcuts.expand)}`}
               onClick={onExpand}
             >
               {state.expanded ? '↙' : '↗'}
             </button>
-            <button type="button" aria-label="在侧边栏继续" title="在侧边栏继续" onClick={onDock}>
+            <button
+              type="button"
+              aria-label={`在侧边栏继续${shortcutTip(shortcuts.dock)}`}
+              title={`在侧边栏继续${shortcutTip(shortcuts.dock)}`}
+              onClick={onDock}
+            >
               ⇥
             </button>
-            <button type="button" aria-label="关闭" title="关闭" onClick={onClose}>
+            <button
+              type="button"
+              aria-label={`关闭${shortcutTip(shortcuts.close)}`}
+              title={`关闭${shortcutTip(shortcuts.close)}`}
+              onClick={onClose}
+            >
               ×
             </button>
           </div>
         </header>
 
-        <main className="dz-body">
+        <main ref={bodyRef} className="dz-body">
           <MessageList
             messages={snapshot?.messages ?? []}
             mode={state.mode}
@@ -175,6 +182,7 @@ export function ContentApp({
               disabled={streaming}
               onChange={onComposerChange}
               onSend={onSend}
+              inputRef={composerRef}
             />
           )}
         </footer>
@@ -205,6 +213,8 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
   const [panelHeight, setPanelHeight] = useState(280)
   const [composer, setComposer] = useState('')
   const panelRef = useRef<HTMLDivElement | null>(null)
+  const composerRef = useRef<HTMLTextAreaElement | null>(null)
+  const bodyRef = useRef<HTMLDivElement | null>(null)
   const requestNumber = useRef(0)
 
   const requestId = useCallback(
@@ -282,6 +292,21 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
     return () => controller.stop()
   }, [extensionHost, requestId, sendCommand, settings])
 
+  const latestAssistant =
+    [...(state.snapshot?.messages ?? [])]
+      .reverse()
+      .find((message) => message.role === 'assistant') ?? null
+  const streaming = latestAssistant?.status === 'streaming'
+
+  useLayoutEffect(() => {
+    if (!state.visible || state.mode !== 'chat') return
+    if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
+    // The composer is disabled while streaming, so defer focusing until the
+    // stream ends; the effect re-runs because `streaming` flips to false.
+    if (streaming) return
+    composerRef.current?.focus()
+  }, [state.visible, state.mode, streaming])
+
   useLayoutEffect(() => {
     if (!state.visible || !anchor) return
     const frame = window.requestAnimationFrame(() => {
@@ -308,8 +333,17 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       }
     }
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && state.visible) dispatch({ type: 'view.closed' })
+      if (matchesShortcut(event, settings.shortcuts.close)) {
+        event.preventDefault()
+        dispatch({ type: 'view.closed' })
+        return
+      }
       if (!state.snapshot) return
+      if (matchesShortcut(event, settings.shortcuts.expand)) {
+        event.preventDefault()
+        dispatch({ type: 'view.expanded', expanded: !state.expanded })
+        return
+      }
       if (matchesShortcut(event, settings.shortcuts.toggleChat)) {
         event.preventDefault()
         dispatch({ type: 'view.mode', mode: state.mode === 'card' ? 'chat' : 'card' })
@@ -352,6 +386,9 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       panelRef={panelRef}
       reasoningEnabled={settings.provider.reasoningEnabled}
       composerValue={composer}
+      shortcuts={settings.shortcuts}
+      composerRef={composerRef}
+      bodyRef={bodyRef}
       onComposerChange={setComposer}
       onToolSelect={(toolId) => void selectTool(toolId)}
       onModeChange={(mode) => dispatch({ type: 'view.mode', mode })}

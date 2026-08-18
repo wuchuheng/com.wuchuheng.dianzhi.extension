@@ -1,0 +1,394 @@
+/* Three-pane tools workspace. Desktop shows list, configuration, and test in
+   one row; medium widths fold configuration/test behind a detail tabset; small
+   widths stack everything without horizontal scrolling. */
+.tool-workspace {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.detail-tabs {
+  display: none;
+}
+.tool-workspace-detail {
+  min-width: 0;
+}
+/* Desktop always shows both detail panes regardless of the tab state. */
+.tool-workspace-detail[hidden] {
+  display: block;
+}
+
+.pane-title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.pane-empty {
+  margin: 0;
+  color: #8d847a;
+  font-size: 13px;
+}
+
+/* Tool list pane */
+.tool-list-pane,
+.tool-config-pane,
+.tool-test-pane {
+  border: 1px solid #ded8ce;
+  border-radius: 14px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 6px 22px rgba(55, 42, 28, 0.04);
+}
+.pane-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.tool-list-count {
+  color: #5e574f;
+  font-size: 13px;
+  font-weight: 600;
+}
+.pane-title-row .secondary {
+  margin: 0;
+  padding: 7px 10px;
+  font-size: 13px;
+}
+.tool-list {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tool-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 40px;
+  border: 1px solid #e5dfd6;
+  border-radius: 9px;
+  padding: 6px 9px;
+  background: #fff;
+  cursor: pointer;
+}
+.tool-row:hover {
+  border-color: #d5cec4;
+}
+.tool-row.selected {
+  border-color: #c85f32;
+  background: #f3ded1;
+  box-shadow: inset 0 0 0 1px #c85f32;
+}
+.tool-row-grip {
+  color: #b6aca0;
+  user-select: none;
+}
+.tool-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  border: 0;
+  padding: 0;
+  color: #292622;
+  background: transparent;
+  font-weight: 600;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tool-row.selected .tool-row-name {
+  color: #963f1e;
+}
+.tool-badge {
+  border-radius: 6px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tool-badge.preset {
+  color: #6f675e;
+  background: #efe9df;
+}
+.tool-badge.custom {
+  color: #963f1e;
+  background: #f9e2d7;
+}
+.tool-row input[type='checkbox'] {
+  width: auto;
+  margin: 0;
+}
+.tool-row-actions {
+  display: flex;
+  gap: 3px;
+}
+.tool-row-actions button {
+  min-width: 26px;
+  border: 1px solid #d7d0c6;
+  border-radius: 6px;
+  padding: 4px 6px;
+  color: #5e574f;
+  background: #fff;
+  cursor: pointer;
+  line-height: 1.1;
+}
+.tool-row-actions button:disabled {
+  color: #c4bcb1;
+  cursor: default;
+}
+.tool-row-actions button:focus-visible,
+.tool-row-name:focus-visible,
+.tool-list-pane .secondary:focus-visible {
+  outline: 2px solid #c85f32;
+  outline-offset: 1px;
+}
+
+/* Drag and drop indicator lines */
+.drop-line {
+  position: absolute;
+  display: none;
+  right: 6px;
+  left: 6px;
+  height: 3px;
+  border-radius: 2px;
+  background: #c85f32;
+  pointer-events: none;
+}
+.drop-before {
+  top: -2px;
+}
+.drop-after {
+  bottom: -2px;
+}
+.tool-row.drag-before .drop-before {
+  display: block;
+}
+.tool-row.drag-after .drop-after {
+  display: block;
+}
+
+/* Configuration pane */
+.tool-config-pane {
+  display: grid;
+  gap: 12px;
+}
+.tool-config-pane label {
+  display: grid;
+  gap: 6px;
+  color: #5e574f;
+  font-size: 13px;
+  font-weight: 600;
+}
+.tool-config-pane input,
+.tool-config-pane textarea,
+.tool-config-pane select {
+  width: 100%;
+  border: 1px solid #d5cec4;
+  border-radius: 8px;
+  padding: 8px 9px;
+  color: #292622;
+  background: #fff;
+  box-sizing: border-box;
+}
+.tool-config-pane input[type='checkbox'] {
+  width: auto;
+}
+.tool-config-pane .switch-row {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+}
+.tool-config-pane textarea {
+  min-height: 110px;
+  resize: vertical;
+  line-height: 1.45;
+}
+.tool-config-pane .danger {
+  justify-self: start;
+  border: 1px solid #e1b4a9;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #a03e31;
+  background: #fff1ed;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tool-field-hint {
+  margin: 0;
+  color: #8d847a;
+  font-size: 12px;
+}
+.tool-default-badge {
+  margin: 0;
+  color: #963f1e;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Live test pane */
+.tool-test-pane {
+  display: grid;
+  gap: 12px;
+}
+.tool-test-pane label {
+  display: grid;
+  gap: 6px;
+  color: #5e574f;
+  font-size: 13px;
+  font-weight: 600;
+}
+.tool-test-pane input,
+.tool-test-pane textarea {
+  width: 100%;
+  border: 1px solid #d5cec4;
+  border-radius: 8px;
+  padding: 8px 9px;
+  color: #292622;
+  background: #fff;
+  box-sizing: border-box;
+}
+.tool-test-pane textarea {
+  min-height: 64px;
+  resize: vertical;
+  line-height: 1.45;
+}
+.prompt-preview-label {
+  margin: 0;
+  color: #5e574f;
+  font-size: 12px;
+  font-weight: 600;
+}
+.prompt-preview {
+  margin: 0;
+  border: 1px dashed #d8d1c7;
+  border-radius: 8px;
+  padding: 8px 9px;
+  max-height: 96px;
+  overflow: auto;
+  color: #6f675e;
+  background: #faf7f1;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.tool-test-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tool-test-actions button {
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.tool-test-actions .primary {
+  color: #fff;
+  background: #c85f32;
+}
+.tool-test-actions .secondary {
+  border: 1px solid #d7d0c6;
+  color: #5e574f;
+  background: #fff;
+}
+.tool-test-actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.tool-test-actions button:focus-visible {
+  outline: 2px solid #c85f32;
+  outline-offset: 1px;
+}
+.tool-test-status {
+  margin: 0;
+  color: #5e574f;
+  font-size: 13px;
+  font-weight: 600;
+}
+.reasoning-region {
+  border: 1px solid #e9e2d8;
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: #faf7f1;
+}
+.reasoning-region summary {
+  color: #6f675e;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.reasoning-region pre,
+.answer-region {
+  margin: 8px 0 0;
+  color: #292622;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.answer-region {
+  min-height: 56px;
+}
+.tool-test-metrics {
+  margin: 0;
+  color: #8d847a;
+  font-size: 12px;
+}
+
+/* Medium widths: tool list above a Configuration/Test tabset. */
+@media (max-width: 1023px) {
+  .tool-workspace {
+    grid-template-columns: 1fr;
+  }
+  .detail-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid #e5dfd6;
+  }
+  .detail-tabs button {
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 8px 8px 0 0;
+    padding: 9px 14px;
+    color: #6f675e;
+    background: transparent;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .detail-tabs button[aria-selected='true'] {
+    color: #963f1e;
+    border-bottom-color: #c85f32;
+    background: #f3ded1;
+  }
+  .tool-workspace-detail[hidden] {
+    display: none;
+  }
+}
+
+/* Small widths: everything stacks, no tabs, no horizontal scroll. */
+@media (max-width: 760px) {
+  .detail-tabs {
+    display: none;
+  }
+  .tool-workspace-detail[hidden] {
+    display: block;
+  }
+  .tool-row {
+    gap: 5px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tool-row,
+  .tool-row-actions button {
+    transition: none;
+  }
+}

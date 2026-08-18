@@ -1,7 +1,7 @@
 .options-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 230px minmax(0, 860px);
+  grid-template-columns: 230px minmax(0, 1120px);
   justify-content: center;
   gap: 36px;
   padding: 34px 24px 90px;
@@ -79,8 +79,7 @@
 .span-two {
   grid-column: 1 / -1;
 }
-.settings-card label,
-.default-tool {
+.settings-card label {
   display: grid;
   gap: 6px;
   color: #5e574f;
@@ -127,13 +126,14 @@ input[type='range'] {
   align-self: end;
   min-height: 39px;
 }
-.section-title {
-  display: flex;
-  align-items: start;
-  justify-content: space-between;
-  gap: 20px;
+.field-hint {
+  grid-column: 1 / -1;
+  margin: -4px 0 0;
+  color: #9a928a;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
 }
-.section-title > button,
 .primary,
 .secondary {
   border: 0;
@@ -149,36 +149,6 @@ input[type='range'] {
   color: #5e574f;
   border: 1px solid #d5cec4;
   background: #fff;
-}
-.default-tool {
-  max-width: 280px;
-  margin-bottom: 14px;
-}
-.tool-list {
-  display: grid;
-  gap: 12px;
-}
-.tool-card {
-  display: grid;
-  gap: 12px;
-}
-.tool-head {
-  display: grid;
-  grid-template-columns: auto minmax(120px, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-}
-.tool-head button {
-  min-width: 31px;
-  border: 1px solid #d7d0c6;
-  border-radius: 7px;
-  padding: 6px;
-  background: #fff;
-  cursor: pointer;
-}
-.tool-head .danger {
-  margin-left: 5px;
-  color: #a03e31;
 }
 .form-errors {
   margin-top: 14px;
@@ -201,7 +171,7 @@ input[type='range'] {
   justify-content: flex-end;
   gap: 18px;
   border-top: 1px solid #d9d2c8;
-  padding: 12px max(24px, calc((100vw - 1126px) / 2 + 24px));
+  padding: 12px max(24px, calc((100vw - 1386px) / 2 + 24px));
   background: rgba(250, 248, 244, 0.94);
   backdrop-filter: blur(12px);
 }

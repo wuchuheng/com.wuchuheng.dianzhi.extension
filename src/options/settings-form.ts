@@ -41,3 +41,44 @@ export function moveTool(
   if (tool) next.tools.splice(destination, 0, tool)
   return next
 }
+
+/**
+ * Immutably moves `draggedId` to the drop position of `targetId`, either before
+ * or after its current row. Returns the same settings reference for no-op drops.
+ */
+export function reorderToolsByTarget(
+  settings: DianzhiSettings,
+  draggedId: string,
+  targetId: string,
+  before: boolean
+): DianzhiSettings {
+  const from = settings.tools.findIndex((tool) => tool.id === draggedId)
+  const target = settings.tools.findIndex((tool) => tool.id === targetId)
+  if (from < 0 || target < 0 || from === target) return settings
+  const next = copy(settings)
+  const [moved] = next.tools.splice(from, 1)
+  let insert = from < target ? target - 1 : target
+  if (!before) insert += 1
+  if (insert === from) return settings
+  if (moved) next.tools.splice(insert, 0, moved)
+  return next
+}
+
+/**
+ * Patches one tool's enabled state. Disabling the current default tool repairs
+ * it to the first remaining enabled tool, mirroring `removeCustomTool`.
+ */
+export function setToolEnabled(
+  settings: DianzhiSettings,
+  toolId: string,
+  enabled: boolean
+): DianzhiSettings {
+  const tool = settings.tools.find((item) => item.id === toolId)
+  if (!tool || tool.enabled === enabled) return settings
+  const next = copy(settings)
+  next.tools = next.tools.map((item) => (item.id === toolId ? { ...item, enabled } : item))
+  if (!enabled && next.ui.defaultToolId === toolId) {
+    next.ui.defaultToolId = next.tools.find((item) => item.enabled)?.id ?? 'context'
+  }
+  return next
+}

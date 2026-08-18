@@ -29,6 +29,9 @@ async function initialize(): Promise<void> {
   databaseRequest.handle(createDatabaseRpc(store))
   databaseReady.handle(async () => true)
   log(Scope.EXTENSION_PAGE, 'Dianzhi OPFS conversation database is ready')
+  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+  // @ts-expect-error
+  window.websqlite = db
 }
 
 void initialize().catch((error: unknown) => {

@@ -1,8 +1,9 @@
 import type { DianzhiErrorShape } from './errors'
-import type { DianzhiSettings, ToolDefinition } from './types'
+import type { DianzhiSettings, ProviderSettings, ToolDefinition } from './types'
 
 export const CONTENT_PORT_NAME = 'dianzhi:content'
 export const SIDEPANEL_PORT_NAME = 'dianzhi:sidepanel'
+export const OPTIONS_TOOL_TEST_PORT_NAME = 'dianzhi:options-tool-test'
 
 export type MessageRole = 'user' | 'assistant'
 export type MessageStatus = 'pending' | 'streaming' | 'completed' | 'error' | 'stopped'
@@ -128,6 +129,36 @@ export type SettingsCommand =
   | { type: 'settings.save'; requestId: string; settings: DianzhiSettings }
   | { type: 'settings.testProvider'; requestId: string; settings: DianzhiSettings }
 
+export type ToolTestCommand =
+  | {
+      type: 'tool.test'
+      requestId: string
+      payload: { prompt: string; provider: ProviderSettings }
+    }
+  | { type: 'tool.test.stop'; requestId: string; payload: Record<string, never> }
+
+export type ToolTestUpdate =
+  | { type: 'test.validating'; requestId: string }
+  | { type: 'test.started'; requestId: string }
+  | { type: 'test.delta'; requestId: string; kind: 'content' | 'reasoning'; delta: string }
+  | {
+      type: 'test.done'
+      requestId: string
+      content: string
+      reasoningContent: string
+      firstTokenMs: number | null
+      totalMs: number
+    }
+  | {
+      type: 'test.stopped'
+      requestId: string
+      content: string
+      reasoningContent: string
+      firstTokenMs: number | null
+      totalMs: number
+    }
+  | { type: 'test.error'; requestId: string; error: DianzhiErrorShape }
+
 export type ParseResult<T> = { ok: true; value: T } | { ok: false; error: DianzhiErrorShape }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -136,6 +167,31 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isRequestId(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
+}
+
+function isProviderSettings(value: unknown): value is ProviderSettings {
+  if (!isRecord(value)) return false
+  const {
+    baseUrl,
+    apiKey,
+    model,
+    temperature,
+    reasoningEnabled,
+    reasoningEffort,
+    thinkingParam,
+    extraBody,
+  } = value
+  return (
+    typeof baseUrl === 'string' &&
+    typeof apiKey === 'string' &&
+    typeof model === 'string' &&
+    typeof temperature === 'number' &&
+    Number.isFinite(temperature) &&
+    typeof reasoningEnabled === 'boolean' &&
+    (reasoningEffort === 'low' || reasoningEffort === 'medium' || reasoningEffort === 'high') &&
+    (thinkingParam === '' || thinkingParam === 'enable_thinking') &&
+    typeof extraBody === 'string'
+  )
 }
 
 function isPositiveInteger(value: unknown): value is number {
@@ -224,4 +280,41 @@ export function parseConversationCommand(value: unknown): ParseResult<Conversati
     default:
       return invalid('Conversation command type is invalid.')
   }
+}
+
+/**
+ * Parses an untrusted Options-page tool-test command received over the test port.
+ * @param value - Runtime message payload received across a Chrome context boundary.
+ * @returns A typed tool-test command or a stable validation failure.
+ */
+export function parseOptionsTestCommand(value: unknown): ParseResult<ToolTestCommand> {
+  if (!isRecord(value) || !isRequestId(value.requestId) || typeof value.type !== 'string') {
+    return invalid('Tool-test command envelope is invalid.')
+  }
+  if (!isRecord(value.payload) || hasCallerTabId(value.payload)) {
+    return invalid('Tool-test command payload is invalid.')
+  }
+  const requestId = value.requestId
+  const payload = value.payload
+  if (value.type === 'tool.test') {
+    if (typeof payload.prompt !== 'string' || !payload.prompt.trim()) {
+      return invalid('Tool-test prompt is empty.')
+    }
+    if (!isProviderSettings(payload.provider)) {
+      return invalid('Tool-test provider payload is invalid.')
+    }
+    return {
+      ok: true,
+      value: {
+        type: value.type,
+        requestId,
+        payload: { prompt: payload.prompt, provider: payload.provider },
+      },
+    }
+  }
+  if (value.type === 'tool.test.stop') {
+    if (Object.keys(payload).length > 0) return invalid('Tool-test stop payload must be empty.')
+    return { ok: true, value: { type: value.type, requestId, payload: {} } }
+  }
+  return invalid('Tool-test command type is invalid.')
 }

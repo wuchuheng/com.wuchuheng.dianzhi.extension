@@ -9,6 +9,7 @@ export type DianzhiErrorCode =
   | 'DB_UNAVAILABLE'
   | 'SIDE_PANEL_OPEN_FAILED'
   | 'SIDE_PANEL_READY_TIMEOUT'
+  | 'TEST_PORT_CLOSED'
 
 export interface DianzhiErrorShape {
   code: DianzhiErrorCode

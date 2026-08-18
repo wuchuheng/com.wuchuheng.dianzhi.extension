@@ -1,5 +1,6 @@
 import { createConversationManager, type ConversationManager } from './conversation-manager'
 import { createOffscreenClient } from './offscreen-client'
+import { createOptionsToolTestRunner } from './options-test-runner'
 import { createProviderRunner } from './provider-runner'
 import { DianzhiError } from '@/dianzhi/domain/errors'
 import { mergeSettings, validateSettings } from '@/dianzhi/domain/settings'
@@ -85,6 +86,7 @@ const manager = createConversationManager({
   },
 })
 managerRef.current = manager
+const optionsTestRunner = createOptionsToolTestRunner()
 
 function handleConversationCommand(
   value: unknown,
@@ -149,6 +151,7 @@ contentSettingsCommand.handle(async (value) => {
 })
 
 chrome.runtime.onConnect.addListener((port) => manager.connect(port))
+chrome.runtime.onConnect.addListener((port) => optionsTestRunner.connect(port))
 relayService()
 void manager.initialize().then(
   () => log(Scope.BACKGROUND, 'Dianzhi conversation manager is ready'),

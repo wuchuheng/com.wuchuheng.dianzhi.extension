@@ -30,3 +30,8 @@ CLAUDE.local.md
 playwright-report/
 test-results/
 .worktrees/
+.chrome-data/
+.omo/
+
+# Transient brainstorm session state
+.superpowers/

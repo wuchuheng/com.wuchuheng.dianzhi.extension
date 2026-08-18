@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { DEFAULT_SETTINGS, effectivePrompt, validateSettings } from '@/dianzhi/domain/settings'
+import { DEFAULT_SETTINGS, validateSettings } from '@/dianzhi/domain/settings'
 import type { DianzhiSettings, SettingsProblem } from '@/dianzhi/domain/types'
 import { settingsCommand } from '@/events/config'
-import { addCustomTool, moveTool, removeCustomTool } from './settings-form'
+import { ToolsWorkspace } from './tools/ToolsWorkspace'
 import './App.css'
 
 export type OptionsSection = 'provider' | 'tools' | 'interaction'
@@ -28,11 +28,6 @@ export function OptionsView(props: OptionsViewProps) {
     props.onSettingsChange({ ...settings, ui: { ...settings.ui, ...patch } })
   const updateShortcuts = (patch: Partial<DianzhiSettings['shortcuts']>) =>
     props.onSettingsChange({ ...settings, shortcuts: { ...settings.shortcuts, ...patch } })
-  const updateTool = (id: string, patch: Partial<DianzhiSettings['tools'][number]>) =>
-    props.onSettingsChange({
-      ...settings,
-      tools: settings.tools.map((tool) => (tool.id === id ? { ...tool, ...patch } : tool)),
-    })
 
   return (
     <div className="options-shell">
@@ -132,6 +127,10 @@ export function OptionsView(props: OptionsViewProps) {
                 />
                 推理模式
               </label>
+              <p className="field-hint">
+                未勾选时，网关模式（enable_thinking）会发送 enable_thinking:false 明确关闭推理；
+                “不使用”模式（OpenAI 兼容）无关闭参数，不发送任何字段，服务商默认行为仍会生效。
+              </p>
               <label>
                 推理强度
                 <select
@@ -167,102 +166,9 @@ export function OptionsView(props: OptionsViewProps) {
         )}
         {props.section === 'tools' && (
           <section>
-            <div className="section-title">
-              <div>
-                <h1>查询工具</h1>
-                <p className="lead">标签顺序也用于弹窗和侧边栏。</p>
-              </div>
-              <button type="button" onClick={() => props.onSettingsChange(addCustomTool(settings))}>
-                添加自定义工具
-              </button>
-            </div>
-            <label className="default-tool">
-              默认工具
-              <select
-                value={settings.ui.defaultToolId}
-                onChange={(e) => updateUi({ defaultToolId: e.target.value })}
-              >
-                {settings.tools
-                  .filter((tool) => tool.enabled)
-                  .map((tool) => (
-                    <option key={tool.id} value={tool.id}>
-                      {tool.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
-            <div className="tool-list">
-              {settings.tools.map((tool, index) => (
-                <article className="settings-card tool-card" key={tool.id}>
-                  <div className="tool-head">
-                    <input
-                      aria-label="启用工具"
-                      type="checkbox"
-                      checked={tool.enabled}
-                      onChange={(e) => updateTool(tool.id, { enabled: e.target.checked })}
-                    />
-                    <input
-                      aria-label="工具名称"
-                      value={tool.name}
-                      onChange={(e) => updateTool(tool.id, { name: e.target.value })}
-                    />
-                    <div>
-                      <button
-                        type="button"
-                        aria-label="上移"
-                        disabled={index === 0}
-                        onClick={() => props.onSettingsChange(moveTool(settings, tool.id, -1))}
-                      >
-                        ↑
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="下移"
-                        disabled={index === settings.tools.length - 1}
-                        onClick={() => props.onSettingsChange(moveTool(settings, tool.id, 1))}
-                      >
-                        ↓
-                      </button>
-                      {!tool.builtin && (
-                        <button
-                          type="button"
-                          className="danger"
-                          onClick={() =>
-                            props.onSettingsChange(removeCustomTool(settings, tool.id))
-                          }
-                        >
-                          删除
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                  <label>
-                    提示词模式
-                    <select
-                      value={tool.promptMode}
-                      onChange={(e) =>
-                        updateTool(tool.id, { promptMode: e.target.value as 'preset' | 'custom' })
-                      }
-                    >
-                      <option value="preset" disabled={!tool.builtin}>
-                        内置
-                      </option>
-                      <option value="custom">自定义</option>
-                    </select>
-                  </label>
-                  <label>
-                    提示词
-                    <textarea
-                      readOnly={tool.promptMode === 'preset'}
-                      value={
-                        tool.promptMode === 'preset' ? effectivePrompt(tool) : tool.customPrompt
-                      }
-                      onChange={(e) => updateTool(tool.id, { customPrompt: e.target.value })}
-                    />
-                  </label>
-                </article>
-              ))}
-            </div>
+            <h1>查询工具</h1>
+            <p className="lead">选择一个工具进行配置，或拖动排序。标签顺序也会用于弹窗和侧边栏。</p>
+            <ToolsWorkspace settings={settings} onSettingsChange={props.onSettingsChange} />
           </section>
         )}
         {props.section === 'interaction' && (

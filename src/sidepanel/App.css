@@ -1,7 +1,9 @@
 .dz-panel-page {
-  min-height: 100vh;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: #f7f4ee;
   color: #22201d;
 }
@@ -24,6 +26,7 @@
   cursor: pointer;
 }
 .dz-tabs {
+  flex: 0 0 auto;
   display: flex;
   gap: 5px;
   padding: 8px 10px;
@@ -56,8 +59,10 @@
   vertical-align: middle;
 }
 .dz-panel-history {
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 16px 12px 24px;
 }
 .dz-messages {
@@ -123,8 +128,7 @@
   white-space: pre-wrap;
 }
 .dz-panel-composer {
-  position: sticky;
-  bottom: 0;
+  flex: 0 0 auto;
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 7px;
@@ -189,8 +193,8 @@
   padding: 4px 7px;
 }
 .dz-panel-empty {
+  flex: 1 1 auto;
   display: grid;
-  grid-row: 1 / -1;
   place-items: center;
   align-content: center;
   padding: 38px 24px;

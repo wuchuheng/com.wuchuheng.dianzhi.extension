@@ -85,7 +85,7 @@ No `seedSQL`: preset rows are created by the typed `tools.ensurePresets` op so `
 - `ToolDefinition.id: number`; `ConversationRecord.toolId: number`; `ConversationSnapshot.activeToolId: number`; `UiSettings.defaultToolId: number`.
 - `effectivePrompt(tool)`: preset tools resolve from `BUILTIN_PROMPTS` (immutable); custom tools read their stored `prompt`.
 - Exact derived fields for a composed `ToolDefinition` from a `tools` row:
-  - `id` = row id; `name` = row name; `builtin` = `is_preset`; `enabled` = row enabled;
+  - `id` = row id; `name` = row name; `builtin` = `is_preset`; `enabled` = row enabled; `isDefault` = `is_default`;
   - `promptMode` = `is_preset && prompt === BUILTIN_PROMPTS[id]` ? `'preset'` : `'custom'`;
   - `customPrompt` = the row's stored `prompt`.
 - `mergeSettings` still guarantees defaults and repairs (e.g., exactly one active tool, available default) on composed snapshots.

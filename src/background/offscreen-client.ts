@@ -138,7 +138,10 @@ export function createOffscreenClient(
     await ensureDocument()
     const requestId = `db-${Date.now()}-${++nextRequestId}`
     const envelope = { requestId, operation, args } as DatabaseRequest
-    const attempts = operation === 'getConversation' ? 2 : 1
+    const attempts =
+      operation === 'getConversation' || operation === 'getSettings' || operation === 'listTools'
+        ? 2
+        : 1
     let lastError: unknown
     for (let attempt = 0; attempt < attempts; attempt += 1) {
       try {

@@ -2,9 +2,9 @@ import type { ToolConversationRef } from '@/dianzhi/domain/protocol'
 
 export function nextToolId(
   tools: readonly ToolConversationRef[],
-  activeToolId: string,
+  activeToolId: number,
   direction: -1 | 1
-): string | null {
+): number | null {
   if (tools.length === 0) return null
   const activeIndex = Math.max(
     0,

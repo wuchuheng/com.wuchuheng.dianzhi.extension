@@ -1,94 +1,141 @@
-import { useState } from 'react'
-import type { DianzhiSettings, ToolDefinition } from '@/dianzhi/domain/types'
-import {
-  addCustomTool,
-  moveTool,
-  removeCustomTool,
-  reorderToolsByTarget,
-  setToolEnabled,
-} from '@/options/settings-form'
+import { useEffect, useState } from 'react'
+import { toToolDefinition } from '@/dianzhi/domain/settings'
+import type { ProviderSettings } from '@/dianzhi/domain/types'
+import type { ToolUpdatePatch } from '@/dianzhi/domain/protocol'
+import type { ToolRecord } from '@/offscreen/database/config-store'
 import { ToolConfig } from './ToolConfig'
 import { ToolList } from './ToolList'
 import { ToolTestPane } from './ToolTestPane'
 import { repairActiveTool } from './tool-workspace-state'
 import { useToolTest, type UseToolTestResult } from './use-tool-test'
+import { useToolsApi, type ToolsApi } from './use-tools-api'
 import './tool-workspace.css'
 
 export interface ToolsWorkspaceProps {
-  settings: DianzhiSettings
-  onSettingsChange(settings: DianzhiSettings): void
+  provider: ProviderSettings
+  /** Injected for deterministic tests; production uses useToolsApi(). */
+  toolsApi?: ToolsApi
   /** Injected only for deterministic tests; production uses the port hook. */
   testStream?: UseToolTestResult
 }
 
 export type DetailTab = 'config' | 'test'
 
+const CUSTOM_TOOL_DEFAULT_PROMPT = '请根据 {{context}} 解释 {{selected}}。'
+
 /**
  * The tools workspace: a draggable tool list driving a configuration pane and
- * a live-test playground, all editing the shared settings draft.
+ * a live-test playground, backed by the SQLite tools API. Every mutation
+ * round-trips through the background and re-renders from the refreshed list.
  */
 export function ToolsWorkspace(props: ToolsWorkspaceProps) {
-  return props.testStream ? (
-    <ToolsWorkspaceView {...props} testStream={props.testStream} />
-  ) : (
-    <ToolsWorkspaceConnected {...props} />
+  // Hooks run unconditionally; injected test doubles simply shadow the
+  // defaults. useToolTest reads chrome.runtime at render, so specs pass a
+  // minimal chrome stub.
+  const fallbackToolsApi = useToolsApi()
+  const fallbackTestStream = useToolTest()
+  const { toolsApi, testStream } = props
+  return (
+    <ToolsWorkspaceView
+      {...props}
+      toolsApi={toolsApi ?? fallbackToolsApi}
+      testStream={testStream ?? fallbackTestStream}
+    />
   )
 }
 
-function ToolsWorkspaceConnected(props: Omit<ToolsWorkspaceProps, 'testStream'>) {
-  const testStream = useToolTest()
-  return <ToolsWorkspaceView {...props} testStream={testStream} />
-}
-
-function ToolsWorkspaceView(props: ToolsWorkspaceProps & { testStream: UseToolTestResult }) {
-  const { settings, onSettingsChange, testStream } = props
-  const [pickedToolId, setPickedToolId] = useState<string | null>(() =>
-    repairActiveTool(settings.tools, null, settings.ui.defaultToolId)
-  )
+function ToolsWorkspaceView(
+  props: ToolsWorkspaceProps & Required<Pick<ToolsWorkspaceProps, 'toolsApi' | 'testStream'>>
+) {
+  const { provider, toolsApi, testStream } = props
+  const [records, setRecords] = useState<ToolRecord[] | null>(null)
+  const [pickedToolId, setPickedToolId] = useState<number | null>(null)
   const [detailTab, setDetailTab] = useState<DetailTab>('config')
+  const [error, setError] = useState<string | null>(null)
 
-  // Resolve the selection during render so a removed tool falls back to the
-  // default/first tool without any effect-driven corrective state update.
-  const activeToolId = repairActiveTool(settings.tools, pickedToolId, settings.ui.defaultToolId)
-  const activeTool = settings.tools.find((tool) => tool.id === activeToolId) ?? null
-  const enabledTools = settings.tools.filter((tool) => tool.enabled)
-
-  const updateTool = (id: string, patch: Partial<ToolDefinition>) =>
-    onSettingsChange({
-      ...settings,
-      tools: settings.tools.map((tool) => (tool.id === id ? { ...tool, ...patch } : tool)),
-    })
-
-  const handleToggleEnabled = (id: string, enabled: boolean) =>
-    onSettingsChange(setToolEnabled(settings, id, enabled))
-
-  const handleMove = (id: string, direction: -1 | 1) =>
-    onSettingsChange(moveTool(settings, id, direction))
-
-  const handleReorder = (draggedId: string, targetId: string, before: boolean) =>
-    onSettingsChange(reorderToolsByTarget(settings, draggedId, targetId, before))
-
-  const handleAdd = () => {
-    const previousIds = new Set(settings.tools.map((tool) => tool.id))
-    const next = addCustomTool(settings)
-    onSettingsChange(next)
-    const added = next.tools.find((tool) => !previousIds.has(tool.id))
-    if (added) setPickedToolId(added.id)
+  const apply = (next: ToolRecord[]) => {
+    setRecords(next)
+    setPickedToolId(null)
+    setError(null)
   }
 
-  const handleRemove = (id: string) => onSettingsChange(removeCustomTool(settings, id))
+  useEffect(() => {
+    let disposed = false
+    toolsApi
+      .list(false)
+      .then((list) => {
+        if (!disposed) apply(list)
+      })
+      .catch(() => {
+        if (!disposed) setError('工具列表加载失败')
+      })
+    return () => {
+      disposed = true
+    }
+  }, [toolsApi])
 
-  const handleSetDefault = (id: string) =>
-    onSettingsChange({ ...settings, ui: { ...settings.ui, defaultToolId: id } })
+  if (records === null) {
+    return (
+      <div className="tool-workspace">
+        <p className="pane-empty">正在加载工具…</p>
+        {error !== null && (
+          <p className="tool-field-hint" role="status">
+            {error}
+          </p>
+        )}
+      </div>
+    )
+  }
+
+  const tools = records.map(toToolDefinition)
+  const defaultToolId = tools.find((tool) => tool.isDefault)?.id ?? tools[0]?.id ?? 1
+  const activeToolId = repairActiveTool(tools, pickedToolId, defaultToolId)
+  const activeRecord = records.find((record) => record.id === activeToolId) ?? null
+  const enabledRecords = records.filter((record) => record.enabled)
+
+  const updateTool = (id: number, patch: ToolUpdatePatch) => {
+    void toolsApi
+      .update(id, patch)
+      .then(apply)
+      .catch((reason: unknown) => setError(message(reason)))
+  }
+
+  const handleToggleEnabled = (id: number, enabled: boolean) => updateTool(id, { enabled })
+
+  const handleReorder = (orderedIds: number[]) => {
+    void toolsApi
+      .reorder(orderedIds)
+      .then(apply)
+      .catch((reason: unknown) => setError(message(reason)))
+  }
+
+  const handleAdd = () => {
+    void toolsApi
+      .create('自定义工具', CUSTOM_TOOL_DEFAULT_PROMPT)
+      .then((list) => {
+        apply(list)
+        const added = list.reduce((max, record) => Math.max(max, record.id), 0)
+        setPickedToolId(added || null)
+      })
+      .catch((reason: unknown) => setError(message(reason)))
+  }
+
+  const handleRemove = (id: number) => {
+    void toolsApi
+      .softRemove(id)
+      .then(apply)
+      .catch((reason: unknown) => setError(message(reason)))
+  }
+
+  const handleSetDefault = (id: number) => updateTool(id, { isDefault: true })
 
   return (
     <div className="tool-workspace">
       <ToolList
-        tools={settings.tools}
+        tools={records}
         selectedId={activeToolId}
         onSelect={setPickedToolId}
         onToggleEnabled={handleToggleEnabled}
-        onMove={handleMove}
         onReorder={handleReorder}
         onAdd={handleAdd}
       />
@@ -112,26 +159,39 @@ function ToolsWorkspaceView(props: ToolsWorkspaceProps & { testStream: UseToolTe
       </div>
       <div className="tool-workspace-detail" hidden={detailTab !== 'config'}>
         <ToolConfig
-          tool={activeTool}
-          defaultToolId={settings.ui.defaultToolId}
-          isDefaultTool={activeTool?.id === settings.ui.defaultToolId}
-          defaultOptions={enabledTools}
-          onUpdate={(patch) => {
-            if (activeTool) updateTool(activeTool.id, patch)
+          key={activeRecord?.id ?? 'none'}
+          tool={activeRecord}
+          defaultToolId={defaultToolId}
+          defaultOptions={enabledRecords}
+          onPatch={(patch) => {
+            if (activeRecord) updateTool(activeRecord.id, patch)
           }}
           onSetDefault={handleSetDefault}
           onRemove={() => {
-            if (activeTool && !activeTool.builtin) handleRemove(activeTool.id)
+            if (activeRecord && !activeRecord.isPreset) handleRemove(activeRecord.id)
           }}
         />
       </div>
       <div className="tool-workspace-detail" hidden={detailTab !== 'test'}>
-        {activeTool ? (
-          <ToolTestPane tool={activeTool} provider={settings.provider} testStream={testStream} />
+        {activeRecord ? (
+          <ToolTestPane
+            tool={toToolDefinition(activeRecord)}
+            provider={provider}
+            testStream={testStream}
+          />
         ) : (
           <p className="pane-empty">请先在左侧选择一个工具。</p>
         )}
       </div>
+      {error !== null && (
+        <p className="tool-field-hint" role="status">
+          {error}
+        </p>
+      )}
     </div>
   )
+}
+
+function message(reason: unknown): string {
+  return reason instanceof Error ? reason.message : '操作失败'
 }

@@ -1,17 +1,32 @@
 import { createConversationManager, type ConversationManager } from './conversation-manager'
-import { createOffscreenClient } from './offscreen-client'
+import { createMigrationCoordinator } from './migration-coordinator'
+import { createOffscreenClient, type OffscreenClient } from './offscreen-client'
 import { createOptionsToolTestRunner } from './options-test-runner'
 import { createProviderRunner } from './provider-runner'
+import { createSettingsLoader } from './settings-loader'
 import { DianzhiError } from '@/dianzhi/domain/errors'
-import { mergeSettings, validateSettings } from '@/dianzhi/domain/settings'
-import { parseConversationCommand, type SettingsCommand } from '@/dianzhi/domain/protocol'
+import {
+  composeSettings,
+  DEFAULT_TOOLS,
+  mergeSettings,
+  rowDataFromSettings,
+  validateSettings,
+} from '@/dianzhi/domain/settings'
+import {
+  parseConversationCommand,
+  parseToolsCommand,
+  type SettingsCommand,
+  type ToolsCommand,
+} from '@/dianzhi/domain/protocol'
 import { streamChat } from '@/dianzhi/provider/client'
+import type { ToolRecord } from '@/offscreen/database/config-store'
 import {
   contentConversationCommand,
   contentSettingsCommand,
   conversationUpdateToContent,
   extensionConversationCommand,
   settingsCommand,
+  toolsCommand,
 } from '@/events/config'
 import { relayService } from '@/events/background/background'
 import { log, logError, Scope } from '@/events/logger'
@@ -46,12 +61,27 @@ function parseSettingsCommand(value: unknown): SettingsCommand {
   return command as SettingsCommand
 }
 
-async function loadSettings() {
-  const stored = await chrome.storage.sync.get(SETTINGS_KEY)
-  return mergeSettings(stored[SETTINGS_KEY])
-}
-
 const database = createOffscreenClient(chrome)
+
+const migrationCoordinator = createMigrationCoordinator({
+  getSettings: () => database.request('getSettings', {}),
+  listTools: (includeRemoved) => database.request('listTools', { includeRemoved }),
+  ensurePresets: () => database.request('ensurePresets', {}),
+  migrateLegacy: (input) => database.request('migrateLegacy', input),
+  readLegacySettings: async () => {
+    const stored = await chrome.storage.sync.get(SETTINGS_KEY)
+    return stored[SETTINGS_KEY]
+  },
+  clearLegacySettings: async () => {
+    await chrome.storage.sync.remove(SETTINGS_KEY)
+  },
+})
+
+const loadSettings = createSettingsLoader({
+  ensureMigrated: () => migrationCoordinator.ensureMigrated(),
+  getSettings: () => database.request('getSettings', {}),
+  listTools: (includeRemoved) => database.request('listTools', { includeRemoved }),
+})
 const managerRef: { current?: ConversationManager } = {}
 const providerRunner = createProviderRunner({
   checkpoint: (messageId, content, reasoningContent) =>
@@ -107,7 +137,9 @@ extensionConversationCommand.handleWithSender((value, sender) =>
 settingsCommand.handle(async (value) => {
   const command = parseSettingsCommand(value)
   if (command.type === 'settings.get') return loadSettings()
-  const settings = mergeSettings(command.settings)
+  const row = mergeSettings(command.settings)
+  const tools = command.type === 'settings.save' ? DEFAULT_TOOLS : command.settings.tools
+  const settings = composeSettings(row, tools)
   const validation = validateSettings(settings)
   if (!validation.ok) {
     throw new DianzhiError({
@@ -136,8 +168,50 @@ settingsCommand.handle(async (value) => {
       }
     )
   }
-  if (command.type === 'settings.save') await chrome.storage.sync.set({ [SETTINGS_KEY]: settings })
+  if (command.type === 'settings.save') {
+    await migrationCoordinator.ensureMigrated()
+    await database.request('saveSettings', { data: JSON.stringify(rowDataFromSettings(settings)) })
+    return loadSettings()
+  }
   return settings
+})
+
+function dispatchToolsCommand(command: ToolsCommand, db: OffscreenClient): Promise<ToolRecord[]> {
+  switch (command.type) {
+    case 'tools.list':
+      return db.request('listTools', { includeRemoved: command.payload.includeRemoved })
+    case 'tools.ensurePresets':
+      return db
+        .request('ensurePresets', {})
+        .then(() => db.request('listTools', { includeRemoved: false }))
+    case 'tools.create':
+      return db
+        .request('createTool', { name: command.payload.name, prompt: command.payload.prompt })
+        .then(() => db.request('listTools', { includeRemoved: false }))
+    case 'tools.update':
+      return db
+        .request('updateTool', { id: command.payload.id, patch: command.payload.patch })
+        .then(() => db.request('listTools', { includeRemoved: false }))
+    case 'tools.reorder':
+      return db
+        .request('reorderTools', { orderedIds: command.payload.orderedIds })
+        .then(() => db.request('listTools', { includeRemoved: false }))
+    case 'tools.softRemove':
+      return db
+        .request('softRemoveTool', { id: command.payload.id })
+        .then(() => db.request('listTools', { includeRemoved: false }))
+    case 'tools.restore':
+      return db
+        .request('restoreTool', { id: command.payload.id })
+        .then(() => db.request('listTools', { includeRemoved: false }))
+  }
+}
+
+toolsCommand.handle(async (value) => {
+  const parsed = parseToolsCommand(value)
+  if (!parsed.ok) throw new DianzhiError(parsed.error)
+  await migrationCoordinator.ensureMigrated()
+  return dispatchToolsCommand(parsed.value, database)
 })
 contentSettingsCommand.handle(async (value) => {
   const command = parseSettingsCommand(value)

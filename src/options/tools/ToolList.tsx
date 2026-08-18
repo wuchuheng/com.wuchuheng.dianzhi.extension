@@ -1,40 +1,42 @@
 import { useState } from 'react'
-import type { ToolDefinition } from '@/dianzhi/domain/types'
+import { toToolDefinition } from '@/dianzhi/domain/settings'
+import type { ToolRecord } from '@/offscreen/database/config-store'
+import { orderedIdsOnDrop } from './tool-workspace-state'
 
 export interface ToolListProps {
-  tools: readonly ToolDefinition[]
-  selectedId: string | null
-  onSelect(id: string): void
-  onToggleEnabled(id: string, enabled: boolean): void
-  onMove(id: string, direction: -1 | 1): void
-  onReorder(draggedId: string, targetId: string, before: boolean): void
+  tools: readonly ToolRecord[]
+  selectedId: number | null
+  onSelect(id: number): void
+  onToggleEnabled(id: number, enabled: boolean): void
+  onReorder(orderedIds: number[]): void
   onAdd(): void
 }
 
 interface DragOverState {
-  id: string
+  id: number
   before: boolean
 }
 
 /**
- * The fixed-width tool pane: draggable rows, keyboard Move actions, and a
- * compact add button. Selection is announced with `aria-current`.
+ * The fixed-width tool pane: draggable rows with default/preset badges, and a
+ * compact create button. Drops resolve to the full ordered id list, which the
+ * workspace persists through `toolsApi.reorder`.
  */
 export function ToolList(props: ToolListProps) {
   const { tools } = props
   const [dragOver, setDragOver] = useState<DragOverState | null>(null)
 
-  const handleDragStart = (event: React.DragEvent, id: string) => {
-    event.dataTransfer.setData('text/plain', id)
+  const handleDragStart = (event: React.DragEvent, id: number) => {
+    event.dataTransfer.setData('text/plain', String(id))
     event.dataTransfer.effectAllowed = 'move'
   }
 
-  const handleDragOver = (event: React.DragEvent, tool: ToolDefinition) => {
+  const handleDragOver = (event: React.DragEvent, id: number) => {
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
     const bounds = event.currentTarget.getBoundingClientRect()
     const before = bounds.height === 0 || event.clientY < bounds.top + bounds.height / 2
-    setDragOver({ id: tool.id, before })
+    setDragOver({ id, before })
   }
 
   const dropBefore = (event: React.DragEvent): boolean => {
@@ -42,14 +44,17 @@ export function ToolList(props: ToolListProps) {
     return bounds.height === 0 || event.clientY < bounds.top + bounds.height / 2
   }
 
-  const handleDrop = (event: React.DragEvent, tool: ToolDefinition) => {
+  const handleDrop = (event: React.DragEvent, id: number) => {
     event.preventDefault()
     setDragOver(null)
-    const draggedId = event.dataTransfer.getData('text/plain')
-    const fromIndex = tools.findIndex((item) => item.id === draggedId)
-    const targetIndex = tools.findIndex((item) => item.id === tool.id)
-    if (fromIndex < 0 || targetIndex < 0 || fromIndex === targetIndex) return
-    props.onReorder(draggedId, tool.id, dropBefore(event))
+    const draggedId = Number(event.dataTransfer.getData('text/plain'))
+    const next = orderedIdsOnDrop(
+      tools.map((tool) => tool.id),
+      draggedId,
+      id,
+      dropBefore(event)
+    )
+    if (next) props.onReorder(next)
   }
 
   return (
@@ -63,6 +68,8 @@ export function ToolList(props: ToolListProps) {
       <ul className="tool-list">
         {tools.map((tool, index) => {
           const selected = tool.id === props.selectedId
+          const definition = toToolDefinition(tool)
+          const modeLabel = definition.promptMode === 'preset' ? '内置' : '自定义'
           const rowClasses = [
             'tool-row',
             selected ? 'selected' : '',
@@ -77,8 +84,8 @@ export function ToolList(props: ToolListProps) {
               draggable
               onClick={() => props.onSelect(tool.id)}
               onDragStart={(event) => handleDragStart(event, tool.id)}
-              onDragOver={(event) => handleDragOver(event, tool)}
-              onDrop={(event) => handleDrop(event, tool)}
+              onDragOver={(event) => handleDragOver(event, tool.id)}
+              onDrop={(event) => handleDrop(event, tool.id)}
               onDragEnd={() => setDragOver(null)}
             >
               <span className="drop-line drop-before" aria-hidden="true" />
@@ -87,7 +94,7 @@ export function ToolList(props: ToolListProps) {
               </span>
               <button
                 type="button"
-                className="tool-row-name"
+                className={`tool-row-name${tool.isDefault ? ' tool-row-default' : ''}`}
                 aria-label={`选择工具 ${tool.name}`}
                 aria-current={selected ? 'true' : undefined}
                 onClick={(event) => {
@@ -97,8 +104,15 @@ export function ToolList(props: ToolListProps) {
               >
                 {tool.name}
               </button>
-              <span className={`tool-badge ${tool.promptMode === 'preset' ? 'preset' : 'custom'}`}>
-                {tool.promptMode === 'preset' ? '内置' : '自定义'}
+              {tool.isDefault && (
+                <span className="tool-badge default" aria-label="默认工具">
+                  默认
+                </span>
+              )}
+              <span
+                className={`tool-badge ${definition.promptMode === 'preset' ? 'preset' : 'custom'}`}
+              >
+                {modeLabel}
               </span>
               <input
                 aria-label={tool.enabled ? `停用 ${tool.name}` : `启用 ${tool.name}`}
@@ -114,7 +128,13 @@ export function ToolList(props: ToolListProps) {
                   disabled={index === 0}
                   onClick={(event) => {
                     event.stopPropagation()
-                    props.onMove(tool.id, -1)
+                    const next = orderedIdsOnDrop(
+                      tools.map((item) => item.id),
+                      tool.id,
+                      tools[index - 1]!.id,
+                      false
+                    )
+                    if (next) props.onReorder(next)
                   }}
                 >
                   ↑
@@ -125,7 +145,13 @@ export function ToolList(props: ToolListProps) {
                   disabled={index === tools.length - 1}
                   onClick={(event) => {
                     event.stopPropagation()
-                    props.onMove(tool.id, 1)
+                    const next = orderedIdsOnDrop(
+                      tools.map((item) => item.id),
+                      tool.id,
+                      tools[index + 1]!.id,
+                      true
+                    )
+                    if (next) props.onReorder(next)
                   }}
                 >
                   ↓

@@ -16,7 +16,7 @@ import type { StoredConversationSnapshot } from '@/offscreen/database/store'
 
 export interface TabConversationState {
   selectionKey: number
-  activeToolId: string
+  activeToolId: number
   activeConversationId: number
   panelOpen: boolean
 }
@@ -123,7 +123,8 @@ export function createConversationManager(dependencies: ConversationManagerDepen
         state.selectionKey > 0 &&
         Number.isSafeInteger(state.activeConversationId) &&
         state.activeConversationId > 0 &&
-        typeof state.activeToolId === 'string' &&
+        Number.isSafeInteger(state.activeToolId) &&
+        state.activeToolId > 0 &&
         typeof state.panelOpen === 'boolean'
       ) {
         tabStates.set(numericTabId, { ...state })

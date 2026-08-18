@@ -60,6 +60,7 @@ Expected: all tests pass on the committed base.
 The foundation. All other tasks depend on these types. Implements spec §2 (numeric identity), §4.1 (preset single-source), §5 (domain/protocol).
 
 **Files:**
+
 - Modify: `src/dianzhi/domain/types.ts`
 - Modify: `src/dianzhi/domain/presets.ts`
 - Modify: `src/dianzhi/domain/settings.ts`
@@ -70,6 +71,7 @@ The foundation. All other tasks depend on these types. Implements spec §2 (nume
 - Modify: any file with string-typed `toolId` / `activeToolId` / `defaultToolId` usage found via `rg -n "activeToolId|defaultToolId|toolId|\.id === '" src`
 
 **Interfaces:**
+
 - Consumes: nothing new.
 - Produces (used by every later task):
   - `types.ts`:
@@ -95,10 +97,11 @@ The foundation. All other tasks depend on these types. Implements spec §2 (nume
 - [ ] **Step 1: Update the failing type tests**
 
 In `tests/unit/domain/protocol.spec.ts` change every fixture `ToolDefinition.id: 'context'` → `1`, `ConversationRecord.toolId: 'context'` → `1`, `conversation.ensureTool` test payload `{ selectionKey: 1, toolId: 'context' }` → `{ selectionKey: 1, toolId: 1 }`; add a negative case `toolId: 'context'` → `ok: false`. In `tests/unit/domain/settings.spec.ts` add tests:
+
 - `mergeSettings({ version: 1, tools: [{ id: 'context', … }] })` returns a `SettingsRowData` with **no** `tools` member and `version === 2`;
 - `composeSettings(DEFAULT_ROW, [{ ...DEFAULT_TOOLS[0], isDefault: true }, ...])` sets `ui.defaultToolId === 1`;
 - `composeSettings` with no default and no enabled tool falls back to `1`.
-Run: `pnpm run test` — expect these new tests to fail (types/function missing) → red.
+  Run: `pnpm run test` — expect these new tests to fail (types/function missing) → red.
 
 - [ ] **Step 2: Rewrite `src/dianzhi/domain/types.ts`**
 
@@ -126,9 +129,13 @@ export const PRESET_TOOL_IDS: Readonly<Record<BuiltinToolId, number>> = {
 ```ts
 export const DEFAULT_ROW: SettingsRowData = {
   version: 2,
-  provider: { /* same literal defaults as today's DEFAULT_SETTINGS.provider */ },
+  provider: {
+    /* same literal defaults as today's DEFAULT_SETTINGS.provider */
+  },
   ui: { contextTargetWords: 100, contextMaxWords: 500, contextMaxBlocks: 6 },
-  shortcuts: { /* same literals as today */ },
+  shortcuts: {
+    /* same literals as today */
+  },
 }
 
 export const DEFAULT_TOOLS: readonly ToolDefinition[] = BUILTIN_TOOL_IDS.map((id, index) => ({
@@ -176,7 +183,9 @@ Keep `validateSettings` validating the **composed** `DianzhiSettings` (same fiel
 ```ts
 | { type: 'conversation.ensureTool'; requestId: string; payload: { selectionKey: number; toolId: number } }
 ```
+
 In `parseConversationCommand`'s `ensureTool` case:
+
 ```ts
 if (!isPositiveInteger(payload.selectionKey) || !isPositiveInteger(payload.toolId)) {
   return invalid('Tool conversation payload is invalid.')
@@ -186,6 +195,7 @@ if (!isPositiveInteger(payload.selectionKey) || !isPositiveInteger(payload.toolI
 - [ ] **Step 6: Fix TypeScript across the tree**
 
 Run: `pnpm run lint` — follow the errors. Expected mechanical fixes:
+
 - `src/options/settings-form.ts`: `defaultToolId` repairs now use numbers; add a `toToolId` guard in the `removeCustomTool`/`setToolEnabled` helpers:
   ```ts
   const fallback = next.tools.find((item) => item.enabled)?.id ?? DEFAULT_TOOLS[0].id
@@ -209,6 +219,7 @@ Commit: `git add -A && git commit -m "refactor: numeric tool ids and settings v2
 Implements spec §4 (DDL, conversation `tool_id` rebuild), §6 (ops, invariants, error codes), §9 (whitelist).
 
 **Files:**
+
 - Modify: `src/offscreen/database/schema.ts`
 - Create: `src/offscreen/database/config-store.ts`
 - Modify: `src/offscreen/database/store.ts` (conversation methods now receive numeric `tool.id`; no SQL change beyond column type)
@@ -218,30 +229,48 @@ Implements spec §4 (DDL, conversation `tool_id` rebuild), §6 (ops, invariants,
 - Create: `tests/unit/offscreen/config-store.spec.ts`; modify `tests/unit/offscreen/store.spec.ts` (fixture ids)
 
 **Interfaces:**
+
 - Consumes: Task 1 types (`ToolDefinition` numeric, `BUILTIN_TOOL_IDS/NAMES/PROMPTS`, `PRESET_TOOL_IDS`).
 - Produces:
   - `schema.ts`: `export const CONFIG_RELEASE: { version: '2.0.0'; migrationSQL: string }` (no `seedSQL`)
   - `config-store.ts`:
     ```ts
     export interface ToolRecord {
-      id: number; name: string; prompt: string; isPreset: boolean; isDefault: boolean;
-      enabled: boolean; sortOrder: number; deletedAt: string | null;
-      createdAt: string; updatedAt: string
+      id: number
+      name: string
+      prompt: string
+      isPreset: boolean
+      isDefault: boolean
+      enabled: boolean
+      sortOrder: number
+      deletedAt: string | null
+      createdAt: string
+      updatedAt: string
     }
     export interface LegacyToolInput {
-      id: string; name: string; isBuiltin: boolean; enabled: boolean; prompt: string
+      id: string
+      name: string
+      isBuiltin: boolean
+      enabled: boolean
+      prompt: string
     }
     export interface ConfigStore {
       listTools(includeRemoved?: boolean): Promise<ToolRecord[]>
       ensurePresets(): Promise<void>
       createTool(input: { name: string; prompt: string }): Promise<ToolRecord>
-      updateTool(id: number, patch: { name?: string; prompt?: string; enabled?: boolean; isDefault?: boolean }): Promise<ToolRecord>
+      updateTool(
+        id: number,
+        patch: { name?: string; prompt?: string; enabled?: boolean; isDefault?: boolean }
+      ): Promise<ToolRecord>
       reorderTools(orderedIds: number[]): Promise<void>
       softRemoveTool(id: number): Promise<void>
       restoreTool(id: number): Promise<void>
       getSettings(): Promise<string | null>
       saveSettings(data: string): Promise<void>
-      migrateLegacy(input: { tools: LegacyToolInput[]; defaultToolId: string | null }): Promise<Record<string, number>>
+      migrateLegacy(input: {
+        tools: LegacyToolInput[]
+        defaultToolId: string | null
+      }): Promise<Record<string, number>>
     }
     export function createConfigStore(db: DatabaseConnection, clock: () => string): ConfigStore
     ```
@@ -424,6 +453,7 @@ Expected: all pass, including the new `config-store.spec.ts`.
 Implements spec §3, §7, §8 (background half), §11 (message channels: `toolsCommand`).
 
 **Files:**
+
 - Modify: `src/events/config.ts`
 - Modify: `src/dianzhi/domain/protocol.ts` (add `ToolsCommand` + `parseToolsCommand`; `SettingsCommand.save` payload → `SettingsRowData`)
 - Create: `src/background/config-composer.ts` (composition + row serialization helpers)
@@ -432,6 +462,7 @@ Implements spec §3, §7, §8 (background half), §11 (message channels: `toolsC
 - Create: `tests/unit/background/config-composer.spec.ts`, `tests/unit/background/migration-coordinator.spec.ts`; modify `tests/unit/background/protocol.spec` additions in Task 1 file
 
 **Interfaces:**
+
 - Consumes: Task 1 types/`composeSettings`/`mergeSettings`; Task 2 store ops via the offscreen client.
 - Produces:
   - `protocol.ts`:
@@ -440,7 +471,14 @@ Implements spec §3, §7, §8 (background half), §11 (message channels: `toolsC
       | { type: 'tools.list'; requestId: string; payload: { includeRemoved?: boolean } }
       | { type: 'tools.ensurePresets'; requestId: string; payload: Record<string, never> }
       | { type: 'tools.create'; requestId: string; payload: { name: string; prompt: string } }
-      | { type: 'tools.update'; requestId: string; payload: { id: number; patch: { name?: string; prompt?: string; enabled?: boolean; isDefault?: boolean } } }
+      | {
+          type: 'tools.update'
+          requestId: string
+          payload: {
+            id: number
+            patch: { name?: string; prompt?: string; enabled?: boolean; isDefault?: boolean }
+          }
+        }
       | { type: 'tools.reorder'; requestId: string; payload: { orderedIds: number[] } }
       | { type: 'tools.softRemove'; requestId: string; payload: { id: number } }
       | { type: 'tools.restore'; requestId: string; payload: { id: number } }
@@ -452,10 +490,15 @@ Implements spec §3, §7, §8 (background half), §11 (message channels: `toolsC
     export function toToolDefinition(record: ToolRecord): ToolDefinition
     // promptMode = record.isPreset && record.prompt === BUILTIN_PROMPTS[<preset for id>] ? 'preset' : 'custom';
     // customPrompt = record.prompt; isDefault = record.isDefault
-    export function serializeRow(settings: Omit<DianzhiSettings, 'tools' | 'ui' | 'version'>): unknown
+    export function serializeRow(
+      settings: Omit<DianzhiSettings, 'tools' | 'ui' | 'version'>
+    ): unknown
     // actually: export function rowDataFromSettings(settings: DianzhiSettings): SettingsRowData
     export function settingsRowToBase(raw: string | null): SettingsRowData
-    export async function composeSettingsSnapshot(base: SettingsRowData, records: ToolRecord[]): Promise<DianzhiSettings>
+    export async function composeSettingsSnapshot(
+      base: SettingsRowData,
+      records: ToolRecord[]
+    ): Promise<DianzhiSettings>
     ```
   - `migration-coordinator.ts`:
     ```ts
@@ -463,8 +506,10 @@ Implements spec §3, §7, §8 (background half), §11 (message channels: `toolsC
       getSettings(): Promise<string | null>
       listTools(includeRemoved: boolean): Promise<ToolRecord[]>
       ensurePresets(): Promise<void>
-      migrateLegacy(input: Parameters<ConfigStore['migrateLegacy']>[0]): Promise<Record<string, number>>
-      readLegacySettings(): Promise<unknown>  // chrome.storage.sync[SETTINGS_KEY]
+      migrateLegacy(
+        input: Parameters<ConfigStore['migrateLegacy']>[0]
+      ): Promise<Record<string, number>>
+      readLegacySettings(): Promise<unknown> // chrome.storage.sync[SETTINGS_KEY]
       clearLegacySettings(): Promise<void>
     }
     export function createMigrationCoordinator(deps: MigrationDependencies): {
@@ -474,11 +519,13 @@ Implements spec §3, §7, §8 (background half), §11 (message channels: `toolsC
 - [ ] **Step 1: Write the failing tests**
 
 `tests/unit/background/config-composer.spec.ts`:
+
 - `toToolDefinition({ id: 1, isPreset: true, prompt: BUILTIN_PROMPTS.context, isDefault: true, name: '语境', enabled: true, ... })` → `{ id: 1, name: '语境', builtin: true, enabled: true, isDefault: true, promptMode: 'preset', customPrompt: BUILTIN_PROMPTS.context }`
 - a preset whose `prompt` was edited → `promptMode: 'custom', customPrompt: <edited>`
 - `composeSettingsSnapshot(...)` derives `defaultToolId` (delegates to domain `composeSettings`).
 
-`tests/unit/background/migration-coordinator.spec.ts` (fakes for deps): 
+`tests/unit/background/migration-coordinator.spec.ts` (fakes for deps):
+
 - legacy sync key present → calls `ensurePresets`, `migrateLegacy` with parsed settings `{ provider, ui, shortcuts }` and `defaultToolId`, then `clearLegacySettings`;
 - no legacy key → only `ensurePresets`;
 - `migrateLegacy` rejects → `clearLegacySettings` NOT called, error surfaces;
@@ -512,16 +559,18 @@ export function createMigrationCoordinator(deps: MigrationDependencies) {
       if (done) return
       await deps.ensurePresets()
       const legacy = await deps.readLegacySettings()
-      if (legacy === undefined) { done = true; return }
+      if (legacy === undefined) {
+        done = true
+        return
+      }
       const rawTools = (legacy as { tools?: unknown }).tools
-      const legacyTools = Array.isArray(rawTools)
-        ? rawTools.filter(isLegacyToolInput)
-        : []
+      const legacyTools = Array.isArray(rawTools) ? rawTools.filter(isLegacyToolInput) : []
       const merged = mergeSettings(legacy)
       await deps.migrateLegacy({
         tools: legacyTools,
         defaultToolId:
-          (merged as SettingsRowData & { ui?: { defaultToolId?: string } }).ui?.defaultToolId ?? null,
+          (merged as SettingsRowData & { ui?: { defaultToolId?: string } }).ui?.defaultToolId ??
+          null,
       })
       await deps.clearLegacySettings()
       done = true
@@ -529,6 +578,7 @@ export function createMigrationCoordinator(deps: MigrationDependencies) {
   }
 }
 ```
+
 `isLegacyToolInput` validates `{ id: string, name: string, isBuiltin: boolean, enabled: boolean, prompt: string }` record shape; legacy `ui.defaultToolId` is read from the raw blob because `mergeSettings` now returns `SettingsRowData` without it.
 
 - [ ] **Step 6: Rewire `src/background/index.ts`**
@@ -537,7 +587,7 @@ export function createMigrationCoordinator(deps: MigrationDependencies) {
   ```ts
   async function loadSettings(): Promise<DianzhiSettings> {
     await migrationCoordinator.ensureMigrated()
-    const raw = await database.request('getSettings', {})   // add read retry (see Step 7)
+    const raw = await database.request('getSettings', {}) // add read retry (see Step 7)
     const records = await database.request('tools.list', { includeRemoved: false })
     const base = settingsRowToBase(raw)
     return composeSettingsSnapshot(base, records)
@@ -560,7 +610,10 @@ export function createMigrationCoordinator(deps: MigrationDependencies) {
 - [ ] **Step 7: Read retry for config reads in `src/background/offscreen-client.ts`**
 
 ```ts
-const attempts = operation === 'getConversation' || operation === 'getSettings' || operation === 'tools.list' ? 2 : 1
+const attempts =
+  operation === 'getConversation' || operation === 'getSettings' || operation === 'tools.list'
+    ? 2
+    : 1
 ```
 
 - [ ] **Step 8: Green + commit**
@@ -576,6 +629,7 @@ Commit: `git add -A && git commit -m "feat: background composes settings from SQ
 Implements spec §8 (Options), §5 derived fields in the workspace UI.
 
 **Files:**
+
 - Create: `src/options/tools/use-tools-api.ts` (injected API holder for the workspace)
 - Modify: `src/options/tools/ToolsWorkspace.tsx`
 - Modify: `src/options/tools/ToolList.tsx`, `src/options/tools/ToolConfig.tsx` (default indicator / promptMode editing)
@@ -584,6 +638,7 @@ Implements spec §8 (Options), §5 derived fields in the workspace UI.
 - Update: `tests/unit/options/tools-workspace.spec.tsx`, `tests/unit/options/tool-list.spec.tsx`, `tests/unit/options/tool-config.spec.tsx`, `tests/unit/options/app.spec.tsx`, `tests/e2e/tools-options.spec.ts`
 
 **Interfaces:**
+
 - Consumes: Task 3 `toolsCommand` event; Task 1 types.
 - Produces:
   ```ts
@@ -591,40 +646,53 @@ Implements spec §8 (Options), §5 derived fields in the workspace UI.
   export interface ToolsApi {
     list(includeRemoved?: boolean): Promise<ToolRecord[]>
     create(name: string, prompt: string): Promise<ToolRecord[]>
-    update(id: number, patch: { name?: string; prompt?: string; enabled?: boolean; isDefault?: boolean }): Promise<ToolRecord[]>
+    update(
+      id: number,
+      patch: { name?: string; prompt?: string; enabled?: boolean; isDefault?: boolean }
+    ): Promise<ToolRecord[]>
     reorder(orderedIds: number[]): Promise<ToolRecord[]>
     softRemove(id: number): Promise<ToolRecord[]>
     restore(id: number): Promise<ToolRecord[]>
   }
-  export function useToolsApi(): ToolsApi  // dispatches toolsCommand ep2bg events
+  export function useToolsApi(): ToolsApi // dispatches toolsCommand ep2bg events
   ```
   `ToolsWorkspaceProps` becomes:
   ```ts
   export interface ToolsWorkspaceProps {
     provider: ProviderSettings
-    toolsApi?: ToolsApi   // injected for tests; production uses useToolsApi()
+    toolsApi?: ToolsApi // injected for tests; production uses useToolsApi()
   }
   ```
   The workspace owns its tool-list state (`useState<ToolRecord[]>`), refreshes after each mutation, and no longer receives/emits a whole `DianzhiSettings` doc.
 - [ ] **Step 1: Write the failing component tests**
 
 Update `tests/unit/options/tools-workspace.spec.tsx` to render `<ToolsWorkspace provider={provider} toolsApi={fakeApi} />`; fake `list` returns three preset `ToolRecord`s. Assert:
+
 - initial render lists the three presets (names from the fake), default badge on id 1;
 - "make default" on id 2 calls `fakeApi.update(2, { isDefault: true })`;
 - drag-reorder calls `fakeApi.reorder([3, 2, 1])`;
 - remove calls `fakeApi.softRemove(2)`;
 - after any mutation the list is re-fetched (`fakeApi.list` called again).
-Run: `pnpm run test tests/unit/options` — expect FAIL.
+  Run: `pnpm run test tests/unit/options` — expect FAIL.
 
 - [ ] **Step 2: Implement `use-tools-api.ts`**
 
 Each method dispatches `toolsCommand` with a fresh `requestId` and returns the `tools.list` result payload; production wiring:
+
 ```ts
 export function useToolsApi(): ToolsApi {
-  return useMemo(() => ({
-    list: (includeRemoved) => toolsCommand.dispatch({ type: 'tools.list', requestId: crypto.randomUUID(), payload: { includeRemoved } }) as Promise<unknown> as Promise<ToolRecord[]>,
-    // ... create/update/reorder/softRemove/restore same pattern
-  }), [])
+  return useMemo(
+    () => ({
+      list: (includeRemoved) =>
+        toolsCommand.dispatch({
+          type: 'tools.list',
+          requestId: crypto.randomUUID(),
+          payload: { includeRemoved },
+        }) as Promise<unknown> as Promise<ToolRecord[]>,
+      // ... create/update/reorder/softRemove/restore same pattern
+    }),
+    []
+  )
 }
 ```
 
@@ -660,21 +728,24 @@ Commit: `git add -A && git commit -m "feat: tools workspace on SQLite-backed too
 Implements spec §10 (migration test, degraded path) and closes the loop.
 
 **Files:**
+
 - Create: `tests/unit/offscreen/migration.spec.ts` (real-DB path is not available in vitest; use `RecordingDatabase` with canned `query` sequences — **alternatively** run the real `web-sqlite` against a temp file if the harness supports it: check `node_modules/web-sqlite-js` worker requirements first; if not usable in node, keep the recording-DB assertions and add a manual e2e step)
 - Modify: `tests/e2e/tools-options.spec.ts` (fixture: settings row writes + reload persistence), `tests/e2e/dianzhi.spec.ts` (numeric `toolId` in fixtures)
 - Modify: `src/dianzhi/domain/settings.ts` (if `toToolDefinition`/`rowDataFromSettings` were not yet moved — done in Task 4; verify imports)
 
 **Interfaces:**
+
 - Consumes: Tasks 1–4.
 - Produces: nothing new.
 
 - [ ] **Step 1: Migration sequence test**
 
 `tests/unit/offscreen/migration.spec.ts`:
+
 - Given a `RecordingDatabase` pretends history: canned `migrateLegacy` inputs with two custom legacy tools and conversations referencing `'context'` and a kebab-case custom id;
 - assert `migrateLegacy` return mapping `{ context: 1, synonyms: 2, translate: 3, 'my-custom': 4, 'ghost': 5 }` (ghost = conversation-only row with `is_preset=0, enabled=0, deleted_at` set);
 - assert re-running migrateLegacy with the same input does not re-insert (tool table now has rows; inserts skipped), i.e., idempotency.
-Run: `pnpm run test tests/unit/offscreen/migration.spec.ts` — expect FAIL, then implement per Task 2's store rules if anything is missing (fix in `config-store.ts`).
+  Run: `pnpm run test tests/unit/offscreen/migration.spec.ts` — expect FAIL, then implement per Task 2's store rules if anything is missing (fix in `config-store.ts`).
 
 - [ ] **Step 2: Degraded-mode test**
 
@@ -699,7 +770,7 @@ Optionally run `pnpm run test:e2e` if a local Chromium profile is available (see
 
 ## Parallelization note
 
-Tasks 0–1 are strictly sequential (shared types). **After Task 2 commits**, Tasks 3 (background) and Task 4 (Options workspace) are independent *if* the interfaces in the Task 2/3/4 "Produces" blocks are honored exactly — they share no files (`background/**` vs `options/tools/**`, with `protocol.ts` additions confined to Task 3). They may be dispatched concurrently. Task 5 collects.
+Tasks 0–1 are strictly sequential (shared types). **After Task 2 commits**, Tasks 3 (background) and Task 4 (Options workspace) are independent _if_ the interfaces in the Task 2/3/4 "Produces" blocks are honored exactly — they share no files (`background/**` vs `options/tools/**`, with `protocol.ts` additions confined to Task 3). They may be dispatched concurrently. Task 5 collects.
 
 ## Self-review log
 

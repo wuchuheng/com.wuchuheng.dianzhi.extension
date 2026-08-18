@@ -16,20 +16,23 @@ export interface ProviderSettings {
 }
 
 export interface ToolDefinition {
-  id: string
+  id: number
   name: string
   builtin: boolean
   enabled: boolean
+  isDefault: boolean
   promptMode: PromptMode
   customPrompt: string
 }
 
 export interface UiSettings {
-  defaultToolId: string
+  defaultToolId: number
   contextTargetWords: number
   contextMaxWords: number
   contextMaxBlocks: number
 }
+
+export type UiConfig = Omit<UiSettings, 'defaultToolId'>
 
 export interface ShortcutSettings {
   triggerMode: TriggerMode
@@ -39,11 +42,15 @@ export interface ShortcutSettings {
   dock: string
 }
 
-export interface DianzhiSettings {
-  version: 1
+export interface SettingsRowData {
+  version: 2
   provider: ProviderSettings
-  ui: UiSettings
   shortcuts: ShortcutSettings
+  ui: UiConfig
+}
+
+export type DianzhiSettings = SettingsRowData & {
+  ui: UiSettings
   tools: ToolDefinition[]
 }
 

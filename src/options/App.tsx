@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { DEFAULT_SETTINGS, validateSettings } from '@/dianzhi/domain/settings'
+import { DEFAULT_SETTINGS, rowDataFromSettings, validateSettings } from '@/dianzhi/domain/settings'
 import type { DianzhiSettings, SettingsProblem } from '@/dianzhi/domain/types'
 import { settingsCommand } from '@/events/config'
 import { ToolsWorkspace } from './tools/ToolsWorkspace'
@@ -62,7 +62,9 @@ export function OptionsView(props: OptionsViewProps) {
         {props.section === 'provider' && (
           <section>
             <h1>AI 服务</h1>
-            <p className="lead">连接任意 OpenAI 兼容服务。密钥只保存在 Chrome 同步存储中。</p>
+            <p className="lead">
+              连接任意 OpenAI 兼容服务。密钥只保存在本地数据库中，不会同步到云端。
+            </p>
             <div className="settings-card grid-two">
               <label className="span-two">
                 API 地址
@@ -168,7 +170,7 @@ export function OptionsView(props: OptionsViewProps) {
           <section>
             <h1>查询工具</h1>
             <p className="lead">选择一个工具进行配置，或拖动排序。标签顺序也会用于弹窗和侧边栏。</p>
-            <ToolsWorkspace settings={settings} onSettingsChange={props.onSettingsChange} />
+            <ToolsWorkspace provider={settings.provider} />
           </section>
         )}
         {props.section === 'interaction' && (
@@ -274,8 +276,15 @@ export default function App() {
     }
     setStatus('正在保存…')
     void settingsCommand
-      .dispatch({ type: 'settings.save', requestId: requestId('save'), settings })
-      .then(() => setStatus('已保存'))
+      .dispatch({
+        type: 'settings.save',
+        requestId: requestId('save'),
+        settings: rowDataFromSettings(settings),
+      })
+      .then((value) => {
+        setSettings(value)
+        setStatus('已保存')
+      })
       .catch(() => setStatus('保存失败'))
   }
   const test = () => {

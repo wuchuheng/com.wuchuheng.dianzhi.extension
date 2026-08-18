@@ -11,9 +11,11 @@ import type {
   ConversationCommandResult,
   ConversationUpdate,
   SettingsCommand,
+  ToolsCommand,
 } from '@/dianzhi/domain/protocol'
 import type { DianzhiSettings } from '@/dianzhi/domain/types'
 import type { DatabaseRequest, DatabaseResult } from '@/offscreen/database/rpc'
+import type { ToolRecord } from '@/offscreen/database/config-store'
 
 // ============================================================================
 // Application Events
@@ -40,6 +42,8 @@ export const conversationUpdateToExtension = events.bg2ep<ConversationUpdate, vo
 export const settingsCommand = events.ep2bg<SettingsCommand, DianzhiSettings>(
   'dianzhi:settings-command'
 )
+
+export const toolsCommand = events.ep2bg<ToolsCommand, ToolRecord[]>('dianzhi:tools-command')
 
 export const contentSettingsCommand = events.cs2bg<SettingsCommand, DianzhiSettings>(
   'dianzhi:settings-command'

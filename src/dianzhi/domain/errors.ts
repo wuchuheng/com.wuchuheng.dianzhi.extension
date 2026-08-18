@@ -10,6 +10,10 @@ export type DianzhiErrorCode =
   | 'SIDE_PANEL_OPEN_FAILED'
   | 'SIDE_PANEL_READY_TIMEOUT'
   | 'TEST_PORT_CLOSED'
+  | 'TOOL_NOT_FOUND'
+  | 'TOOL_LAST_ENABLED'
+  | 'TOOL_ORDER_INVALID'
+  | 'TOOL_PRESET_INVALID'
 
 export interface DianzhiErrorShape {
   code: DianzhiErrorCode

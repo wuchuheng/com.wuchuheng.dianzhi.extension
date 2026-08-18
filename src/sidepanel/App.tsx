@@ -22,7 +22,7 @@ export interface SidePanelViewProps {
   reasoningEnabled: boolean
   draft: string
   onDraftChange(value: string): void
-  onToolSelect(toolId: string): void
+  onToolSelect(toolId: number): void
   onSend(): void
   onStop(): void
   onRetry(): void
@@ -197,8 +197,9 @@ export default function App() {
     })
   }, [command, state.snapshot?.conversation.id])
 
-  const currentTool = state.snapshot?.activeToolId ?? ''
-  const draft = drafts[currentTool] ?? ''
+  const currentTool = state.snapshot?.activeToolId
+  const draftKey = currentTool === undefined ? '' : String(currentTool)
+  const draft = drafts[draftKey] ?? ''
   const withConversation = useCallback(
     (build: (id: number) => ConversationCommand) => {
       const id = state.snapshot?.conversation.id
@@ -207,7 +208,7 @@ export default function App() {
     [command, state.snapshot?.conversation.id]
   )
   const selectTool = useCallback(
-    (toolId: string) => {
+    (toolId: number) => {
       const snapshot = state.snapshot
       if (!snapshot || toolId === snapshot.activeToolId) return
       void command({
@@ -250,12 +251,12 @@ export default function App() {
       state={state}
       reasoningEnabled={settings.provider.reasoningEnabled}
       draft={draft}
-      onDraftChange={(value) => setDrafts((current) => ({ ...current, [currentTool]: value }))}
+      onDraftChange={(value) => setDrafts((current) => ({ ...current, [draftKey]: value }))}
       onToolSelect={selectTool}
       onSend={() => {
         const content = draft.trim()
         if (!content) return
-        setDrafts((current) => ({ ...current, [currentTool]: '' }))
+        setDrafts((current) => ({ ...current, [draftKey]: '' }))
         withConversation((conversationId) => ({
           type: 'conversation.followup',
           requestId: requestId('followup'),

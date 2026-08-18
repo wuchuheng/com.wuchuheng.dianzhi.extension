@@ -41,7 +41,7 @@ export function reducePanelState(state: PanelState, event: PanelStateEvent): Pan
 export function cycleEnabledTool(
   snapshot: ConversationSnapshot | null,
   direction: -1 | 1
-): string | null {
+): number | null {
   if (!snapshot || snapshot.tools.length === 0) return null
   const index = Math.max(
     0,

@@ -1,14 +1,15 @@
-import { BUILTIN_PROMPTS, BUILTIN_TOOL_IDS } from './presets'
+import { BUILTIN_PROMPTS, BUILTIN_TOOL_IDS, BUILTIN_TOOL_NAMES, PRESET_TOOL_IDS } from './presets'
+import type { ToolRecord } from '@/offscreen/database/config-store'
 import type {
-  BuiltinToolId,
   DianzhiSettings,
   SettingsProblem,
+  SettingsRowData,
   SettingsValidation,
   ToolDefinition,
 } from './types'
 
-export const DEFAULT_SETTINGS: DianzhiSettings = {
-  version: 1,
+export const DEFAULT_ROW: SettingsRowData = {
+  version: 2,
   provider: {
     baseUrl: 'https://api.deepseek.com/v1',
     apiKey: '',
@@ -20,7 +21,6 @@ export const DEFAULT_SETTINGS: DianzhiSettings = {
     extraBody: '',
   },
   ui: {
-    defaultToolId: 'context',
     contextTargetWords: 100,
     contextMaxWords: 500,
     contextMaxBlocks: 6,
@@ -32,39 +32,29 @@ export const DEFAULT_SETTINGS: DianzhiSettings = {
     toggleChat: 'Control+Enter',
     dock: 'Control+bracketleft',
   },
-  tools: [
-    {
-      id: 'context',
-      name: '语境',
-      builtin: true,
-      enabled: true,
-      promptMode: 'preset',
-      customPrompt: '',
-    },
-    {
-      id: 'synonyms',
-      name: '同义词',
-      builtin: true,
-      enabled: true,
-      promptMode: 'preset',
-      customPrompt: '',
-    },
-    {
-      id: 'translate',
-      name: '翻译',
-      builtin: true,
-      enabled: true,
-      promptMode: 'preset',
-      customPrompt: '',
-    },
-  ],
+}
+
+export const DEFAULT_TOOLS: readonly ToolDefinition[] = BUILTIN_TOOL_IDS.map((id, index) => ({
+  id: PRESET_TOOL_IDS[id],
+  name: BUILTIN_TOOL_NAMES[id],
+  builtin: true,
+  enabled: true,
+  isDefault: index === 0,
+  promptMode: 'preset',
+  customPrompt: '',
+}))
+
+export const DEFAULT_SETTINGS: DianzhiSettings = {
+  ...DEFAULT_ROW,
+  ui: { ...DEFAULT_ROW.ui, defaultToolId: DEFAULT_TOOLS[0].id },
+  tools: [...DEFAULT_TOOLS],
 }
 
 const SHORTCUT_PATTERN =
   /^(?:(?:Control|Alt|Shift|Meta)\+)*(?:ArrowLeft|ArrowRight|Enter|bracketleft|[A-Za-z0-9-]+)$/
 
-function cloneSettings(settings: DianzhiSettings): DianzhiSettings {
-  return JSON.parse(JSON.stringify(settings)) as DianzhiSettings
+function cloneSettings(settings: SettingsRowData): SettingsRowData {
+  return JSON.parse(JSON.stringify(settings)) as SettingsRowData
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -88,38 +78,72 @@ function mergeRecord(target: Record<string, unknown>, source: Record<string, unk
   }
 }
 
-function isToolDefinition(value: unknown): value is ToolDefinition {
-  if (!isRecord(value)) return false
-  return (
-    typeof value.id === 'string' &&
-    typeof value.name === 'string' &&
-    typeof value.builtin === 'boolean' &&
-    typeof value.enabled === 'boolean' &&
-    (value.promptMode === 'preset' || value.promptMode === 'custom') &&
-    typeof value.customPrompt === 'string'
-  )
+/**
+ * Merges persisted settings into current defaults and returns a version-2 row
+ * document. Tools are deliberately absent here: they live beside the row and
+ * are composed in via {@link composeSettings}.
+ * @param raw - Untrusted value read from extension storage.
+ * @returns A detached `SettingsRowData` (provider/shortcuts/ui) with version forced to 2.
+ */
+export function mergeSettings(raw: unknown): SettingsRowData {
+  const merged = cloneSettings(DEFAULT_ROW)
+  if (isRecord(raw)) mergeRecord(merged as unknown as Record<string, unknown>, raw)
+  merged.version = 2
+  return merged
 }
 
 /**
- * Merges persisted settings into current defaults and repairs an unavailable default tool.
- * @param raw - Untrusted value read from extension storage.
- * @returns A detached settings object safe for form mutation.
+ * Composes a runtime settings snapshot from a row document and its tool list.
+ * @param row - Version-2 provider/shortcuts/ui defaults and overrides.
+ * @param tools - Active tool definitions, in display order.
+ * @returns The composed v2 snapshot with the default tool id resolved.
  */
-export function mergeSettings(raw: unknown): DianzhiSettings {
-  const merged = cloneSettings(DEFAULT_SETTINGS)
-  if (isRecord(raw)) mergeRecord(merged as unknown as Record<string, unknown>, raw)
-
-  merged.version = 1
-  const tools =
-    Array.isArray(merged.tools) && merged.tools.every(isToolDefinition)
-      ? merged.tools
-      : cloneSettings(DEFAULT_SETTINGS).tools
-  merged.tools = tools
-  if (!tools.some((tool) => tool.id === merged.ui.defaultToolId && tool.enabled)) {
-    merged.ui.defaultToolId = tools.find((tool) => tool.enabled)?.id ?? 'context'
+export function composeSettings(
+  row: SettingsRowData,
+  tools: readonly ToolDefinition[]
+): DianzhiSettings {
+  const active = tools.find((tool) => tool.isDefault) ?? tools.find((tool) => tool.enabled)
+  return {
+    ...row,
+    ui: { ...row.ui, defaultToolId: active?.id ?? 1 },
+    tools: [...tools],
   }
+}
 
-  return merged
+/**
+ * Converts a persisted `tools` row into the composed tool definition shape.
+ * Presets keep their immutable built-in prompt unless the stored prompt was
+ * edited, in which case the tool behaves as a custom-prompt tool.
+ * @param record - Tool row read from the config store.
+ * @returns A `ToolDefinition` for runtime composition.
+ */
+export function toToolDefinition(record: ToolRecord): ToolDefinition {
+  const preset = BUILTIN_TOOL_IDS.find((id) => PRESET_TOOL_IDS[id] === record.id)
+  const promptMode =
+    record.isPreset && preset !== undefined && record.prompt === BUILTIN_PROMPTS[preset]
+      ? 'preset'
+      : 'custom'
+  return {
+    id: record.id,
+    name: record.name,
+    builtin: record.isPreset,
+    enabled: record.enabled,
+    isDefault: record.isDefault,
+    promptMode,
+    customPrompt: record.prompt,
+  }
+}
+
+/**
+ * Strips the composed snapshot back to its persistable row document: no
+ * `tools`, no derived `ui.defaultToolId`, version pinned to 2.
+ * @param settings - Composed settings snapshot (e.g. an Options draft).
+ * @returns The row payload accepted by `settings.save`.
+ */
+export function rowDataFromSettings(settings: DianzhiSettings): SettingsRowData {
+  const { tools: _tools, ui, ...row } = settings
+  const { defaultToolId: _defaultToolId, ...uiRest } = ui
+  return { ...row, version: 2, ui: uiRest }
 }
 
 function addProblem(problems: SettingsProblem[], path: string, message: string): void {
@@ -127,8 +151,8 @@ function addProblem(problems: SettingsProblem[], path: string, message: string):
 }
 
 /**
- * Validates a complete settings snapshot before storage or provider use.
- * @param settings - Merged settings snapshot.
+ * Validates a complete composed settings snapshot before storage or provider use.
+ * @param settings - Composed settings snapshot.
  * @returns Blocking errors and non-blocking warnings with stable field paths.
  */
 export function validateSettings(settings: DianzhiSettings): SettingsValidation {
@@ -176,7 +200,7 @@ export function validateSettings(settings: DianzhiSettings): SettingsValidation 
     addProblem(errors, 'shortcuts.triggerMode', 'Selection trigger mode is invalid.')
   }
 
-  const seen = new Set<string>()
+  const seen = new Set<number>()
   for (const tool of settings.tools) {
     if (!tool.id || seen.has(tool.id)) {
       addProblem(errors, `tools.${tool.id || 'unknown'}.id`, 'Tool IDs must be present and unique.')
@@ -188,8 +212,9 @@ export function validateSettings(settings: DianzhiSettings): SettingsValidation 
     }
   }
   for (const builtinId of BUILTIN_TOOL_IDS) {
-    if (!settings.tools.some((tool) => tool.id === builtinId && tool.builtin)) {
-      addProblem(errors, `tools.${builtinId}`, 'Built-in tools cannot be deleted.')
+    const presetId = PRESET_TOOL_IDS[builtinId]
+    if (!settings.tools.some((tool) => tool.id === presetId && tool.builtin)) {
+      addProblem(errors, `tools.${presetId}`, 'Built-in tools cannot be deleted.')
     }
   }
   if (!settings.tools.some((tool) => tool.enabled)) {
@@ -201,13 +226,12 @@ export function validateSettings(settings: DianzhiSettings): SettingsValidation 
 
 /**
  * Resolves the prompt snapshot used when a conversation is created.
- * @param tool - Tool definition from merged settings.
+ * @param tool - Tool definition from a composed settings snapshot.
  * @returns The selected custom prompt or immutable built-in preset.
  */
 export function effectivePrompt(tool: ToolDefinition): string {
   if (tool.promptMode === 'custom' && tool.customPrompt.trim()) return tool.customPrompt
-  if (tool.builtin && BUILTIN_TOOL_IDS.includes(tool.id as BuiltinToolId)) {
-    return BUILTIN_PROMPTS[tool.id as BuiltinToolId]
-  }
+  const builtinId = BUILTIN_TOOL_IDS.find((id) => PRESET_TOOL_IDS[id] === tool.id)
+  if (tool.builtin && builtinId !== undefined) return BUILTIN_PROMPTS[builtinId]
   return tool.customPrompt
 }

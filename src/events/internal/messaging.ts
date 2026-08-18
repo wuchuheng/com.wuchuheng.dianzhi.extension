@@ -36,6 +36,10 @@ const DIANZHI_ERROR_CODES = new Set<DianzhiErrorCode>([
   'DB_UNAVAILABLE',
   'SIDE_PANEL_OPEN_FAILED',
   'SIDE_PANEL_READY_TIMEOUT',
+  'TOOL_NOT_FOUND',
+  'TOOL_LAST_ENABLED',
+  'TOOL_ORDER_INVALID',
+  'TOOL_PRESET_INVALID',
 ])
 
 function isDianzhiErrorCode(value: unknown): value is DianzhiErrorCode {

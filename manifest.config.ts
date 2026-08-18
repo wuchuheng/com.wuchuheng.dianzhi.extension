@@ -1,4 +1,4 @@
-import { defineManifest } from '@crxjs/vite-plugin'
+import { defineManifest, type ManifestV3Export } from '@crxjs/vite-plugin'
 import pkg from './package.json'
 
 const crxManifest = defineManifest({
@@ -39,9 +39,17 @@ const crxManifest = defineManifest({
   },
 })
 
+// defineManifest returns ManifestV3Export (a union with Promise/function variants).
+// The runtime value is a plain object; narrow the export to the concrete manifest
+// shape so consumers can read manifest fields without a double-cast.
+type CrxManifestV3 = Extract<ManifestV3Export, { manifest_version: number }>
+
 export const dianzhiManifest = Object.assign(crxManifest, {
   cross_origin_opener_policy: { value: 'same-origin' as const },
   cross_origin_embedder_policy: { value: 'require-corp' as const },
-})
+}) as CrxManifestV3 & {
+  cross_origin_opener_policy: { value: 'same-origin' }
+  cross_origin_embedder_policy: { value: 'require-corp' }
+}
 
 export default dianzhiManifest

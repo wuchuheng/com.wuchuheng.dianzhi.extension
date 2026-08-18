@@ -4,8 +4,8 @@ import { nextToolId } from './tool-tabs-state'
 
 export interface ToolTabsProps {
   tools: readonly ToolConversationRef[]
-  activeToolId: string
-  onSelect(toolId: string): void
+  activeToolId: number
+  onSelect(toolId: number): void
 }
 
 export function ToolTabs({ tools, activeToolId, onSelect }: ToolTabsProps) {

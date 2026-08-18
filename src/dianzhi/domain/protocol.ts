@@ -1,5 +1,5 @@
 import type { DianzhiErrorShape } from './errors'
-import type { DianzhiSettings, ProviderSettings, ToolDefinition } from './types'
+import type { DianzhiSettings, ProviderSettings, SettingsRowData, ToolDefinition } from './types'
 
 export const CONTENT_PORT_NAME = 'dianzhi:content'
 export const SIDEPANEL_PORT_NAME = 'dianzhi:sidepanel'
@@ -12,7 +12,7 @@ export interface ConversationRecord {
   id: number
   selectionKey: number
   tabId: number
-  toolId: string
+  toolId: number
   toolName: string
   title: string
   selectedText: string
@@ -45,7 +45,7 @@ export interface ConversationSnapshot {
   conversation: ConversationRecord
   messages: MessageRecord[]
   tools: ToolConversationRef[]
-  activeToolId: string
+  activeToolId: number
 }
 
 export type ConversationCommand =
@@ -72,7 +72,7 @@ export type ConversationCommand =
   | {
       type: 'conversation.ensureTool'
       requestId: string
-      payload: { selectionKey: number; toolId: string }
+      payload: { selectionKey: number; toolId: number }
     }
   | {
       type: 'stream.stop'
@@ -126,8 +126,28 @@ export type ConversationUpdate =
 
 export type SettingsCommand =
   | { type: 'settings.get'; requestId: string }
-  | { type: 'settings.save'; requestId: string; settings: DianzhiSettings }
+  | { type: 'settings.save'; requestId: string; settings: SettingsRowData }
   | { type: 'settings.testProvider'; requestId: string; settings: DianzhiSettings }
+
+export type ToolUpdatePatch = {
+  name?: string
+  prompt?: string
+  enabled?: boolean
+  isDefault?: boolean
+}
+
+export type ToolsCommand =
+  | { type: 'tools.list'; requestId: string; payload: { includeRemoved?: boolean } }
+  | { type: 'tools.ensurePresets'; requestId: string; payload: Record<string, never> }
+  | { type: 'tools.create'; requestId: string; payload: { name: string; prompt: string } }
+  | {
+      type: 'tools.update'
+      requestId: string
+      payload: { id: number; patch: ToolUpdatePatch }
+    }
+  | { type: 'tools.reorder'; requestId: string; payload: { orderedIds: number[] } }
+  | { type: 'tools.softRemove'; requestId: string; payload: { id: number } }
+  | { type: 'tools.restore'; requestId: string; payload: { id: number } }
 
 export type ToolTestCommand =
   | {
@@ -265,10 +285,9 @@ export function parseConversationCommand(value: unknown): ParseResult<Conversati
         },
       }
     case 'conversation.ensureTool':
-      if (!isPositiveInteger(payload.selectionKey) || typeof payload.toolId !== 'string') {
+      if (!isPositiveInteger(payload.selectionKey) || !isPositiveInteger(payload.toolId)) {
         return invalid('Tool conversation payload is invalid.')
       }
-      if (!payload.toolId.trim()) return invalid('Tool ID is empty.')
       return {
         ok: true,
         value: {
@@ -279,6 +298,102 @@ export function parseConversationCommand(value: unknown): ParseResult<Conversati
       }
     default:
       return invalid('Conversation command type is invalid.')
+  }
+}
+
+/**
+ * Parses an untrusted Options-page tools command.
+ * @param value - Runtime message payload received across a Chrome context boundary.
+ * @returns A typed tools command or a stable validation failure.
+ */
+export function parseToolsCommand(value: unknown): ParseResult<ToolsCommand> {
+  if (!isRecord(value) || !isRequestId(value.requestId) || typeof value.type !== 'string') {
+    return invalid('Tools command envelope is invalid.')
+  }
+  if (!isRecord(value.payload) || hasCallerTabId(value.payload)) {
+    return invalid('Tools command payload is invalid.')
+  }
+  const requestId = value.requestId
+  const payload = value.payload
+  const TOOL_PATCH_KEYS = ['name', 'prompt', 'enabled', 'isDefault'] as const
+  switch (value.type) {
+    case 'tools.list':
+      if (payload.includeRemoved !== undefined && typeof payload.includeRemoved !== 'boolean') {
+        return invalid('Tools list payload is invalid.')
+      }
+      return {
+        ok: true,
+        value: {
+          type: value.type,
+          requestId,
+          payload:
+            payload.includeRemoved === undefined ? {} : { includeRemoved: payload.includeRemoved },
+        },
+      }
+    case 'tools.ensurePresets':
+      if (Object.keys(payload).length > 0)
+        return invalid('Tools ensurePresets payload must be empty.')
+      return { ok: true, value: { type: value.type, requestId, payload: {} } }
+    case 'tools.create':
+      if (
+        typeof payload.name !== 'string' ||
+        !payload.name.trim() ||
+        typeof payload.prompt !== 'string' ||
+        !payload.prompt.trim()
+      ) {
+        return invalid('Tools create payload is invalid.')
+      }
+      return {
+        ok: true,
+        value: {
+          type: value.type,
+          requestId,
+          payload: { name: payload.name, prompt: payload.prompt },
+        },
+      }
+    case 'tools.update': {
+      if (!isPositiveInteger(payload.id) || !isRecord(payload.patch)) {
+        return invalid('Tools update payload is invalid.')
+      }
+      const patchKeys = Object.keys(payload.patch)
+      if (
+        patchKeys.length === 0 ||
+        patchKeys.some((key) => !TOOL_PATCH_KEYS.includes(key as (typeof TOOL_PATCH_KEYS)[number]))
+      ) {
+        return invalid('Tools update patch is invalid.')
+      }
+      const patch: ToolUpdatePatch = {}
+      if (typeof payload.patch.name === 'string') patch.name = payload.patch.name
+      if (typeof payload.patch.prompt === 'string') patch.prompt = payload.patch.prompt
+      if (typeof payload.patch.enabled === 'boolean') patch.enabled = payload.patch.enabled
+      if (typeof payload.patch.isDefault === 'boolean') patch.isDefault = payload.patch.isDefault
+      return {
+        ok: true,
+        value: { type: value.type, requestId, payload: { id: payload.id, patch } },
+      }
+    }
+    case 'tools.reorder':
+      if (
+        !Array.isArray(payload.orderedIds) ||
+        payload.orderedIds.length === 0 ||
+        !payload.orderedIds.every(isPositiveInteger)
+      ) {
+        return invalid('Tools reorder payload is invalid.')
+      }
+      return {
+        ok: true,
+        value: {
+          type: value.type,
+          requestId,
+          payload: { orderedIds: [...payload.orderedIds] },
+        },
+      }
+    case 'tools.softRemove':
+    case 'tools.restore':
+      if (!isPositiveInteger(payload.id)) return invalid('Tools id payload is invalid.')
+      return { ok: true, value: { type: value.type, requestId, payload: { id: payload.id } } }
+    default:
+      return invalid('Tools command type is invalid.')
   }
 }
 

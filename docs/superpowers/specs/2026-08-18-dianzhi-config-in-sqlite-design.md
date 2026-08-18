@@ -10,16 +10,16 @@ This feature intentionally reworks _where configuration lives_, not the Options 
 
 ## 2. Decisions
 
-| Decision | Choice | Rationale |
-| --- | --- | --- |
-| Config location | OPFS SQLite (offscreen-owned), `chrome.storage.sync` cleared after migration | User request; OPFS is machine-local, so settings deliberately stop syncing across devices |
-| Tables | One `tools` table + one `settings` row | Tools are a list with CRUD/order/soft-delete semantics (relational); everything else is one validated document (relational buys nothing) |
-| Tool identity | **Numeric**: `tools.id INTEGER PRIMARY KEY AUTOINCREMENT`; presets seeded at reserved ids (`context`=1, `synonyms`=2, `translate`=3); custom tools auto-increment | No redundant string `key` column; matches the approved tools spec's mapping |
-| Domain identity | `ToolDefinition.id`, `ConversationRecord.toolId`, `defaultToolId` become integers; `conversations.tool_id` rebuilt to INTEGER in migration | Follows from numeric tool identity (one coherent model) |
-| Default tool | `tools.is_default` column (unique partial index, one active default) replaces `ui.defaultToolId` | User request; default is a property of a tool |
-| Settings shape | **S1**: single-row JSON document `settings(id=1, data)` holding `{ provider, shortcuts, ui }` | One row per save; `mergeSettings` (defaults, forward-compat) and `validateSettings` keep working unchanged; no per-field migrations |
-| Preset source of truth | `src/dianzhi/domain/presets.ts` via typed op `tools.ensurePresets`; **no `seedSQL` literals** | `seedSQL` is raw SQL applied at migration time and cannot reference TS constants; presets must not be duplicated |
-| Migration | Schema release `2.0.0` (DDL only) + background-coordinated idempotent `tools.ensurePresets` / `tools.migrateLegacy` ops | Legacy data lives in `chrome.storage`, inaccessible to SQL; app-layer transfer is required |
+| Decision               | Choice                                                                                                                                                            | Rationale                                                                                                                                |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Config location        | OPFS SQLite (offscreen-owned), `chrome.storage.sync` cleared after migration                                                                                      | User request; OPFS is machine-local, so settings deliberately stop syncing across devices                                                |
+| Tables                 | One `tools` table + one `settings` row                                                                                                                            | Tools are a list with CRUD/order/soft-delete semantics (relational); everything else is one validated document (relational buys nothing) |
+| Tool identity          | **Numeric**: `tools.id INTEGER PRIMARY KEY AUTOINCREMENT`; presets seeded at reserved ids (`context`=1, `synonyms`=2, `translate`=3); custom tools auto-increment | No redundant string `key` column; matches the approved tools spec's mapping                                                              |
+| Domain identity        | `ToolDefinition.id`, `ConversationRecord.toolId`, `defaultToolId` become integers; `conversations.tool_id` rebuilt to INTEGER in migration                        | Follows from numeric tool identity (one coherent model)                                                                                  |
+| Default tool           | `tools.is_default` column (unique partial index, one active default) replaces `ui.defaultToolId`                                                                  | User request; default is a property of a tool                                                                                            |
+| Settings shape         | **S1**: single-row JSON document `settings(id=1, data)` holding `{ provider, shortcuts, ui }`                                                                     | One row per save; `mergeSettings` (defaults, forward-compat) and `validateSettings` keep working unchanged; no per-field migrations      |
+| Preset source of truth | `src/dianzhi/domain/presets.ts` via typed op `tools.ensurePresets`; **no `seedSQL` literals**                                                                     | `seedSQL` is raw SQL applied at migration time and cannot reference TS constants; presets must not be duplicated                         |
+| Migration              | Schema release `2.0.0` (DDL only) + background-coordinated idempotent `tools.ensurePresets` / `tools.migrateLegacy` ops                                           | Legacy data lives in `chrome.storage`, inaccessible to SQL; app-layer transfer is required                                               |
 
 ## 3. Architecture
 
@@ -94,18 +94,18 @@ No `seedSQL`: preset rows are created by the typed `tools.ensurePresets` op so `
 
 New offscreen RPC operations (same requestId dedup for mutations and per-operation validation as today; no arbitrary-SQL events):
 
-| Operation | Args | Notes |
-| --- | --- | --- |
-| `settings.get` | — | Returns the `settings` row or null |
-| `settings.save` | `{ data }` | Upserts row `id=1`; data is the validated `{ provider, shortcuts, ui }` document (no tools) |
-| `tools.list` | `{ includeRemoved?: boolean }` | Active (and optionally removed) tool rows ordered by `sort_order` |
-| `tools.ensurePresets` | — | Insert-if-missing preset rows from `presets.ts` at reserved ids 1/2/3; sets `is_default` on `context` when no active default exists; never overwrites existing rows |
-| `tools.create` | `{ name, prompt }` | New custom tool; `sort_order` appended at end; `is_preset=0`, `enabled=1` |
-| `tools.update` | `{ id, patch }` | Rename / prompt / enabled / is_default. Flipping `is_default=1` clears the prior default in the same transaction. `TOOL_LAST_ENABLED` if disabling would leave zero active |
-| `tools.reorder` | `{ orderedIds }` | Ordered id set must exactly match active tools; temporary collision-free sort values, then final positions, one transaction. `TOOL_ORDER_INVALID` otherwise |
-| `tools.softRemove` | `{ id }` | Sets `deleted_at`; clears `is_default`. `TOOL_NOT_FOUND` if missing or already removed |
-| `tools.restore` | `{ id }` | Clears `deleted_at`; re-append at end of active order |
-| `tools.migrateLegacy` | `{ legacySettings }` | One-time v1 transfer (Section 7) |
+| Operation             | Args                           | Notes                                                                                                                                                                      |
+| --------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `settings.get`        | —                              | Returns the `settings` row or null                                                                                                                                         |
+| `settings.save`       | `{ data }`                     | Upserts row `id=1`; data is the validated `{ provider, shortcuts, ui }` document (no tools)                                                                                |
+| `tools.list`          | `{ includeRemoved?: boolean }` | Active (and optionally removed) tool rows ordered by `sort_order`                                                                                                          |
+| `tools.ensurePresets` | —                              | Insert-if-missing preset rows from `presets.ts` at reserved ids 1/2/3; sets `is_default` on `context` when no active default exists; never overwrites existing rows        |
+| `tools.create`        | `{ name, prompt }`             | New custom tool; `sort_order` appended at end; `is_preset=0`, `enabled=1`                                                                                                  |
+| `tools.update`        | `{ id, patch }`                | Rename / prompt / enabled / is_default. Flipping `is_default=1` clears the prior default in the same transaction. `TOOL_LAST_ENABLED` if disabling would leave zero active |
+| `tools.reorder`       | `{ orderedIds }`               | Ordered id set must exactly match active tools; temporary collision-free sort values, then final positions, one transaction. `TOOL_ORDER_INVALID` otherwise                |
+| `tools.softRemove`    | `{ id }`                       | Sets `deleted_at`; clears `is_default`. `TOOL_NOT_FOUND` if missing or already removed                                                                                     |
+| `tools.restore`       | `{ id }`                       | Clears `deleted_at`; re-append at end of active order                                                                                                                      |
+| `tools.migrateLegacy` | `{ legacySettings }`           | One-time v1 transfer (Section 7)                                                                                                                                           |
 
 Validation invariants per operation: preset rows (1/2/3) cannot be soft-removed or renumbered; at least one enabled tool must remain; at most one active `is_default`.
 
@@ -121,13 +121,13 @@ Read operations (`settings.get`, `tools.list`) retry once through the offscreen 
    a. `tools.ensurePresets` — reserve preset ids 1/2/3.
    b. Read `chrome.storage.sync[SETTINGS_KEY]` (v1 `DianzhiSettings`), validate with `validateSettings`.
    c. `tools.migrateLegacy`: in one SQLite transaction —
-      - sync preset rows' `enabled`/`name` state from the legacy `tools` array;
-      - allocate auto-increment ids for legacy custom tools in legacy order (id 4, 5, …), insert rows;
-      - for any distinct `conversations.tool_id` string not covered by the mapping, allocate a conversation-only row (`is_preset=0`, `enabled=0`, `deleted_at` set) so history resolves to a stable integer id without surfacing a phantom tool;
-      - mark `is_default` from the legacy `defaultToolId` (translate string → reserved/mapped id);
-      - rebuild `conversations.tool_id` as INTEGER and rewrite every value through the generated string→id mapping;
-      - upsert the `settings` row from legacy `provider` + `shortcuts` + `ui` (minus `defaultToolId`, minus `tools`).
-   d. Only after the transaction commits: clear `chrome.storage.sync[SETTINGS_KEY]`.
+   - sync preset rows' `enabled`/`name` state from the legacy `tools` array;
+   - allocate auto-increment ids for legacy custom tools in legacy order (id 4, 5, …), insert rows;
+   - for any distinct `conversations.tool_id` string not covered by the mapping, allocate a conversation-only row (`is_preset=0`, `enabled=0`, `deleted_at` set) so history resolves to a stable integer id without surfacing a phantom tool;
+   - mark `is_default` from the legacy `defaultToolId` (translate string → reserved/mapped id);
+   - rebuild `conversations.tool_id` as INTEGER and rewrite every value through the generated string→id mapping;
+   - upsert the `settings` row from legacy `provider` + `shortcuts` + `ui` (minus `defaultToolId`, minus `tools`).
+     d. Only after the transaction commits: clear `chrome.storage.sync[SETTINGS_KEY]`.
 4. Fresh install (no legacy key): `tools.ensurePresets` only; defaults otherwise come from `mergeSettings`.
 5. Crash-safety: `migrateLegacy` is re-runnable (upserts, mapping rebuilt by key match, guarded by the completed-check in step 2). If the offscreen DB is unavailable, background serves `mergeSettings(DEFAULT_SETTINGS)` plus preset rows and reports a non-fatal status; no writes are attempted to a missing DB.
 
@@ -158,14 +158,14 @@ Read operations (`settings.get`, `tools.list`) retry once through the offscreen 
 
 Events are defined once in `src/events/config.ts` and created per channel in `src/events/{background,extensionPage,contentScript}/`. Channels, transports, and sender validation (all existing):
 
-| Hop | Channel | Transport | Sender validation |
-| --- | --- | --- | --- |
-| Extension pages (Options, Side Panel, popup, offscreen) → bg | `ep2bg` | `chrome.runtime.sendMessage` (`{event,args}` → `{success,data|error}`) | Sender filter `origin` starts with `chrome-extension://` |
-| Content script → bg | `cs2bg` | `chrome.runtime.sendMessage` | `handleWithSender` retains Chrome sender metadata for tab identity |
-| bg → extension page | `bg2ep` | `chrome.runtime.sendMessage` | `isPrivilegedExtensionSender` (ext id, no tab, ext origin) — offscreen qualifies |
-| bg → content | `bg2cs` | `chrome.tabs.sendMessage(tabId)` | Explicit tab target |
-| content ↔ extension page | `ep2cs`/`cs2ep` | Native port relay via bg (`relayService()`) | Port name = event; page vs content port distinguished |
-| bg ↔ bg | `bg2bg` | In-memory | n/a |
+| Hop                                                          | Channel         | Transport                                                     | Sender validation                                                                |
+| ------------------------------------------------------------ | --------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Extension pages (Options, Side Panel, popup, offscreen) → bg | `ep2bg`         | `chrome.runtime.sendMessage` (`{event,args}` → `{success,data | error}`)                                                                         | Sender filter `origin` starts with `chrome-extension://` |
+| Content script → bg                                          | `cs2bg`         | `chrome.runtime.sendMessage`                                  | `handleWithSender` retains Chrome sender metadata for tab identity               |
+| bg → extension page                                          | `bg2ep`         | `chrome.runtime.sendMessage`                                  | `isPrivilegedExtensionSender` (ext id, no tab, ext origin) — offscreen qualifies |
+| bg → content                                                 | `bg2cs`         | `chrome.tabs.sendMessage(tabId)`                              | Explicit tab target                                                              |
+| content ↔ extension page                                     | `ep2cs`/`cs2ep` | Native port relay via bg (`relayService()`)                   | Port name = event; page vs content port distinguished                            |
+| bg ↔ bg                                                      | `bg2bg`         | In-memory                                                     | n/a                                                                              |
 
 Config CRUD adds exactly one consumer-facing event: **`toolsCommand`** — `ep2bg 'dianzhi:tools-command'` carrying a `ToolsCommand` union (`tools.list/create/update/reorder/softRemove/restore`), parsed by a new `parseToolsCommand` validator mirroring `parseSettingsCommand`. The tools workspace is its only caller; the Side Panel and content scripts never write tools.
 

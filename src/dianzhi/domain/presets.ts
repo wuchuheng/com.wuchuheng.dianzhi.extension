@@ -149,4 +149,16 @@ AI Output:
   `,
 }
 
+export const BUILTIN_TOOL_NAMES: Readonly<Record<BuiltinToolId, string>> = {
+  context: '语境',
+  synonyms: '同义词',
+  translate: '翻译',
+}
+
+export const PRESET_TOOL_IDS: Readonly<Record<BuiltinToolId, number>> = {
+  context: 1,
+  synonyms: 2,
+  translate: 3,
+}
+
 export const BUILTIN_TOOL_IDS: readonly BuiltinToolId[] = ['context', 'synonyms', 'translate']

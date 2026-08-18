@@ -41,7 +41,7 @@ export interface ContentAppProps {
   reasoningEnabled: boolean
   composerValue?: string
   onComposerChange?(value: string): void
-  onToolSelect(toolId: string): void
+  onToolSelect(toolId: number): void
   onModeChange(mode: 'card' | 'chat'): void
   onExpand(): void
   onClose(): void
@@ -217,7 +217,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
     return result
   }, [])
   const selectTool = useCallback(
-    async (toolId: string) => {
+    async (toolId: number) => {
       const snapshot = state.snapshot
       if (!snapshot || toolId === snapshot.activeToolId) return
       await sendCommand({

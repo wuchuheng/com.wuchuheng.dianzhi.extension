@@ -1,5 +1,6 @@
 import { DianzhiError } from '@/dianzhi/domain/errors'
 import type { ToolDefinition } from '@/dianzhi/domain/types'
+import type { ConfigStore, LegacySettingsDocument } from './config-store'
 import type {
   ConversationStore,
   CreateSelectionInput,
@@ -40,6 +41,49 @@ export interface DatabaseOperationMap {
     args: { tabId: number; selectionKey: number }
     result: Awaited<ReturnType<ConversationStore['deleteSelection']>>
   }
+  getSettings: {
+    args: Record<string, never>
+    result: Awaited<ReturnType<ConfigStore['getSettings']>>
+  }
+  saveSettings: {
+    args: { data: string }
+    result: Awaited<ReturnType<ConfigStore['saveSettings']>>
+  }
+  listTools: {
+    args: { includeRemoved?: boolean }
+    result: Awaited<ReturnType<ConfigStore['listTools']>>
+  }
+  ensurePresets: {
+    args: Record<string, never>
+    result: Awaited<ReturnType<ConfigStore['ensurePresets']>>
+  }
+  createTool: {
+    args: { name: string; prompt: string }
+    result: Awaited<ReturnType<ConfigStore['createTool']>>
+  }
+  updateTool: {
+    args: {
+      id: number
+      patch: { name?: string; prompt?: string; enabled?: boolean; isDefault?: boolean }
+    }
+    result: Awaited<ReturnType<ConfigStore['updateTool']>>
+  }
+  reorderTools: {
+    args: { orderedIds: number[] }
+    result: Awaited<ReturnType<ConfigStore['reorderTools']>>
+  }
+  softRemoveTool: {
+    args: { id: number }
+    result: Awaited<ReturnType<ConfigStore['softRemoveTool']>>
+  }
+  restoreTool: {
+    args: { id: number }
+    result: Awaited<ReturnType<ConfigStore['restoreTool']>>
+  }
+  migrateLegacy: {
+    args: { legacySettings: LegacySettingsDocument }
+    result: Awaited<ReturnType<ConfigStore['migrateLegacy']>>
+  }
 }
 
 export type DatabaseOperation = keyof DatabaseOperationMap
@@ -62,7 +106,18 @@ const MUTATIONS = new Set<DatabaseOperation>([
   'checkpointAssistant',
   'finalizeAssistant',
   'deleteSelection',
+  'saveSettings',
+  'ensurePresets',
+  'createTool',
+  'updateTool',
+  'reorderTools',
+  'softRemoveTool',
+  'restoreTool',
+  'migrateLegacy',
 ])
+
+const MAX_TOOL_LENGTH = 2000
+const MAX_SETTINGS_DATA_LENGTH = 100_000
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -72,14 +127,30 @@ function isPositiveInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 }
 
+function isToolName(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= MAX_TOOL_LENGTH
+}
+
+function isToolPrompt(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0 && value.length <= MAX_TOOL_LENGTH
+}
+
+function isOrderedIds(value: unknown): value is number[] {
+  return Array.isArray(value) && value.length > 0 && value.every(isPositiveInteger)
+}
+
+function isSettingsData(value: unknown): value is string {
+  return typeof value === 'string' && value.length <= MAX_SETTINGS_DATA_LENGTH
+}
+
 function isTool(value: unknown): value is ToolDefinition {
   return (
     isRecord(value) &&
-    typeof value.id === 'string' &&
-    Boolean(value.id.trim()) &&
+    isPositiveInteger(value.id) &&
     typeof value.name === 'string' &&
     typeof value.builtin === 'boolean' &&
     typeof value.enabled === 'boolean' &&
+    typeof value.isDefault === 'boolean' &&
     (value.promptMode === 'preset' || value.promptMode === 'custom') &&
     typeof value.customPrompt === 'string'
   )
@@ -152,6 +223,38 @@ function assertDatabaseRequest(value: unknown): asserts value is DatabaseRequest
     case 'deleteSelection':
       valid = isPositiveInteger(args.tabId) && isPositiveInteger(args.selectionKey)
       break
+    case 'getSettings':
+    case 'ensurePresets':
+      valid = Object.keys(args).length === 0
+      break
+    case 'saveSettings':
+      valid = isSettingsData(args.data)
+      break
+    case 'listTools':
+      valid = args.includeRemoved === undefined || typeof args.includeRemoved === 'boolean'
+      break
+    case 'createTool':
+      valid = isToolName(args.name) && isToolPrompt(args.prompt)
+      break
+    case 'updateTool':
+      valid =
+        isPositiveInteger(args.id) &&
+        isRecord(args.patch) &&
+        (args.patch.name === undefined || isToolName(args.patch.name)) &&
+        (args.patch.prompt === undefined || isToolPrompt(args.patch.prompt)) &&
+        (args.patch.enabled === undefined || typeof args.patch.enabled === 'boolean') &&
+        (args.patch.isDefault === undefined || typeof args.patch.isDefault === 'boolean')
+      break
+    case 'reorderTools':
+      valid = isOrderedIds(args.orderedIds)
+      break
+    case 'softRemoveTool':
+    case 'restoreTool':
+      valid = isPositiveInteger(args.id)
+      break
+    case 'migrateLegacy':
+      valid = isRecord(args.legacySettings)
+      break
     default:
       valid = false
   }
@@ -165,42 +268,67 @@ function invalidRequest(): DianzhiError {
   })
 }
 
+export interface DatabaseHandlers {
+  conversation: ConversationStore
+  config: ConfigStore
+}
+
 async function dispatch(
-  store: ConversationStore,
+  handlers: DatabaseHandlers,
   request: DatabaseRequest
 ): Promise<DatabaseResult> {
   switch (request.operation) {
     case 'createSelection':
-      return store.createSelection(request.args)
+      return handlers.conversation.createSelection(request.args)
     case 'ensureToolConversation':
-      return store.ensureToolConversation(request.args)
+      return handlers.conversation.ensureToolConversation(request.args)
     case 'getConversation':
-      return store.getConversation(request.args.id)
+      return handlers.conversation.getConversation(request.args.id)
     case 'appendAssistant':
-      return store.appendAssistant(request.args.conversationId)
+      return handlers.conversation.appendAssistant(request.args.conversationId)
     case 'appendTurn':
-      return store.appendTurn(request.args.conversationId, request.args.content)
+      return handlers.conversation.appendTurn(request.args.conversationId, request.args.content)
     case 'checkpointAssistant':
-      return store.checkpointAssistant(
+      return handlers.conversation.checkpointAssistant(
         request.args.messageId,
         request.args.content,
         request.args.reasoningContent
       )
     case 'finalizeAssistant':
-      return store.finalizeAssistant(request.args.messageId, request.args.input)
+      return handlers.conversation.finalizeAssistant(request.args.messageId, request.args.input)
     case 'deleteSelection':
-      return store.deleteSelection(request.args.tabId, request.args.selectionKey)
+      return handlers.conversation.deleteSelection(request.args.tabId, request.args.selectionKey)
+    case 'getSettings':
+      return handlers.config.getSettings()
+    case 'saveSettings':
+      return handlers.config.saveSettings(request.args.data)
+    case 'listTools':
+      return handlers.config.listTools(request.args.includeRemoved)
+    case 'ensurePresets':
+      return handlers.config.ensurePresets()
+    case 'createTool':
+      return handlers.config.createTool(request.args)
+    case 'updateTool':
+      return handlers.config.updateTool(request.args.id, request.args.patch)
+    case 'reorderTools':
+      return handlers.config.reorderTools(request.args.orderedIds)
+    case 'softRemoveTool':
+      return handlers.config.softRemoveTool(request.args.id)
+    case 'restoreTool':
+      return handlers.config.restoreTool(request.args.id)
+    case 'migrateLegacy':
+      return handlers.config.migrateLegacy(request.args)
   }
 }
 
-export function createDatabaseRpc(store: ConversationStore) {
+export function createDatabaseRpc(handlers: DatabaseHandlers) {
   const completedMutations = new Map<string, DatabaseResult>()
   const pendingMutations = new Map<string, Promise<DatabaseResult>>()
 
   return async (untrustedRequest: unknown): Promise<DatabaseResult> => {
     assertDatabaseRequest(untrustedRequest)
     const request = untrustedRequest
-    if (!MUTATIONS.has(request.operation)) return dispatch(store, request)
+    if (!MUTATIONS.has(request.operation)) return dispatch(handlers, request)
 
     if (completedMutations.has(request.requestId)) {
       return completedMutations.get(request.requestId) as DatabaseResult
@@ -208,7 +336,7 @@ export function createDatabaseRpc(store: ConversationStore) {
     const pending = pendingMutations.get(request.requestId)
     if (pending) return pending
 
-    const operation = dispatch(store, request)
+    const operation = dispatch(handlers, request)
       .then((result) => {
         completedMutations.set(request.requestId, result)
         return result

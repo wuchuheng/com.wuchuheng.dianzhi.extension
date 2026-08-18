@@ -41,6 +41,7 @@ export function buildRequestBody(input: ProviderRequestInput): Record<string, un
     messages: input.messages.map((message) => ({ ...message })),
     temperature: provider.temperature,
     stream: true,
+    enable_thinking: provider.reasoningEnabled,
   }
 
   if (provider.thinkingParam === 'enable_thinking') {

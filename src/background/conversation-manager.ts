@@ -344,14 +344,20 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       selected: command.payload.selectedText,
       context: command.payload.contextText,
     })
-    const stored = await dependencies.database.request('createSelection', {
+    const createArgs = {
       tabId,
       ...(previous ? { replaceSelectionKey: previous.selectionKey } : {}),
       tool,
       selectedText: command.payload.selectedText,
       contextText: command.payload.contextText,
       promptSnapshot,
-    })
+    }
+    const stored = await dependencies.database
+      .request('createSelection', createArgs)
+      .catch((createError: unknown) => {
+        console.error('[dianzhi] createSelection args:', JSON.stringify(createArgs))
+        throw createError
+      })
     const snapshot = snapshotFromStored(stored, settings, tool.id)
     tabStates.set(tabId, {
       selectionKey: stored.conversation.selectionKey,

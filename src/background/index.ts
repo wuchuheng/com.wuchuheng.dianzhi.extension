@@ -128,12 +128,20 @@ function handleConversationCommand(
   return manager.handle(parsed.value, sender, source)
 }
 
-contentConversationCommand.handleWithSender((value, sender) =>
-  handleConversationCommand(value, sender, 'content')
-)
-extensionConversationCommand.handleWithSender((value, sender) =>
-  handleConversationCommand(value, sender, 'extension')
-)
+function logCommandFailure(source: 'content' | 'extension', error: unknown): void {
+  console.error(`[dianzhi] conversation command failed (${source}):`, error)
+}
+
+contentConversationCommand.handleWithSender((value, sender) => {
+  const run = handleConversationCommand(value, sender, 'content')
+  void run.catch((error: unknown) => logCommandFailure('content', error))
+  return run
+})
+extensionConversationCommand.handleWithSender((value, sender) => {
+  const run = handleConversationCommand(value, sender, 'extension')
+  void run.catch((error: unknown) => logCommandFailure('extension', error))
+  return run
+})
 settingsCommand.handle(async (value) => {
   const command = parseSettingsCommand(value)
   if (command.type === 'settings.get') return loadSettings()
@@ -183,27 +191,27 @@ function dispatchToolsCommand(command: ToolsCommand, db: OffscreenClient): Promi
     case 'tools.ensurePresets':
       return db
         .request('ensurePresets', {})
-        .then(() => db.request('listTools', { includeRemoved: false }))
+        .then(() => db.request('listTools', { includeRemoved: true }))
     case 'tools.create':
       return db
         .request('createTool', { name: command.payload.name, prompt: command.payload.prompt })
-        .then(() => db.request('listTools', { includeRemoved: false }))
+        .then(() => db.request('listTools', { includeRemoved: true }))
     case 'tools.update':
       return db
         .request('updateTool', { id: command.payload.id, patch: command.payload.patch })
-        .then(() => db.request('listTools', { includeRemoved: false }))
+        .then(() => db.request('listTools', { includeRemoved: true }))
     case 'tools.reorder':
       return db
         .request('reorderTools', { orderedIds: command.payload.orderedIds })
-        .then(() => db.request('listTools', { includeRemoved: false }))
+        .then(() => db.request('listTools', { includeRemoved: true }))
     case 'tools.softRemove':
       return db
         .request('softRemoveTool', { id: command.payload.id })
-        .then(() => db.request('listTools', { includeRemoved: false }))
+        .then(() => db.request('listTools', { includeRemoved: true }))
     case 'tools.restore':
       return db
         .request('restoreTool', { id: command.payload.id })
-        .then(() => db.request('listTools', { includeRemoved: false }))
+        .then(() => db.request('listTools', { includeRemoved: true }))
   }
 }
 

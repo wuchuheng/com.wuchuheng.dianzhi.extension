@@ -18,6 +18,7 @@ export default tseslint.config(
       '.superpowers',
       '.worktrees',
       'src/vendor/web-sqlite',
+      'src/vendor/web-sqlite-v2',
       '*.config.ts',
       'manifest.config.ts',
     ],

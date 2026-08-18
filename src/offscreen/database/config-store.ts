@@ -99,8 +99,25 @@ function toolNotFound(id: number): DianzhiError {
   })
 }
 
+/**
+ * SQLite has no boolean type: the three flag columns read back as 0/1
+ * integers. Normalize them to real booleans so `ToolRecord`'s contract holds
+ * for every consumer (tool composition, rpc validation, Options rendering).
+ */
+function normalizeToolRow(row: ToolRecord): ToolRecord {
+  const flags = row as unknown as { isPreset: number; isDefault: number; enabled: number }
+  return {
+    ...row,
+    isPreset: flags.isPreset === 1,
+    isDefault: flags.isDefault === 1,
+    enabled: flags.enabled === 1,
+  }
+}
+
 function freezeTools(rows: readonly ToolRecord[]): ToolRecord[] {
-  return Object.freeze(rows.map((row) => Object.freeze({ ...row }))) as unknown as ToolRecord[]
+  return Object.freeze(
+    rows.map((row) => Object.freeze(normalizeToolRow(row)))
+  ) as unknown as ToolRecord[]
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -198,7 +215,7 @@ export function createConfigStore(db: DatabaseConnection, clock: () => string): 
     const rows = await db.query<ToolRecord>(`SELECT ${TOOL_COLUMNS} FROM tools WHERE id = ?`, [id])
     const row = rows[0]
     if (!row) throw toolNotFound(id)
-    return Object.freeze({ ...row })
+    return Object.freeze(normalizeToolRow(row))
   }
 
   async function updateTool(
@@ -261,7 +278,7 @@ export function createConfigStore(db: DatabaseConnection, clock: () => string): 
     const rows = await db.query<ToolRecord>(`SELECT ${TOOL_COLUMNS} FROM tools WHERE id = ?`, [id])
     const row = rows[0]
     if (!row) throw toolNotFound(id)
-    return Object.freeze({ ...row })
+    return Object.freeze(normalizeToolRow(row))
   }
 
   async function reorderTools(orderedIds: number[]): Promise<void> {

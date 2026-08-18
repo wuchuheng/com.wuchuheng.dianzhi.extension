@@ -271,7 +271,10 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
           type: 'conversation.create',
           requestId: requestId('selection'),
           payload: { selectedText: context.selectedText, contextText: context.contextText },
-        }).catch((error: unknown) => dispatch({ type: 'view.error', error: errorShape(error) }))
+        }).catch((error: unknown) => {
+          console.error('[dianzhi] conversation.create failed:', error)
+          dispatch({ type: 'view.error', error: errorShape(error) })
+        })
       },
       onAnchorChange: setAnchor,
     })

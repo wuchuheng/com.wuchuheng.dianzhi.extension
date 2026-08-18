@@ -45,12 +45,14 @@ const defaultTimers: TimerApi = {
 }
 
 function dbUnavailable(operation: string, error: unknown): DianzhiError {
+  const reason = error instanceof Error ? error.message.slice(0, 300) : String(error).slice(0, 300)
+  console.error(`[dianzhi] database operation ${operation} failed:`, error)
   return new DianzhiError({
     code: 'DB_UNAVAILABLE',
-    message: `The conversation database operation ${operation} failed.`,
+    message: `The conversation database operation ${operation} failed: ${reason}`,
     context: {
       operation,
-      reason: error instanceof Error ? error.message.slice(0, 160) : String(error).slice(0, 160),
+      reason,
     },
   })
 }

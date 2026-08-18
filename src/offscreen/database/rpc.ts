@@ -258,7 +258,14 @@ function assertDatabaseRequest(value: unknown): asserts value is DatabaseRequest
     default:
       valid = false
   }
-  if (!valid) throw invalidRequest()
+  if (!valid) {
+    console.error('[dianzhi] rejected database request', {
+      requestId: value.requestId,
+      operation: value.operation,
+      args: value.args,
+    })
+    throw invalidRequest()
+  }
 }
 
 function invalidRequest(): DianzhiError {

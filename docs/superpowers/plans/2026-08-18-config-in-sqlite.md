@@ -25,12 +25,12 @@
 
 ---
 
-### Task 0: Land the staged tools-workspace work on a clean base
+### Task 0: Land the tools-workspace work on a clean base
 
-The working tree already contains the approved-but-uncommitted tools workspace UI work (staged: `src/options/tools/*`, `src/background/options-test-runner.ts`, `tests/unit/options/*`, `tests/e2e/tools-options.spec.ts`, and related edits). Everything after this task builds on a committed base.
+The tools-workspace UI work was already committed by the human partner as `fd2012a feat: tools workspace with drag-and-drop reorder and live tool testing` (it also includes the earlier thinking-param helper text). **Task 0 is satisfied** — do not re-commit. The only remaining dirty file on `main` is `src/dianzhi/provider/request.ts` (an uncommitted experiment adding an unconditional `enable_thinking` line; it is out of this plan's scope and is left untouched). All feature work happens in the `feat/config-in-sqlite` worktree rooted at `fd2012a`, whose tree is clean.
 
-**Files:** (commit whatever is staged; no new code)
-**Interfaces:** Produces: a working `main` with Options tools workspace + provider testing, all tests green.
+**Files:** none
+**Interfaces:** none
 
 - [ ] **Step 1: Confirm the tree is sane and green**
 
@@ -127,8 +127,7 @@ export const PRESET_TOOL_IDS: Readonly<Record<BuiltinToolId, number>> = {
 export const DEFAULT_ROW: SettingsRowData = {
   version: 2,
   provider: { /* same literal defaults as today's DEFAULT_SETTINGS.provider */ },
-  ui: { defaultToolId: undefined as never } // do NOT include defaultToolId — use UiConfig shape:
-  //   ui: { contextTargetWords: 100, contextMaxWords: 500, contextMaxBlocks: 6 },
+  ui: { contextTargetWords: 100, contextMaxWords: 500, contextMaxBlocks: 6 },
   shortcuts: { /* same literals as today */ },
 }
 
@@ -167,6 +166,8 @@ export function composeSettings(
   }
 }
 ```
+
+`toToolDefinition(record: ToolRecord): ToolDefinition` and `rowDataFromSettings(settings: DianzhiSettings): SettingsRowData` also live in `settings.ts` (Task 1) even though `ToolRecord` arrives from the offscreen layer — `settings.ts` imports the `ToolRecord` type from `@/offscreen/database/config-store`, and Task 3's `config-composer.ts` re-exports both so background code imports them from one place.
 
 Keep `validateSettings` validating the **composed** `DianzhiSettings` (same field checks as today, including the tools integrity loop and builtin-can't-be-deleted check — `BUILTIN_TOOL_IDS` now maps numeric ids through `PRESET_TOOL_IDS`). Any test that imported `DEFAULT_SETTINGS.tools` continues to work because `DEFAULT_SETTINGS` still has tools.
 
@@ -399,7 +400,7 @@ Follow the RecordingDatabase tests exactly. Shared helpers (copy from `store.ts`
 
 - [ ] **Step 5: Extend `src/offscreen/database/rpc.ts`**
 
-Add ops to `DatabaseOperationMap` with `args` exactly matching the store signatures (top-level `id` args for `updateTool`, `softRemoveTool`, `restoreTool`). Add validation predicates: `isToolName`, `isToolPrompt` (non-empty strings, length ≤ 2000), `isOrderedIds` (non-empty, all positive ints), `isSettingsData` (string, length ≤ 100_000). `migrateLegacy` args: `{ legacyTools: LegacyToolInput[]; legacyDefaultToolId: string | null }` with per-field validation. Extend `MUTATIONS` and dispatch. `invalidRequest()` stays for unknown ops.
+Add ops to `DatabaseOperationMap` with `args` exactly matching the store signatures (top-level `id` args for `updateTool`, `softRemoveTool`, `restoreTool`; `migrateLegacy` args are `{ tools: LegacyToolInput[]; defaultToolId: string | null }` — same names as the store input). Add validation predicates: `isToolName`, `isToolPrompt` (non-empty strings, length ≤ 2000), `isOrderedIds` (non-empty, all positive ints), `isSettingsData` (string, length ≤ 100_000). `migrateLegacy` args: `{ tools: LegacyToolInput[]; defaultToolId: string | null }` with per-field validation (`isLegacyToolInput` per element). Extend `MUTATIONS` and dispatch. `invalidRequest()` stays for unknown ops.
 
 - [ ] **Step 6: Error codes + whitelist**
 
@@ -633,8 +634,8 @@ export function useToolsApi(): ToolsApi {
 - On mount and after every mutation: `toolsApi.list(false)` → set state; guard against unmounted setState with a disposed flag in a `useEffect` loader.
 - `updateTool(id, patch)` → `toolsApi.update(...)` then refresh; the default-tool control sets `{ isDefault: true }` (server clears others).
 - Reorder handlers call `toolsApi.reorder(orderedIds)`; keep the existing drag structures in `ToolList`.
-- `ToolTestPane` keeps working: pass `provider` and `tools.find(t => t.id === activeId)`'s composed prompt (via `toToolDefinition` from `config-composer` — import from `@/background/config-composer` or move `toToolDefinition` to domain `settings.ts` if the options bundle cannot import background; prefer the domain location: **move `toToolDefinition` into `src/dianzhi/domain/settings.ts`** in Task 4 and have `config-composer.ts` re-export it — the options page bundles domain, not background).
-- `ToolConfig` prompt editor maps the single `prompt` field; preset rows keep a "重置为内置提示词" button (writes `prompt = BUILTIN_PROMPTS[...]` via `update`), and `promptMode` is derived on render.
+- `ToolTestPane` keeps working: pass `provider` and `tools.find(t => t.id === activeId)` rendered through `toToolDefinition` (from `@/dianzhi/domain/settings` — the options bundle imports domain, not background).
+- `ToolConfig` prompt editor maps the single `prompt` field; preset rows keep a "重置为内置提示词" button (writes `prompt = BUILTIN_PROMPTS[...]` via `update`), and `promptMode` is derived on render via `toToolDefinition` (imported from `@/dianzhi/domain/settings`, per Task 1).
 
 - [ ] **Step 4: Update `ToolList.tsx` / `ToolConfig.tsx`**
 
@@ -642,7 +643,7 @@ ToolList receives `ToolRecord[]` + callbacks; render `isDefault` badge; ToolConf
 
 - [ ] **Step 5: Rewire `src/options/App.tsx` and `settings-form.ts`**
 
-- Provider/ui/shortcuts tab: on save, dispatch `settingsCommand` `settings.save` with `rowDataFromSettings(settings)` (import from `@/dianzhi/domain/settings` — move `rowDataFromSettings` there too) and update local state from the returned composed snapshot.
+- Provider/ui/shortcuts tab: on save, dispatch `settingsCommand` `settings.save` with `rowDataFromSettings(settings)` and update local state from the returned composed snapshot.
 - Tools tab: `<ToolsWorkspace provider={settings.provider} />` (no doc props).
 - `settings-form.ts`: delete `addCustomTool`, `moveTool`, `removeCustomTool`, `reorderToolsByTarget`, `setToolEnabled` (workspace owns tool mutation now); keep `updateProvider`/`updateUi`/shortcut helpers; remove the `defaultToolId`-repair logic that referenced `settings.tools`.
 

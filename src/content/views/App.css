@@ -344,24 +344,6 @@ textarea {
   font-weight: 650;
   cursor: pointer;
 }
-.dz-card-cta {
-  width: 100%;
-  margin-top: 12px;
-  border: 1px solid var(--d-brand);
-  border-radius: var(--d-radius-sm);
-  background: var(--d-surface);
-  color: var(--d-brand-strong);
-  font-weight: 650;
-  padding: 8px 12px;
-  cursor: pointer;
-  transition: background-color 120ms ease;
-}
-.dz-card-cta:hover {
-  background: var(--d-surface-brand);
-}
-.dz-card-cta:active {
-  transform: scale(0.98);
-}
 .dz-footer {
   border-top: 1px solid var(--d-border);
   padding: 8px 10px 10px;
@@ -447,13 +429,11 @@ textarea {
     animation: none;
   }
   .dz-composer button,
-  .dz-actions button,
-  .dz-card-cta {
+  .dz-actions button {
     transition: none;
   }
   .dz-composer button:active,
-  .dz-actions button:active,
-  .dz-card-cta:active {
+  .dz-actions button:active {
     transform: none;
   }
 }

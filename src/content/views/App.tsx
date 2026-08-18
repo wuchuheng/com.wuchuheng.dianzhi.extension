@@ -220,11 +220,6 @@ export function ContentApp({
             mode={state.mode}
             reasoningEnabled={reasoningEnabled}
           />
-          {state.mode === 'card' && (
-            <button type="button" className="dz-card-cta" onClick={() => onModeChange('chat')}>
-              继续对话{shortcutTip(shortcuts.toggleChat)}
-            </button>
-          )}
           {(state.error || latestAssistant?.errorMessage) && (
             <div className="dz-error" role="alert">
               <span>{state.error?.message ?? latestAssistant?.errorMessage}</span>

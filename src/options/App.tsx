@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DEFAULT_SETTINGS, rowDataFromSettings, validateSettings } from '@/dianzhi/domain/settings'
 import type { DianzhiSettings, SettingsProblem } from '@/dianzhi/domain/types'
 import { settingsCommand } from '@/events/config'
@@ -12,6 +12,7 @@ export interface OptionsViewProps {
   settings: DianzhiSettings
   status: string
   errors: SettingsProblem[]
+  testing: boolean
   revealKey: boolean
   onSectionChange(section: OptionsSection): void
   onSettingsChange(settings: DianzhiSettings): void
@@ -20,14 +21,37 @@ export interface OptionsViewProps {
   onTest(): void
 }
 
+function FieldError({ problem, full }: { problem?: SettingsProblem; full?: boolean }) {
+  if (!problem) return null
+  return (
+    <p
+      id={`${problem.path}-error`}
+      className={full ? 'field-error field-error--full' : 'field-error'}
+    >
+      {problem.message}
+    </p>
+  )
+}
+
 export function OptionsView(props: OptionsViewProps) {
   const { settings } = props
+  const errorBoxRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (props.errors.length > 0) errorBoxRef.current?.focus()
+  }, [props.errors])
   const updateProvider = (patch: Partial<DianzhiSettings['provider']>) =>
     props.onSettingsChange({ ...settings, provider: { ...settings.provider, ...patch } })
   const updateUi = (patch: Partial<DianzhiSettings['ui']>) =>
     props.onSettingsChange({ ...settings, ui: { ...settings.ui, ...patch } })
   const updateShortcuts = (patch: Partial<DianzhiSettings['shortcuts']>) =>
     props.onSettingsChange({ ...settings, shortcuts: { ...settings.shortcuts, ...patch } })
+
+  const errorFor = (path: string): SettingsProblem | undefined =>
+    props.errors.find((error) => error.path === path)
+  const fieldProps = (path: string) => ({
+    id: path,
+    'aria-describedby': errorFor(path) ? `${path}-error` : undefined,
+  })
 
   return (
     <div className="options-shell">
@@ -69,14 +93,17 @@ export function OptionsView(props: OptionsViewProps) {
               <label className="span-two">
                 API 地址
                 <input
+                  {...fieldProps('provider.baseUrl')}
                   value={settings.provider.baseUrl}
                   onChange={(e) => updateProvider({ baseUrl: e.target.value })}
                 />
               </label>
+              <FieldError problem={errorFor('provider.baseUrl')} full />
               <label>
                 API Key
                 <span className="secret">
                   <input
+                    {...fieldProps('provider.apiKey')}
                     type={props.revealKey ? 'text' : 'password'}
                     autoComplete="off"
                     value={settings.provider.apiKey}
@@ -90,13 +117,16 @@ export function OptionsView(props: OptionsViewProps) {
               <label>
                 模型
                 <input
+                  {...fieldProps('provider.model')}
                   value={settings.provider.model}
                   onChange={(e) => updateProvider({ model: e.target.value })}
                 />
               </label>
+              <FieldError problem={errorFor('provider.model')} />
               <label>
                 温度 <output>{settings.provider.temperature.toFixed(1)}</output>
                 <input
+                  {...fieldProps('provider.temperature')}
                   type="range"
                   min="0"
                   max="2"
@@ -155,14 +185,21 @@ export function OptionsView(props: OptionsViewProps) {
               <label className="span-two">
                 额外请求字段（JSON）
                 <textarea
+                  {...fieldProps('provider.extraBody')}
                   value={settings.provider.extraBody}
                   onChange={(e) => updateProvider({ extraBody: e.target.value })}
                   placeholder='{"top_p": 0.9}'
                 />
               </label>
+              <FieldError problem={errorFor('provider.extraBody')} full />
             </div>
-            <button type="button" className="secondary" onClick={props.onTest}>
-              测试连接
+            <button
+              type="button"
+              className="secondary"
+              onClick={props.onTest}
+              disabled={props.testing}
+            >
+              {props.testing ? '测试中…' : '测试连接'}
             </button>
           </section>
         )}
@@ -181,6 +218,7 @@ export function OptionsView(props: OptionsViewProps) {
               <label>
                 选词触发
                 <select
+                  {...fieldProps('shortcuts.triggerMode')}
                   value={settings.shortcuts.triggerMode}
                   onChange={(e) =>
                     updateShortcuts({
@@ -195,6 +233,7 @@ export function OptionsView(props: OptionsViewProps) {
               <label>
                 目标上下文词数
                 <input
+                  {...fieldProps('ui.contextTargetWords')}
                   type="number"
                   value={settings.ui.contextTargetWords}
                   onChange={(e) => updateUi({ contextTargetWords: Number(e.target.value) })}
@@ -203,6 +242,7 @@ export function OptionsView(props: OptionsViewProps) {
               <label>
                 最大上下文词数
                 <input
+                  {...fieldProps('ui.contextMaxWords')}
                   type="number"
                   value={settings.ui.contextMaxWords}
                   onChange={(e) => updateUi({ contextMaxWords: Number(e.target.value) })}
@@ -211,28 +251,41 @@ export function OptionsView(props: OptionsViewProps) {
               <label>
                 最大文本块数
                 <input
+                  {...fieldProps('ui.contextMaxBlocks')}
                   type="number"
                   value={settings.ui.contextMaxBlocks}
                   onChange={(e) => updateUi({ contextMaxBlocks: Number(e.target.value) })}
                 />
               </label>
-              {(['tabLeft', 'tabRight', 'toggleChat', 'dock'] as const).map((key) => (
-                <label key={key}>
-                  {key}
-                  <input
-                    value={settings.shortcuts[key]}
-                    onChange={(e) => updateShortcuts({ [key]: e.target.value })}
-                  />
-                </label>
-              ))}
+              {(['tabLeft', 'tabRight', 'toggleChat', 'dock', 'expand', 'close'] as const).map(
+                (key) => (
+                  <label key={key}>
+                    {key}
+                    <input
+                      {...fieldProps(`shortcuts.${key}`)}
+                      value={settings.shortcuts[key]}
+                      onChange={(e) => updateShortcuts({ [key]: e.target.value })}
+                    />
+                  </label>
+                )
+              )}
             </div>
           </section>
         )}
         {props.errors.length > 0 && (
-          <div className="form-errors" role="alert">
+          <div className="form-errors" role="alert" tabIndex={-1} ref={errorBoxRef}>
+            <p className="form-errors-title">请修正以下问题</p>
             {props.errors.map((error) => (
               <p key={error.path}>
-                <strong>{error.path}</strong>：{error.message}
+                <a
+                  href={`#${error.path}`}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    document.getElementById(error.path)?.focus()
+                  }}
+                >
+                  {error.path}：{error.message}
+                </a>
               </p>
             ))}
           </div>
@@ -258,6 +311,7 @@ export default function App() {
   const [status, setStatus] = useState('正在加载…')
   const [errors, setErrors] = useState<SettingsProblem[]>([])
   const [revealKey, setRevealKey] = useState(false)
+  const [testing, setTesting] = useState(false)
   useEffect(() => {
     void settingsCommand
       .dispatch({ type: 'settings.get', requestId: requestId('load') })
@@ -294,11 +348,13 @@ export default function App() {
       setStatus('请先修正配置')
       return
     }
+    setTesting(true)
     setStatus('正在测试连接…')
     void settingsCommand
       .dispatch({ type: 'settings.testProvider', requestId: requestId('test'), settings })
       .then(() => setStatus('连接成功'))
       .catch((error: unknown) => setStatus(error instanceof Error ? error.message : '连接失败'))
+      .finally(() => setTesting(false))
   }
   return (
     <OptionsView
@@ -306,6 +362,7 @@ export default function App() {
       settings={settings}
       status={status}
       errors={errors}
+      testing={testing}
       revealKey={revealKey}
       onSectionChange={setSection}
       onSettingsChange={setSettings}

@@ -6,10 +6,7 @@ import type { ToolRecord } from '@/offscreen/database/config-store'
 
 export interface ToolConfigProps {
   tool: ToolRecord | null
-  defaultToolId: number
-  defaultOptions: readonly ToolRecord[]
   onPatch(patch: ToolUpdatePatch): void
-  onSetDefault(id: number): void
   onRemove(): void
 }
 
@@ -20,12 +17,12 @@ export interface ToolConfigProps {
  * `isDefault` on another tool (the server clears the previous default).
  */
 export function ToolConfig(props: ToolConfigProps) {
-  const { tool, defaultToolId } = props
+  const { tool } = props
   const presetPrompt = tool ? builtinPromptFor(tool.id) : null
-  const isPristinePreset = tool !== null && presetPrompt !== null && tool.prompt === presetPrompt
   const promptMode = tool ? toToolDefinition(tool).promptMode : null
 
   const [draft, setDraft] = useState(() => initialDraft(tool))
+  const [confirmingRemove, setConfirmingRemove] = useState(false)
 
   if (tool === null) {
     return (
@@ -83,12 +80,16 @@ export function ToolConfig(props: ToolConfigProps) {
         提示词
         <textarea
           aria-label="提示词"
-          readOnly={isPristinePreset}
           value={draft.prompt}
           onChange={(event) => setDraft({ ...draft, prompt: event.target.value })}
         />
       </label>
-      {tool.isPreset && !isPristinePreset && presetPrompt !== null && (
+      {tool.isPreset && (
+        <p className="tool-field-hint">
+          内置工具的提示词可以按需修改；改动后可随时「重置为内置提示词」恢复原样。
+        </p>
+      )}
+      {tool.isPreset && presetPrompt !== null && draft.prompt !== presetPrompt && (
         <button
           type="button"
           className="secondary"
@@ -97,34 +98,46 @@ export function ToolConfig(props: ToolConfigProps) {
           重置为内置提示词
         </button>
       )}
-      <label>
-        默认工具
-        <select
-          aria-label="默认工具"
-          value={defaultToolId}
-          onChange={(event) => props.onSetDefault(Number(event.target.value))}
-        >
-          {props.defaultOptions.map((option) => (
-            <option key={option.id} value={option.id}>
-              {option.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      {tool.isDefault && (
-        <p className="tool-default-badge" role="status">
-          当前活跃编辑的工具是默认工具
-        </p>
-      )}
       <div className="tool-config-actions">
         <button type="button" className="primary" disabled={!dirty} onClick={commit}>
           保存修改
         </button>
-        {!tool.isPreset && (
-          <button type="button" className="danger" onClick={props.onRemove}>
-            删除工具
-          </button>
-        )}
+        {!tool.isPreset &&
+          (confirmingRemove ? (
+            <div className="tool-delete-confirm-group">
+              <p className="tool-delete-confirm">
+                删除后工具不再出现在列表中，可在左侧「已删除」中恢复。
+              </p>
+              <div className="tool-delete-actions">
+                <button
+                  type="button"
+                  className="danger"
+                  onClick={() => {
+                    setConfirmingRemove(false)
+                    props.onRemove()
+                  }}
+                >
+                  确认删除
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setConfirmingRemove(false)}
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="danger"
+              aria-label={`删除工具 ${tool.name}`}
+              onClick={() => setConfirmingRemove(true)}
+            >
+              删除工具
+            </button>
+          ))}
       </div>
     </div>
   )

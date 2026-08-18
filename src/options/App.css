@@ -1,3 +1,82 @@
+/* ===========================================================================
+   Button system (shared across all Options sections)
+   Variants: primary / secondary / danger / ghost / icon
+   ========================================================================= */
+.btn,
+.primary,
+.secondary,
+.danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  border-radius: var(--d-radius-md);
+  padding: 0 13px;
+  font-size: var(--d-text-button);
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease;
+}
+.btn:disabled,
+.primary:disabled,
+.secondary:disabled,
+.danger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.btn-primary,
+.primary {
+  border: 1px solid transparent;
+  color: var(--d-text-on-brand);
+  background: var(--d-brand);
+}
+.btn-primary:hover:not(:disabled),
+.primary:hover:not(:disabled) {
+  background: var(--d-brand-strong);
+}
+.btn-secondary,
+.secondary {
+  border: 1px solid var(--d-border-strong);
+  color: var(--d-text-secondary);
+  background: var(--d-surface);
+}
+.btn-secondary:hover:not(:disabled),
+.secondary:hover:not(:disabled) {
+  border-color: var(--d-brand);
+  color: var(--d-brand-strong);
+}
+.btn-danger,
+.danger {
+  border: 1px solid var(--d-danger-border);
+  color: var(--d-danger);
+  background: var(--d-danger-soft);
+}
+.btn-danger:hover:not(:disabled),
+.danger:hover:not(:disabled) {
+  border-color: var(--d-danger);
+  background: #f9e3de;
+}
+.btn-ghost {
+  border: 1px solid transparent;
+  color: var(--d-text-muted);
+  background: transparent;
+}
+.btn-ghost:hover:not(:disabled) {
+  color: var(--d-brand-strong);
+  background: var(--d-surface-brand);
+}
+.btn-icon {
+  min-height: 0;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: var(--d-radius-xs);
+}
+
 .options-shell {
   min-height: 100vh;
   display: grid;
@@ -24,15 +103,16 @@
   width: 38px;
   height: 38px;
   border-radius: 11px;
-  color: white;
-  background: #c85f32;
+  color: var(--d-text-on-brand);
+  background: var(--d-brand);
   font-weight: 750;
 }
 .options-brand div {
   display: grid;
 }
 .options-brand small {
-  color: #8d847a;
+  color: var(--d-text-muted);
+  font-size: 12px;
 }
 .options-shell nav {
   display: grid;
@@ -40,16 +120,21 @@
 }
 .options-shell nav button {
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--d-radius-md);
   padding: 10px 12px;
   text-align: left;
-  color: #6f675e;
+  color: var(--d-text-muted);
   background: transparent;
+  font-size: var(--d-text-label);
+  font-weight: 600;
   cursor: pointer;
 }
+.options-shell nav button:hover {
+  background: var(--d-surface-soft);
+}
 .options-shell nav button.active {
-  color: #963f1e;
-  background: #f3ded1;
+  color: var(--d-brand-strong);
+  background: var(--d-surface-brand);
   font-weight: 650;
 }
 .options-shell main {
@@ -57,16 +142,19 @@
 }
 .options-shell h1 {
   margin: 0 0 5px;
-  font-size: 26px;
+  font-size: var(--d-text-h1);
+  line-height: 1.25;
   letter-spacing: -0.02em;
 }
 .lead {
   margin: 0 0 22px;
-  color: #7c746b;
+  color: var(--d-text-muted);
+  font-size: var(--d-text-lead);
+  line-height: 1.6;
 }
 .settings-card {
-  border: 1px solid #ded8ce;
-  border-radius: 14px;
+  border: 1px solid var(--d-border);
+  border-radius: var(--d-radius-lg);
   padding: 18px;
   background: rgba(255, 255, 255, 0.85);
   box-shadow: 0 6px 22px rgba(55, 42, 28, 0.04);
@@ -82,19 +170,25 @@
 .settings-card label {
   display: grid;
   gap: 6px;
-  color: #5e574f;
-  font-size: 13px;
+  color: var(--d-text-secondary);
+  font-size: var(--d-text-label);
   font-weight: 600;
 }
 input,
 textarea,
 select {
   width: 100%;
-  border: 1px solid #d5cec4;
-  border-radius: 8px;
+  border: 1px solid var(--d-border-strong);
+  border-radius: var(--d-radius-sm);
   padding: 8px 9px;
-  color: #292622;
-  background: #fff;
+  color: var(--d-text);
+  background: var(--d-surface);
+  font-size: var(--d-text-body);
+}
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  border-color: var(--d-focus);
 }
 textarea {
   min-height: 92px;
@@ -111,14 +205,21 @@ input[type='range'] {
   display: flex;
 }
 .secret input {
-  border-radius: 8px 0 0 8px;
+  border-radius: var(--d-radius-sm) 0 0 var(--d-radius-sm);
 }
 .secret button {
-  border: 1px solid #d5cec4;
+  border: 1px solid var(--d-border-strong);
   border-left: 0;
-  border-radius: 0 8px 8px 0;
-  background: #f5f1eb;
+  border-radius: 0 var(--d-radius-sm) var(--d-radius-sm) 0;
+  padding: 0 12px;
+  color: var(--d-text-secondary);
+  background: var(--d-surface-soft);
+  font-size: var(--d-text-label);
+  font-weight: 600;
   cursor: pointer;
+}
+.secret button:hover {
+  color: var(--d-brand-strong);
 }
 .switch-row {
   grid-template-columns: auto 1fr;
@@ -129,37 +230,49 @@ input[type='range'] {
 .field-hint {
   grid-column: 1 / -1;
   margin: -4px 0 0;
-  color: #9a928a;
-  font-size: 12px;
+  color: var(--d-text-muted);
+  font-size: var(--d-text-hint);
   font-weight: 500;
   line-height: 1.5;
 }
-.primary,
-.secondary {
-  border: 0;
-  border-radius: 9px;
-  padding: 9px 13px;
-  color: white;
-  background: #c85f32;
-  font-weight: 650;
-  cursor: pointer;
-}
-.secondary {
+.settings-card + .secondary,
+.section-actions .secondary {
   margin-top: 14px;
-  color: #5e574f;
-  border: 1px solid #d5cec4;
-  background: #fff;
 }
 .form-errors {
   margin-top: 14px;
-  border: 1px solid #e1b4a9;
-  border-radius: 10px;
+  border: 1px solid var(--d-danger-border);
+  border-radius: var(--d-radius-md);
   padding: 8px 12px;
-  color: #983b2f;
-  background: #fff1ed;
+  color: var(--d-danger-strong);
+  background: var(--d-danger-soft);
+}
+.form-errors:focus-visible {
+  outline: 2px solid var(--d-danger);
+  outline-offset: 2px;
+}
+.form-errors-title {
+  margin: 0 0 6px;
+  color: var(--d-danger-strong);
+  font-weight: 700;
+}
+.form-errors a {
+  color: var(--d-danger-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .form-errors p {
   margin: 4px 0;
+}
+.field-error {
+  margin: 0;
+  color: var(--d-danger-strong);
+  font-size: var(--d-text-hint);
+  font-weight: 600;
+  line-height: 1.4;
+}
+.field-error--full {
+  grid-column: 1 / -1;
 }
 .save-bar {
   position: fixed;
@@ -170,14 +283,14 @@ input[type='range'] {
   align-items: center;
   justify-content: flex-end;
   gap: 18px;
-  border-top: 1px solid #d9d2c8;
+  border-top: 1px solid var(--d-border);
   padding: 12px max(24px, calc((100vw - 1386px) / 2 + 24px));
   background: rgba(250, 248, 244, 0.94);
   backdrop-filter: blur(12px);
 }
 .save-bar span {
-  color: #756d64;
-  font-size: 13px;
+  color: var(--d-text-muted);
+  font-size: var(--d-text-label);
 }
 @media (max-width: 760px) {
   .options-shell {
@@ -199,5 +312,11 @@ input[type='range'] {
   }
   .span-two {
     grid-column: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn {
+    transition: none;
   }
 }

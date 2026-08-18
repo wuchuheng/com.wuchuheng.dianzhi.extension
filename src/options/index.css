@@ -1,4 +1,54 @@
+/* Design tokens for the Options surface. */
 :root {
+  /* surfaces */
+  --d-bg: #f5f2ec;
+  --d-surface: #ffffff;
+  --d-surface-soft: #faf8f4;
+  --d-surface-brand: #f3ded1;
+  --d-surface-hover: #fff9f6;
+
+  /* borders */
+  --d-border: #ded8ce;
+  --d-border-strong: #d5cec4;
+  --d-border-faint: #e5dfd6;
+
+  /* text */
+  --d-text: #292622;
+  --d-text-secondary: #5e574f;
+  --d-text-muted: #6f675e;
+  --d-text-faint: #8d847a;
+  --d-text-on-brand: #ffffff;
+
+  /* brand */
+  --d-brand: #c85f32;
+  --d-brand-strong: #963f1e;
+
+  /* feedback */
+  --d-danger: #a03e31;
+  --d-danger-strong: #983b2f;
+  --d-danger-soft: #fff1ed;
+  --d-danger-border: #e1b4a9;
+  --d-disabled: #c4bcb1;
+
+  /* focus */
+  --d-focus: #c85f32;
+
+  /* type scale */
+  --d-text-h1: 26px;
+  --d-text-lead: 14px;
+  --d-text-body: 14px;
+  --d-text-title: 15px;
+  --d-text-label: 13px;
+  --d-text-button: 13px;
+  --d-text-hint: 12px;
+  --d-text-badge: 11px;
+
+  /* radius */
+  --d-radius-lg: 14px;
+  --d-radius-md: 9px;
+  --d-radius-sm: 8px;
+  --d-radius-xs: 6px;
+
   font-family:
     Inter,
     ui-sans-serif,
@@ -6,8 +56,8 @@
     BlinkMacSystemFont,
     'Segoe UI',
     sans-serif;
-  color: #292622;
-  background: #f5f2ec;
+  color: var(--d-text);
+  background: var(--d-bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
@@ -31,6 +81,6 @@ button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: 2px solid #c85f32;
+  outline: 2px solid var(--d-focus);
   outline-offset: 2px;
 }

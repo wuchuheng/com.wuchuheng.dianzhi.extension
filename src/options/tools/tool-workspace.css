@@ -3,7 +3,7 @@
    widths stack everything without horizontal scrolling. */
 .tool-workspace {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 288px minmax(0, 1fr) minmax(0, 1fr);
   gap: 18px;
   align-items: start;
 }
@@ -20,21 +20,21 @@
 
 .pane-title {
   margin: 0 0 12px;
-  font-size: 15px;
+  font-size: var(--d-text-title);
   font-weight: 700;
 }
 .pane-empty {
   margin: 0;
-  color: #8d847a;
-  font-size: 13px;
+  color: var(--d-text-muted);
+  font-size: var(--d-text-hint);
 }
 
 /* Tool list pane */
 .tool-list-pane,
 .tool-config-pane,
 .tool-test-pane {
-  border: 1px solid #ded8ce;
-  border-radius: 14px;
+  border: 1px solid var(--d-border);
+  border-radius: var(--d-radius-lg);
   padding: 16px;
   background: rgba(255, 255, 255, 0.85);
   box-shadow: 0 6px 22px rgba(55, 42, 28, 0.04);
@@ -47,14 +47,9 @@
   margin-bottom: 10px;
 }
 .tool-list-count {
-  color: #5e574f;
-  font-size: 13px;
+  color: var(--d-text-secondary);
+  font-size: var(--d-text-label);
   font-weight: 600;
-}
-.pane-title-row .secondary {
-  margin: 0;
-  padding: 7px 10px;
-  font-size: 13px;
 }
 .tool-list {
   display: grid;
@@ -67,24 +62,27 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 7px;
-  min-height: 40px;
-  border: 1px solid #e5dfd6;
-  border-radius: 9px;
-  padding: 6px 9px;
-  background: #fff;
+  gap: 6px;
+  min-height: 38px;
+  border: 1px solid var(--d-border-faint);
+  border-radius: var(--d-radius-md);
+  padding: 4px 8px;
+  background: var(--d-surface);
   cursor: pointer;
 }
 .tool-row:hover {
-  border-color: #d5cec4;
+  border-color: var(--d-border-strong);
 }
 .tool-row.selected {
-  border-color: #c85f32;
-  background: #f3ded1;
-  box-shadow: inset 0 0 0 1px #c85f32;
+  border-color: var(--d-brand);
+  background: var(--d-surface-brand);
+  box-shadow: inset 0 0 0 1px var(--d-brand);
 }
 .tool-row-grip {
-  color: #b6aca0;
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--d-text-faint);
   user-select: none;
 }
 .tool-row-name {
@@ -93,8 +91,9 @@
   overflow: hidden;
   border: 0;
   padding: 0;
-  color: #292622;
+  color: var(--d-text);
   background: transparent;
+  font-size: var(--d-text-label);
   font-weight: 600;
   text-align: left;
   text-overflow: ellipsis;
@@ -102,49 +101,67 @@
   cursor: pointer;
 }
 .tool-row.selected .tool-row-name {
-  color: #963f1e;
+  color: var(--d-brand-strong);
 }
-.tool-badge {
-  border-radius: 6px;
-  padding: 2px 6px;
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.tool-badge.preset {
-  color: #6f675e;
-  background: #efe9df;
-}
-.tool-badge.custom {
-  color: #963f1e;
-  background: #f9e2d7;
-}
-.tool-row input[type='checkbox'] {
-  width: auto;
-  margin: 0;
+.tool-row .tool-row-toggle {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin: 0 2px;
+  accent-color: var(--d-brand);
+  cursor: pointer;
 }
 .tool-row-actions {
   display: flex;
-  gap: 3px;
+  gap: 4px;
 }
 .tool-row-actions button {
-  min-width: 26px;
-  border: 1px solid #d7d0c6;
-  border-radius: 6px;
-  padding: 4px 6px;
-  color: #5e574f;
-  background: #fff;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: var(--d-radius-xs);
+  padding: 0;
+  color: var(--d-text-muted);
+  background: transparent;
   cursor: pointer;
-  line-height: 1.1;
+}
+.tool-row-actions button:hover:not(:disabled) {
+  color: var(--d-brand-strong);
+  background: var(--d-surface-brand);
 }
 .tool-row-actions button:disabled {
-  color: #c4bcb1;
+  color: var(--d-disabled);
   cursor: default;
+}
+.tool-row-default-toggle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border: 1px solid transparent;
+  border-radius: var(--d-radius-xs);
+  padding: 0;
+  color: var(--d-text-faint);
+  background: transparent;
+  cursor: pointer;
+}
+.tool-row-default-toggle:hover {
+  color: var(--d-brand-strong);
+  background: var(--d-surface-brand);
+}
+.tool-row-default-toggle.is-default {
+  color: var(--d-brand);
 }
 .tool-row-actions button:focus-visible,
 .tool-row-name:focus-visible,
-.tool-list-pane .secondary:focus-visible {
-  outline: 2px solid #c85f32;
+.tool-row-default-toggle:focus-visible,
+.tool-add-button:focus-visible,
+.removed-tool-restore:focus-visible {
+  outline: 2px solid var(--d-focus);
   outline-offset: 1px;
 }
 
@@ -156,7 +173,7 @@
   left: 6px;
   height: 3px;
   border-radius: 2px;
-  background: #c85f32;
+  background: var(--d-brand);
   pointer-events: none;
 }
 .drop-before {
@@ -172,6 +189,86 @@
   display: block;
 }
 
+/* New-tool dashed add row */
+.tool-add-row {
+  list-style: none;
+}
+.tool-add-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 38px;
+  border: 1.5px dashed var(--d-border-strong);
+  border-radius: var(--d-radius-md);
+  color: var(--d-text-muted);
+  background: transparent;
+  font-size: var(--d-text-button);
+  font-weight: 600;
+  cursor: pointer;
+}
+.tool-add-button:hover {
+  border-color: var(--d-brand);
+  color: var(--d-brand-strong);
+  background: var(--d-surface-hover);
+}
+.tool-empty {
+  margin: 10px 0 0;
+  color: var(--d-text-muted);
+  font-size: var(--d-text-label);
+}
+
+/* Removed tools recovery section */
+.removed-tools {
+  margin-top: 14px;
+}
+.removed-tools-title {
+  margin: 0 0 6px;
+  color: var(--d-text-secondary);
+  font-size: var(--d-text-hint);
+  font-weight: 700;
+}
+.removed-tools-list {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.removed-tool-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px dashed var(--d-border);
+  border-radius: var(--d-radius-sm);
+  padding: 5px 9px;
+  background: var(--d-surface-soft);
+}
+.removed-tool-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--d-text-muted);
+  font-size: var(--d-text-label);
+}
+.removed-tool-restore {
+  border: 1px solid var(--d-border-strong);
+  border-radius: var(--d-radius-xs);
+  padding: 3px 10px;
+  color: var(--d-text-secondary);
+  background: var(--d-surface);
+  font-size: var(--d-text-hint);
+  font-weight: 600;
+  cursor: pointer;
+}
+.removed-tool-restore:hover {
+  border-color: var(--d-brand);
+  color: var(--d-brand-strong);
+}
+
 /* Configuration pane */
 .tool-config-pane {
   display: grid;
@@ -180,19 +277,20 @@
 .tool-config-pane label {
   display: grid;
   gap: 6px;
-  color: #5e574f;
-  font-size: 13px;
+  color: var(--d-text-secondary);
+  font-size: var(--d-text-label);
   font-weight: 600;
 }
 .tool-config-pane input,
 .tool-config-pane textarea,
 .tool-config-pane select {
   width: 100%;
-  border: 1px solid #d5cec4;
-  border-radius: 8px;
+  border: 1px solid var(--d-border-strong);
+  border-radius: var(--d-radius-sm);
   padding: 8px 9px;
-  color: #292622;
-  background: #fff;
+  color: var(--d-text);
+  background: var(--d-surface);
+  font-size: var(--d-text-body);
   box-sizing: border-box;
 }
 .tool-config-pane input[type='checkbox'] {
@@ -209,24 +307,29 @@
 }
 .tool-config-pane .danger {
   justify-self: start;
-  border: 1px solid #e1b4a9;
-  border-radius: 8px;
-  padding: 8px 12px;
-  color: #a03e31;
-  background: #fff1ed;
-  font-weight: 600;
-  cursor: pointer;
 }
 .tool-field-hint {
   margin: 0;
-  color: #8d847a;
-  font-size: 12px;
+  color: var(--d-text-muted);
+  font-size: var(--d-text-hint);
+  line-height: 1.5;
 }
-.tool-default-badge {
+
+/* Two-step destructive confirm inside the config pane */
+.tool-delete-confirm-group {
+  display: grid;
+  gap: 8px;
+}
+.tool-delete-confirm {
   margin: 0;
-  color: #963f1e;
-  font-size: 12px;
-  font-weight: 600;
+  color: var(--d-text-muted);
+  font-size: var(--d-text-hint);
+  line-height: 1.5;
+}
+.tool-delete-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /* Live test pane */
@@ -237,18 +340,19 @@
 .tool-test-pane label {
   display: grid;
   gap: 6px;
-  color: #5e574f;
-  font-size: 13px;
+  color: var(--d-text-secondary);
+  font-size: var(--d-text-label);
   font-weight: 600;
 }
 .tool-test-pane input,
 .tool-test-pane textarea {
   width: 100%;
-  border: 1px solid #d5cec4;
-  border-radius: 8px;
+  border: 1px solid var(--d-border-strong);
+  border-radius: var(--d-radius-sm);
   padding: 8px 9px;
-  color: #292622;
-  background: #fff;
+  color: var(--d-text);
+  background: var(--d-surface);
+  font-size: var(--d-text-body);
   box-sizing: border-box;
 }
 .tool-test-pane textarea {
@@ -258,21 +362,21 @@
 }
 .prompt-preview-label {
   margin: 0;
-  color: #5e574f;
-  font-size: 12px;
+  color: var(--d-text-secondary);
+  font-size: var(--d-text-hint);
   font-weight: 600;
 }
 .prompt-preview {
   margin: 0;
-  border: 1px dashed #d8d1c7;
-  border-radius: 8px;
+  border: 1px dashed var(--d-border-strong);
+  border-radius: var(--d-radius-sm);
   padding: 8px 9px;
   max-height: 96px;
   overflow: auto;
-  color: #6f675e;
-  background: #faf7f1;
+  color: var(--d-text-muted);
+  background: var(--d-surface-soft);
   font-family: inherit;
-  font-size: 12px;
+  font-size: var(--d-text-hint);
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
@@ -282,54 +386,30 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.tool-test-actions button {
-  border: 0;
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-weight: 650;
-  cursor: pointer;
-}
-.tool-test-actions .primary {
-  color: #fff;
-  background: #c85f32;
-}
-.tool-test-actions .secondary {
-  border: 1px solid #d7d0c6;
-  color: #5e574f;
-  background: #fff;
-}
-.tool-test-actions button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.tool-test-actions button:focus-visible {
-  outline: 2px solid #c85f32;
-  outline-offset: 1px;
-}
 .tool-test-status {
   margin: 0;
-  color: #5e574f;
-  font-size: 13px;
+  color: var(--d-text-secondary);
+  font-size: var(--d-text-label);
   font-weight: 600;
 }
 .reasoning-region {
-  border: 1px solid #e9e2d8;
-  border-radius: 8px;
+  border: 1px solid var(--d-border-faint);
+  border-radius: var(--d-radius-sm);
   padding: 8px 10px;
-  background: #faf7f1;
+  background: var(--d-surface-soft);
 }
 .reasoning-region summary {
-  color: #6f675e;
-  font-size: 12px;
+  color: var(--d-text-muted);
+  font-size: var(--d-text-hint);
   font-weight: 600;
   cursor: pointer;
 }
 .reasoning-region pre,
 .answer-region {
   margin: 8px 0 0;
-  color: #292622;
+  color: var(--d-text);
   font-family: inherit;
-  font-size: 13px;
+  font-size: var(--d-text-label);
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
@@ -339,8 +419,8 @@
 }
 .tool-test-metrics {
   margin: 0;
-  color: #8d847a;
-  font-size: 12px;
+  color: var(--d-text-muted);
+  font-size: var(--d-text-hint);
 }
 
 /* Medium widths: tool list above a Configuration/Test tabset. */
@@ -351,22 +431,23 @@
   .detail-tabs {
     display: flex;
     gap: 4px;
-    border-bottom: 1px solid #e5dfd6;
+    border-bottom: 1px solid var(--d-border-faint);
   }
   .detail-tabs button {
     border: 0;
     border-bottom: 2px solid transparent;
-    border-radius: 8px 8px 0 0;
+    border-radius: var(--d-radius-sm) var(--d-radius-sm) 0 0;
     padding: 9px 14px;
-    color: #6f675e;
+    color: var(--d-text-muted);
     background: transparent;
+    font-size: var(--d-text-button);
     font-weight: 600;
     cursor: pointer;
   }
   .detail-tabs button[aria-selected='true'] {
-    color: #963f1e;
-    border-bottom-color: #c85f32;
-    background: #f3ded1;
+    color: var(--d-brand-strong);
+    border-bottom-color: var(--d-brand);
+    background: var(--d-surface-brand);
   }
   .tool-workspace-detail[hidden] {
     display: none;
@@ -388,7 +469,10 @@
 
 @media (prefers-reduced-motion: reduce) {
   .tool-row,
-  .tool-row-actions button {
+  .tool-row-actions button,
+  .tool-row-default-toggle,
+  .tool-add-button,
+  .removed-tool-restore {
     transition: none;
   }
 }

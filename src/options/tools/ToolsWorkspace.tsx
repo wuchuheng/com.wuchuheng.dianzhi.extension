@@ -55,14 +55,18 @@ function ToolsWorkspaceView(
 
   const apply = (next: ToolRecord[]) => {
     setRecords(next)
-    setPickedToolId(null)
+    // Keep the current selection when the refreshed list still contains it;
+    // only fall back to the default tool when it was removed.
+    setPickedToolId((picked) =>
+      picked !== null && next.some((tool) => tool.id === picked) ? picked : null
+    )
     setError(null)
   }
 
   useEffect(() => {
     let disposed = false
     toolsApi
-      .list(false)
+      .list(true)
       .then((list) => {
         if (!disposed) apply(list)
       })
@@ -87,11 +91,12 @@ function ToolsWorkspaceView(
     )
   }
 
-  const tools = records.map(toToolDefinition)
+  const active = records.filter((record) => record.deletedAt === null)
+  const removed = records.filter((record) => record.deletedAt !== null)
+  const tools = active.map(toToolDefinition)
   const defaultToolId = tools.find((tool) => tool.isDefault)?.id ?? tools[0]?.id ?? 1
   const activeToolId = repairActiveTool(tools, pickedToolId, defaultToolId)
-  const activeRecord = records.find((record) => record.id === activeToolId) ?? null
-  const enabledRecords = records.filter((record) => record.enabled)
+  const activeRecord = active.find((record) => record.id === activeToolId) ?? null
 
   const updateTool = (id: number, patch: ToolUpdatePatch) => {
     void toolsApi
@@ -127,17 +132,27 @@ function ToolsWorkspaceView(
       .catch((reason: unknown) => setError(message(reason)))
   }
 
+  const handleRestore = (id: number) => {
+    void toolsApi
+      .restore(id)
+      .then(apply)
+      .catch((reason: unknown) => setError(message(reason)))
+  }
+
   const handleSetDefault = (id: number) => updateTool(id, { isDefault: true })
 
   return (
     <div className="tool-workspace">
       <ToolList
-        tools={records}
+        tools={active}
+        removed={removed}
         selectedId={activeToolId}
         onSelect={setPickedToolId}
         onToggleEnabled={handleToggleEnabled}
+        onSetDefault={handleSetDefault}
         onReorder={handleReorder}
         onAdd={handleAdd}
+        onRestore={handleRestore}
       />
       <div className="detail-tabs" role="tablist" aria-label="工具详情">
         <button
@@ -161,12 +176,9 @@ function ToolsWorkspaceView(
         <ToolConfig
           key={activeRecord?.id ?? 'none'}
           tool={activeRecord}
-          defaultToolId={defaultToolId}
-          defaultOptions={enabledRecords}
           onPatch={(patch) => {
             if (activeRecord) updateTool(activeRecord.id, patch)
           }}
-          onSetDefault={handleSetDefault}
           onRemove={() => {
             if (activeRecord && !activeRecord.isPreset) handleRemove(activeRecord.id)
           }}

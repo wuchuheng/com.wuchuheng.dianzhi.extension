@@ -31,6 +31,8 @@ export const DEFAULT_ROW: SettingsRowData = {
     tabRight: 'Control+ArrowRight',
     toggleChat: 'Control+Enter',
     dock: 'Control+bracketleft',
+    expand: 'Control+Shift+Enter',
+    close: 'Escape',
   },
 }
 

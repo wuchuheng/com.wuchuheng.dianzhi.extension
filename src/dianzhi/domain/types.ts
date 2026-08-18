@@ -40,6 +40,8 @@ export interface ShortcutSettings {
   tabRight: string
   toggleChat: string
   dock: string
+  expand: string
+  close: string
 }
 
 export interface SettingsRowData {

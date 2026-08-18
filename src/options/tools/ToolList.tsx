@@ -1,15 +1,17 @@
 import { useState } from 'react'
-import { toToolDefinition } from '@/dianzhi/domain/settings'
 import type { ToolRecord } from '@/offscreen/database/config-store'
 import { orderedIdsOnDrop } from './tool-workspace-state'
 
 export interface ToolListProps {
   tools: readonly ToolRecord[]
+  removed: readonly ToolRecord[]
   selectedId: number | null
   onSelect(id: number): void
   onToggleEnabled(id: number, enabled: boolean): void
+  onSetDefault(id: number): void
   onReorder(orderedIds: number[]): void
   onAdd(): void
+  onRestore(id: number): void
 }
 
 interface DragOverState {
@@ -17,10 +19,76 @@ interface DragOverState {
   before: boolean
 }
 
+function GripIcon() {
+  return (
+    <svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true">
+      <circle cx="2.5" cy="3" r="1.5" />
+      <circle cx="7.5" cy="3" r="1.5" />
+      <circle cx="2.5" cy="8" r="1.5" />
+      <circle cx="7.5" cy="8" r="1.5" />
+      <circle cx="2.5" cy="13" r="1.5" />
+      <circle cx="7.5" cy="13" r="1.5" />
+    </svg>
+  )
+}
+
+function ChevronIcon({ direction }: { direction: 'up' | 'down' }) {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {direction === 'up' ? <path d="M6 15l6-6 6 6" /> : <path d="M6 9l6 6 6-6" />}
+    </svg>
+  )
+}
+
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill={filled ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z" />
+    </svg>
+  )
+}
+
+function PlusIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      aria-hidden="true"
+    >
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  )
+}
+
 /**
- * The fixed-width tool pane: draggable rows with default/preset badges, and a
- * compact create button. Drops resolve to the full ordered id list, which the
- * workspace persists through `toolsApi.reorder`.
+ * The fixed-width tool pane: draggable rows with default/preset badges, a
+ * compact create row, and a recoverable "removed" section. Drops resolve to
+ * the full ordered id list, which the workspace persists through
+ * `toolsApi.reorder`.
  */
 export function ToolList(props: ToolListProps) {
   const { tools } = props
@@ -61,15 +129,10 @@ export function ToolList(props: ToolListProps) {
     <div className="tool-list-pane">
       <div className="pane-title-row">
         <span className="tool-list-count">共 {tools.length} 个工具</span>
-        <button type="button" className="secondary" onClick={props.onAdd}>
-          + 添加自定义工具
-        </button>
       </div>
       <ul className="tool-list">
         {tools.map((tool, index) => {
           const selected = tool.id === props.selectedId
-          const definition = toToolDefinition(tool)
-          const modeLabel = definition.promptMode === 'preset' ? '内置' : '自定义'
           const rowClasses = [
             'tool-row',
             selected ? 'selected' : '',
@@ -90,13 +153,14 @@ export function ToolList(props: ToolListProps) {
             >
               <span className="drop-line drop-before" aria-hidden="true" />
               <span className="tool-row-grip" aria-hidden="true">
-                ⠿
+                <GripIcon />
               </span>
               <button
                 type="button"
                 className={`tool-row-name${tool.isDefault ? ' tool-row-default' : ''}`}
                 aria-label={`选择工具 ${tool.name}`}
                 aria-current={selected ? 'true' : undefined}
+                title={tool.name}
                 onClick={(event) => {
                   event.stopPropagation()
                   props.onSelect(tool.id)
@@ -104,17 +168,23 @@ export function ToolList(props: ToolListProps) {
               >
                 {tool.name}
               </button>
-              {tool.isDefault && (
-                <span className="tool-badge default" aria-label="默认工具">
-                  默认
-                </span>
-              )}
-              <span
-                className={`tool-badge ${definition.promptMode === 'preset' ? 'preset' : 'custom'}`}
+              <button
+                type="button"
+                className={`tool-row-default-toggle${tool.isDefault ? ' is-default' : ''}`}
+                aria-label={
+                  tool.isDefault ? `${tool.name} 是默认工具` : `设为默认工具：${tool.name}`
+                }
+                aria-pressed={tool.isDefault}
+                title={tool.isDefault ? '默认工具' : '设为默认工具'}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  if (!tool.isDefault) props.onSetDefault(tool.id)
+                }}
               >
-                {modeLabel}
-              </span>
+                <StarIcon filled={tool.isDefault} />
+              </button>
               <input
+                className="tool-row-toggle"
                 aria-label={tool.enabled ? `停用 ${tool.name}` : `启用 ${tool.name}`}
                 type="checkbox"
                 checked={tool.enabled}
@@ -137,7 +207,7 @@ export function ToolList(props: ToolListProps) {
                     if (next) props.onReorder(next)
                   }}
                 >
-                  ↑
+                  <ChevronIcon direction="up" />
                 </button>
                 <button
                   type="button"
@@ -154,15 +224,43 @@ export function ToolList(props: ToolListProps) {
                     if (next) props.onReorder(next)
                   }}
                 >
-                  ↓
+                  <ChevronIcon direction="down" />
                 </button>
               </span>
               <span className="drop-line drop-after" aria-hidden="true" />
             </li>
           )
         })}
+        <li className="tool-add-row">
+          <button type="button" className="tool-add-button" onClick={props.onAdd}>
+            <PlusIcon />
+            新建工具
+          </button>
+        </li>
       </ul>
-      {tools.length === 0 && <p className="tool-empty">还没有工具，添加一个试试。</p>}
+      {tools.length === 0 && <p className="tool-empty">还没有工具，点击上方「新建工具」添加。</p>}
+      {props.removed.length > 0 && (
+        <section className="removed-tools" aria-label="已删除工具">
+          <h3 className="removed-tools-title">已删除（{props.removed.length}）</h3>
+          <ul className="removed-tools-list">
+            {props.removed.map((tool) => (
+              <li key={tool.id} className="removed-tool-row">
+                <span className="removed-tool-name" title={tool.name}>
+                  {tool.name}
+                </span>
+                <button
+                  type="button"
+                  className="removed-tool-restore"
+                  aria-label={`恢复工具 ${tool.name}`}
+                  onClick={() => props.onRestore(tool.id)}
+                >
+                  恢复
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   )
 }

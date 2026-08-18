@@ -4,25 +4,25 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #f7f4ee;
-  color: #22201d;
+  background: var(--d-bg);
+  color: var(--d-text);
 }
 .dz-empty-mark {
   display: grid;
   place-items: center;
   width: 30px;
   height: 30px;
-  border-radius: 9px;
-  color: white;
-  background: #c85f32;
+  border-radius: var(--d-radius-md);
+  color: var(--d-text-on-brand);
+  background: var(--d-brand);
   font-weight: 750;
 }
 .dz-secondary,
 .dz-error button {
-  border: 1px solid #d8d0c4;
-  border-radius: 8px;
-  background: #fff;
-  color: #49433c;
+  border: 1px solid var(--d-border-strong);
+  border-radius: var(--d-radius-sm);
+  background: var(--d-surface);
+  color: var(--d-text-secondary);
   cursor: pointer;
 }
 .dz-tabs {
@@ -31,22 +31,22 @@
   gap: 5px;
   padding: 8px 10px;
   overflow-x: auto;
-  border-bottom: 1px solid #e2ddd4;
-  background: #fff;
+  border-bottom: 1px solid var(--d-border);
+  background: var(--d-surface);
 }
 .dz-tab {
   position: relative;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--d-radius-sm);
   padding: 6px 11px;
   white-space: nowrap;
-  color: #746c63;
+  color: var(--d-text-secondary);
   background: transparent;
   cursor: pointer;
 }
 .dz-tab.is-active {
-  color: #9d4420;
-  background: #f7e4d8;
+  color: var(--d-brand-strong);
+  background: var(--d-surface-brand);
   font-weight: 650;
 }
 .dz-tab-new {
@@ -55,7 +55,7 @@
   height: 5px;
   margin-left: 5px;
   border-radius: 50%;
-  background: #b7aea2;
+  background: var(--d-text-faint);
   vertical-align: middle;
 }
 .dz-panel-history {
@@ -73,23 +73,23 @@
 .dz-message {
   max-width: 92%;
   padding: 10px 12px;
-  border: 1px solid #ded8ce;
-  border-radius: 13px;
-  background: #fff;
+  border: 1px solid var(--d-border);
+  border-radius: var(--d-radius-lg);
+  background: var(--d-surface);
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
 .dz-message.is-user {
   align-self: flex-end;
-  border-color: #edcbb8;
-  background: #f8e7dc;
+  border-color: var(--d-border-brand);
+  background: var(--d-surface-brand);
 }
 .dz-message.is-assistant {
   align-self: flex-start;
 }
 .dz-message-meta {
   margin-bottom: 5px;
-  color: #8c837a;
+  color: var(--d-text-muted);
   font-size: 11px;
 }
 .dz-message p,
@@ -102,28 +102,28 @@
 }
 .dz-message blockquote {
   padding-left: 10px;
-  border-left: 3px solid #d9b19c;
-  color: #665e56;
+  border-left: 3px solid var(--d-border-brand);
+  color: var(--d-text-muted);
 }
 .dz-message code {
   border-radius: 4px;
   padding: 1px 4px;
-  background: #f1ede7;
+  background: var(--d-surface-soft);
 }
 .dz-reasoning {
   margin-bottom: 8px;
-  border: 1px solid #e2ddd4;
-  border-radius: 8px;
-  background: #faf8f4;
+  border: 1px solid var(--d-border);
+  border-radius: var(--d-radius-sm);
+  background: var(--d-surface-soft);
 }
 .dz-reasoning summary {
   padding: 7px 9px;
   cursor: pointer;
-  color: #766e65;
+  color: var(--d-text-muted);
 }
 .dz-reasoning-body {
   padding: 0 9px 9px;
-  color: #665f58;
+  color: var(--d-text-muted);
   font-size: 12px;
   white-space: pre-wrap;
 }
@@ -134,18 +134,18 @@
   gap: 7px;
   align-items: center;
   padding: 10px 12px 12px;
-  border-top: 1px solid #ded8ce;
-  background: rgba(255, 255, 255, 0.94);
+  border-top: 1px solid var(--d-border);
+  background: var(--d-surface-hover);
 }
 .dz-composer {
   grid-column: 1 / -1;
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  border: 1px solid #d5cec4;
-  border-radius: 12px;
+  border: 1px solid var(--d-border-strong);
+  border-radius: var(--d-radius-md);
   padding: 7px;
-  background: white;
+  background: var(--d-surface);
 }
 .dz-composer textarea {
   flex: 1;
@@ -154,25 +154,28 @@
   resize: vertical;
   border: 0;
   outline: 0;
-  color: #292622;
+  color: var(--d-text);
   background: transparent;
 }
 .dz-composer button {
-  width: 34px;
-  height: 34px;
+  width: 32px;
+  height: 32px;
   border: 0;
-  border-radius: 9px;
-  color: white;
-  background: #c85f32;
+  border-radius: var(--d-radius-md);
+  color: var(--d-text-on-brand);
+  background: var(--d-brand);
   cursor: pointer;
 }
+.dz-composer button:hover:not(:disabled) {
+  background: var(--d-brand-strong);
+}
 .dz-composer button:disabled {
-  opacity: 0.45;
+  opacity: 0.38;
   cursor: default;
 }
 .dz-status {
   min-height: 18px;
-  color: #817970;
+  color: var(--d-text-muted);
   font-size: 12px;
 }
 .dz-secondary {
@@ -183,11 +186,11 @@
   display: flex;
   justify-content: space-between;
   gap: 8px;
-  border: 1px solid #e0b3a7;
-  border-radius: 9px;
+  border: 1px solid var(--d-danger-border);
+  border-radius: var(--d-radius-md);
   padding: 9px;
-  color: #9b3829;
-  background: #fff1ed;
+  color: var(--d-danger);
+  background: var(--d-danger-soft);
 }
 .dz-error button {
   padding: 4px 7px;
@@ -199,11 +202,11 @@
   align-content: center;
   padding: 38px 24px;
   text-align: center;
-  color: #766e65;
+  color: var(--d-text-muted);
 }
 .dz-panel-empty h1 {
   margin: 14px 0 5px;
-  color: #38332e;
+  color: var(--d-text);
   font-size: 18px;
 }
 .dz-panel-empty p {

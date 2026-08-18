@@ -1,0 +1,73 @@
+/*
+ * Design tokens — single source of truth for every surface.
+ *
+ * Surfaces that live in a normal document (Options, Side Panel) import this
+ * file and consume the variables from :root.
+ *
+ * The content script popover renders inside a Shadow DOM, so its :host rule in
+ * src/content/views/App.css mirrors the values below on purpose (custom
+ * properties do NOT cross the shadow boundary from a plain webpage). Keep the
+ * two definitions in sync — add new tokens here first, then mirror them.
+ */
+:root {
+  /* surfaces */
+  --d-bg: #f5f2ec;
+  --d-surface: #ffffff;
+  --d-surface-soft: #faf8f4;
+  --d-surface-brand: #f3ded1;
+  --d-surface-hover: #fff9f6;
+
+  /* borders */
+  --d-border: #ded8ce;
+  --d-border-strong: #d5cec4;
+  --d-border-faint: #e5dfd6;
+  --d-border-brand: #e3c3ae;
+
+  /* text */
+  --d-text: #292622;
+  --d-text-secondary: #5e574f;
+  --d-text-muted: #6f675e;
+  --d-text-faint: #8d847a;
+  --d-text-on-brand: #ffffff;
+
+  /* brand */
+  --d-brand: #c85f32;
+  --d-brand-strong: #963f1e;
+
+  /* feedback */
+  --d-danger: #a03e31;
+  --d-danger-strong: #983b2f;
+  --d-danger-soft: #fff1ed;
+  --d-danger-border: #e1b4a9;
+  --d-disabled: #c4bcb1;
+
+  /* focus */
+  --d-focus: #c85f32;
+
+  /* type scale */
+  --d-text-h1: 26px;
+  --d-text-lead: 14px;
+  --d-text-body: 14px;
+  --d-text-title: 15px;
+  --d-text-label: 13px;
+  --d-text-button: 13px;
+  --d-text-hint: 12px;
+  --d-text-badge: 11px;
+
+  /* radius */
+  --d-radius-lg: 14px;
+  --d-radius-md: 9px;
+  --d-radius-sm: 8px;
+  --d-radius-xs: 6px;
+
+  /* type rhythm */
+  font-family:
+    Inter,
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}

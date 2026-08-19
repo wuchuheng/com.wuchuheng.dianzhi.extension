@@ -253,7 +253,6 @@ export function parseConversationCommand(value: unknown): ParseResult<Conversati
       if (
         typeof payload.selectedText !== 'string' ||
         payload.selectedText.trim().length < 1 ||
-        payload.selectedText.trim().length > 300 ||
         typeof payload.contextText !== 'string' ||
         !payload.contextText.trim()
       ) {

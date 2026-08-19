@@ -130,7 +130,10 @@ export function assembleSelectionContext(
     .join('\n\n')
   return {
     selectedText,
-    contextText: trimAroundSelection(context, Math.max(1, limits.maxWords)),
+    // Wrap the assembled context in a <context> tag so models can tell the
+    // selection boundary from its surroundings at a glance. The delimiters
+    // are applied after word trimming, so neither tag counts as content.
+    contextText: `<context>${trimAroundSelection(context, Math.max(1, limits.maxWords))}</context>`,
     blockCount,
   }
 }

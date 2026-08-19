@@ -186,7 +186,9 @@ AI Output:
 # Example(严格遵循此格式;多词性时每组词性一行依次排列)
 
 <Example_Output>
-**in·for·ma·tion** (名词) 英 /ˌɪnfəˈmeɪʃn/ · 美 /ˌɪnfərˈmeɪʃn/
+**in·for·ma·tion** 
+
+英 /ˌɪnfəˈmeɪʃn/ · 美 /ˌɪnfərˈmeɪʃn/
 
 **信息 / 资料**：“report” 中关于该事件的事实与详情；不可数名词，搭 \`information about/on something\`。
 

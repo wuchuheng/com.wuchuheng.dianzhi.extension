@@ -244,6 +244,18 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     await publish({ type: 'panel.closed', conversationId })
   }
 
+  /**
+   * Idempotent panel closure: no-op when the panel is already marked closed,
+   * and treats a browser rejection ("No active tab-specific side panel", e.g.
+   * after a manual close or a disconnect race) as the desired outcome.
+   */
+  async function closePanelIfOpen(tabId: number, conversationId: number): Promise<void> {
+    if (!tabStates.get(tabId)?.panelOpen) return
+    cancelPendingPanelClose(tabId)
+    await dependencies.sidePanel.close(tabId).catch(() => undefined)
+    await markPanelClosed(tabId, conversationId)
+  }
+
   function providerMessages(messages: readonly MessageRecord[]) {
     return messages
       .filter(
@@ -414,9 +426,7 @@ export function createConversationManager(dependencies: ConversationManagerDepen
           panelState?.panelOpen &&
           panelState.activeConversationId === command.payload.conversationId
         ) {
-          cancelPendingPanelClose(tabId)
-          await dependencies.sidePanel.close(tabId)
-          await markPanelClosed(tabId, command.payload.conversationId)
+          await closePanelIfOpen(tabId, command.payload.conversationId)
           const settings = await dependencies.loadSettings()
           return {
             accepted: true,
@@ -629,9 +639,7 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     if (source !== 'extension') throw invalid('Only the Side Panel can request panel closure.')
     const tabId = tabForConversation(command.payload.conversationId)
     if (tabId === null) throw invalid('The Side Panel conversation is not associated with a tab.')
-    cancelPendingPanelClose(tabId)
-    await dependencies.sidePanel.close(tabId)
-    await markPanelClosed(tabId, command.payload.conversationId)
+    await closePanelIfOpen(tabId, command.payload.conversationId)
     return {
       accepted: true,
       snapshot: await loadSnapshot(command.payload.conversationId, settings),

@@ -12,6 +12,19 @@ export interface SelectionContext {
 
 const BLOCK_SELECTOR = 'p,li,blockquote,pre,td,th,h1,h2,h3,h4,h5,h6,article,section,main,aside,div'
 
+/**
+ * Removes literal HTML tag-like fragments (e.g. `<div>` or `</span>`) from
+ * displayed text. `Range.toString()` only ever contains text nodes, so a
+ * `<div>` the user sees came from the page itself (code samples, pasted
+ * markup). Only patterns shaped like a tag are removed — plain `< b` or
+ * `a < b` stays untouched.
+ */
+const LITERAL_HTML_TAG = /<\/?[a-zA-Z][a-zA-Z0-9]*[^>]*>/g
+
+export function stripLiteralTags(value: string): string {
+  return value.replace(LITERAL_HTML_TAG, '')
+}
+
 function nearestBlock(node: Node): Element | null {
   const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement
   return element?.closest(BLOCK_SELECTOR) ?? null
@@ -75,7 +88,7 @@ export function assembleSelectionContext(
 ): SelectionContext | null {
   if (selection.rangeCount !== 1 || selection.isCollapsed) return null
   const range = selection.getRangeAt(0)
-  const selectedText = selection.toString().trim()
+  const selectedText = stripLiteralTags(selection.toString()).trim()
   if (!selectedText) return null
   const startBlock = nearestBlock(range.startContainer)
   const endBlock = nearestBlock(range.endContainer)
@@ -86,9 +99,8 @@ export function assembleSelectionContext(
   const endIndex = blocks.indexOf(endBlock)
   if (startIndex < 0 || endIndex < startIndex) return null
 
-  const central = `${textBefore(range, startBlock)}<selected>${selectedText}</selected>${textAfter(
-    range,
-    endBlock
+  const central = `${stripLiteralTags(textBefore(range, startBlock))}<selected>${selectedText}</selected>${stripLiteralTags(
+    textAfter(range, endBlock)
   )}`
   const parts = new Map<number, string>([[startIndex, central]])
   let blockCount = endIndex - startIndex + 1
@@ -102,10 +114,10 @@ export function assembleSelectionContext(
     (previous >= 0 || next < blocks.length)
   ) {
     if ((choosePrevious && previous >= 0) || next >= blocks.length) {
-      parts.set(previous, blocks[previous]?.textContent?.trim() ?? '')
+      parts.set(previous, stripLiteralTags(blocks[previous]?.textContent ?? '').trim())
       previous -= 1
     } else if (next < blocks.length) {
-      parts.set(next, blocks[next]?.textContent?.trim() ?? '')
+      parts.set(next, stripLiteralTags(blocks[next]?.textContent ?? '').trim())
       next += 1
     }
     blockCount += 1

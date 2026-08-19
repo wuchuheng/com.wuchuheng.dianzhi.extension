@@ -282,6 +282,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
   const panelRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
+  const selectionControllerRef = useRef<ReturnType<typeof createSelectionController> | null>(null)
   const requestNumber = useRef(0)
 
   const requestId = useCallback(
@@ -362,9 +363,19 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       },
       onAnchorChange: setAnchor,
     })
+    selectionControllerRef.current = controller
     controller.start()
-    return () => controller.stop()
+    return () => {
+      selectionControllerRef.current = null
+      controller.stop()
+    }
   }, [extensionHost, requestId, sendCommand, settings])
+
+  useEffect(() => {
+    // While the popover is open, keep the captured word highlighted on the
+    // page even when focus moves inside the popover (composer field etc.).
+    selectionControllerRef.current?.keepAlive(state.visible)
+  }, [state.visible])
 
   const latestAssistant =
     [...(state.snapshot?.messages ?? [])]

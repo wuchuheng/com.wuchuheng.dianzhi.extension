@@ -28,12 +28,14 @@ export function ToolTabs({ tools, activeToolId, onSelect }: ToolTabsProps) {
           aria-selected={tool.id === activeToolId}
           tabIndex={tool.id === activeToolId ? 0 : -1}
           className={`dz-tab${tool.id === activeToolId ? ' is-active' : ''}`}
-          title={`${tool.name} (${formatShortcut(`Control+Shift+${index + 1}`)})`}
+          title={`${tool.name}${conversationId !== null ? '（已有会话）' : ''} (${formatShortcut(`Control+Shift+${index + 1}`)})`}
           onClick={() => onSelect(tool.id)}
         >
           {tool.name}
-          {conversationId !== null && <span className="dz-tab-new" aria-label="已有会话" />}
-          <span className="dz-tab-index" aria-hidden="true">
+          <span
+            className={`dz-tab-index${conversationId !== null ? ' has-conversation' : ''}`}
+            aria-hidden="true"
+          >
             {index + 1}
           </span>
         </button>

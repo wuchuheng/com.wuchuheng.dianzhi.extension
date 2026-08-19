@@ -29,6 +29,8 @@ CLAUDE.local.md
 .chromiumCache/
 playwright-report/
 test-results/
+# Stray clone of the upstream web-sqlite-js repo; vendored assets live in src/vendor/web-sqlite
+web-sqlite-js/
 .worktrees/
 .chrome-data/
 .omo/

@@ -49,15 +49,6 @@
   background: var(--d-surface-brand);
   font-weight: 650;
 }
-.dz-tab-new {
-  display: inline-block;
-  width: 5px;
-  height: 5px;
-  margin-left: 5px;
-  border-radius: 50%;
-  background: var(--d-brand);
-  vertical-align: middle;
-}
 .dz-tab-index {
   position: absolute;
   right: 3px;
@@ -73,6 +64,9 @@
   font-size: 8px;
   font-weight: 650;
   line-height: 1;
+}
+.dz-tab-index.has-conversation {
+  color: var(--d-brand);
 }
 .dz-panel-history {
   flex: 1 1 auto;

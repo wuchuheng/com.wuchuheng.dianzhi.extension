@@ -76,6 +76,7 @@ export default tseslint.config(
             'tests/unit/dianzhi/ui/markdown-text.spec.ts',
             'tests/unit/dianzhi/ui/MessageList.spec.tsx',
             'tests/unit/dianzhi/ui/Markdown.spec.tsx',
+            'tests/unit/dianzhi/ui/ToolTabs.spec.tsx',
             'tests/unit/dianzhi/protocol.spec.ts',
           ],
         },

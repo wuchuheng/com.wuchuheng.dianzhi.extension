@@ -8,6 +8,7 @@ import type { DianzhiSettings } from '@/dianzhi/domain/types'
 import type { ConversationCommand, ConversationUpdate } from '@/dianzhi/domain/protocol'
 import { SIDEPANEL_PORT_NAME } from '@/dianzhi/domain/protocol'
 import { extensionConversationCommand, settingsCommand } from '@/events/config'
+import { matchesShortcut } from '@/dianzhi/domain/shortcuts'
 import {
   INITIAL_PANEL_STATE,
   cycleEnabledTool,
@@ -49,6 +50,8 @@ export function SidePanelView({
   const needsSettings = latestAssistant?.errorCode === 'PROVIDER_NOT_CONFIGURED'
 
   const historyRef = useRef<HTMLDivElement | null>(null)
+  const composerRef = useRef<HTMLTextAreaElement | null>(null)
+  const hasSnapshot = snapshot !== null
   const pinnedRef = useRef(true)
   const viewKey = `${snapshot?.conversation.id ?? ''}:${snapshot?.activeToolId ?? ''}`
   const previousViewKey = useRef(viewKey)
@@ -60,6 +63,13 @@ export function SidePanelView({
       pinnedRef.current = true
     }
   }, [viewKey])
+
+  useEffect(() => {
+    // Focus the chat input once a conversation is attached and nothing is
+    // streaming (the stream ending flips `streaming` and re-runs this).
+    if (!hasSnapshot || streaming) return
+    composerRef.current?.focus()
+  }, [viewKey, streaming, hasSnapshot])
 
   const messages = snapshot?.messages
   useEffect(() => {
@@ -115,6 +125,7 @@ export function SidePanelView({
               onChange={onDraftChange}
               onSend={onSend}
               onStop={onStop}
+              inputRef={composerRef}
             />
           </footer>
         </>
@@ -224,7 +235,13 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
+      // The configured close (Esc by default) and the dock toggle both close
+      // the panel from inside it — the content-script half of the toggle
+      // cannot hear keys while focus lives in the Side Panel page.
+      if (
+        matchesShortcut(event, settings.shortcuts.close) ||
+        matchesShortcut(event, settings.shortcuts.dock)
+      ) {
         event.preventDefault()
         withConversation((conversationId) => ({
           type: 'panel.close',
@@ -246,7 +263,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [selectTool, state.snapshot, withConversation])
+  }, [selectTool, settings.shortcuts, state.snapshot, withConversation])
 
   return (
     <SidePanelView

@@ -66,6 +66,7 @@ export default tseslint.config(
             '*.config.js',
             '*.config.ts',
             'tests/unit/ep2cs-env.spec.ts',
+            'tests/unit/domain/shortcuts.spec.ts',
           ],
         },
         tsconfigRootDir: import.meta.dirname,

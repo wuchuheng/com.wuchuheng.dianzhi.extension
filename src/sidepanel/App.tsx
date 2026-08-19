@@ -8,7 +8,7 @@ import type { DianzhiSettings } from '@/dianzhi/domain/types'
 import type { ConversationCommand, ConversationUpdate } from '@/dianzhi/domain/protocol'
 import { SIDEPANEL_PORT_NAME } from '@/dianzhi/domain/protocol'
 import { extensionConversationCommand, settingsCommand } from '@/events/config'
-import { matchesShortcut } from '@/dianzhi/domain/shortcuts'
+import { matchesShortcut, toolShortcutNumber } from '@/dianzhi/domain/shortcuts'
 import {
   INITIAL_PANEL_STATE,
   cycleEnabledTool,
@@ -235,6 +235,7 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      const toolNumber = toolShortcutNumber(event)
       // The configured close (Esc by default) and the dock toggle both close
       // the panel from inside it — the content-script half of the toggle
       // cannot hear keys while focus lives in the Side Panel page.
@@ -248,6 +249,10 @@ export default function App() {
           requestId: requestId('close'),
           payload: { conversationId },
         }))
+      } else if (toolNumber !== null) {
+        event.preventDefault()
+        const tool = state.snapshot?.tools[toolNumber - 1]
+        if (tool) selectTool(tool.tool.id)
       } else if (event.ctrlKey && event.key === '.') {
         event.preventDefault()
         withConversation((conversationId) => ({

@@ -19,7 +19,7 @@ import {
 } from '@/events/config'
 import { createSelectionController } from '../selection/controller'
 import { computePlacement, type AnchorRect, type Placement } from '../popover/placement'
-import { formatShortcut, matchesShortcut } from './shortcuts'
+import { formatShortcut, matchesShortcut, toolShortcutNumber } from './shortcuts'
 import './App.css'
 
 /* Header action glyphs — inline SVG (no emoji/text-as-icon), one stroke
@@ -415,7 +415,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       setPlacement(
         computePlacement(
           anchor,
-          { width: state.expanded ? 680 : 380, height: measuredHeight },
+          { width: state.expanded ? 544 : 380, height: measuredHeight },
           { width: window.innerWidth, height: window.innerHeight }
         )
       )
@@ -461,6 +461,13 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
         const direction = matchesShortcut(event, settings.shortcuts.tabLeft) ? -1 : 1
         const next = tools[(current + direction + tools.length) % tools.length]
         if (next) void selectTool(next.tool.id)
+        return
+      }
+      const toolNumber = toolShortcutNumber(event)
+      if (toolNumber !== null) {
+        event.preventDefault()
+        const tool = state.snapshot.tools[toolNumber - 1]
+        if (tool) void selectTool(tool.tool.id)
       }
     }
     document.addEventListener('pointerdown', onPointerDown)

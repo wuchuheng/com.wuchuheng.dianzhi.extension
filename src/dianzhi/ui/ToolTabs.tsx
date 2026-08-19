@@ -1,5 +1,6 @@
 import type { KeyboardEvent } from 'react'
 import type { ToolConversationRef } from '@/dianzhi/domain/protocol'
+import { formatShortcut } from '@/dianzhi/domain/shortcuts'
 import { nextToolId } from './tool-tabs-state'
 
 export interface ToolTabsProps {
@@ -19,7 +20,7 @@ export function ToolTabs({ tools, activeToolId, onSelect }: ToolTabsProps) {
 
   return (
     <div className="dz-tabs" role="tablist" aria-label="查询工具" onKeyDown={onKeyDown}>
-      {tools.map(({ tool, conversationId }) => (
+      {tools.map(({ tool, conversationId }, index) => (
         <button
           key={tool.id}
           type="button"
@@ -27,10 +28,14 @@ export function ToolTabs({ tools, activeToolId, onSelect }: ToolTabsProps) {
           aria-selected={tool.id === activeToolId}
           tabIndex={tool.id === activeToolId ? 0 : -1}
           className={`dz-tab${tool.id === activeToolId ? ' is-active' : ''}`}
+          title={`${tool.name} (${formatShortcut(`Control+Shift+${index + 1}`)})`}
           onClick={() => onSelect(tool.id)}
         >
           {tool.name}
-          {conversationId === null && <span className="dz-tab-new" aria-label="尚未查询" />}
+          {conversationId !== null && <span className="dz-tab-new" aria-label="已有会话" />}
+          <span className="dz-tab-index" aria-hidden="true">
+            {index + 1}
+          </span>
         </button>
       ))}
     </div>

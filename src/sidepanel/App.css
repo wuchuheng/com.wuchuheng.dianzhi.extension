@@ -55,8 +55,24 @@
   height: 5px;
   margin-left: 5px;
   border-radius: 50%;
-  background: var(--d-text-faint);
+  background: var(--d-brand);
   vertical-align: middle;
+}
+.dz-tab-index {
+  position: absolute;
+  right: 3px;
+  bottom: 1px;
+  display: grid;
+  min-width: 12px;
+  height: 12px;
+  place-items: center;
+  padding: 0 2px;
+  border-radius: var(--d-radius-xs);
+  background: var(--d-surface-soft);
+  color: var(--d-text-faint);
+  font-size: 8px;
+  font-weight: 650;
+  line-height: 1;
 }
 .dz-panel-history {
   flex: 1 1 auto;

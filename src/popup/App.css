@@ -67,6 +67,45 @@
   font-weight: 650;
   cursor: pointer;
 }
+.popup-guide {
+  margin-top: 12px;
+  border: 1px solid #ded8ce;
+  border-radius: 12px;
+  padding: 11px 12px;
+  background: white;
+}
+.popup-guide h2 {
+  margin: 0 0 8px;
+  color: #292622;
+  font-size: 13px;
+}
+.popup-guide ol {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+}
+.popup-guide li {
+  color: #776f66;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.popup-guide strong {
+  color: #292622;
+  font-weight: 650;
+}
+.popup-card kbd {
+  display: inline-block;
+  border: 1px solid #ded8ce;
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 0 4px;
+  color: #292622;
+  background: #faf8f4;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 650;
+}
 .popup-hint {
   margin: 11px 2px 0;
   color: #8a8177;

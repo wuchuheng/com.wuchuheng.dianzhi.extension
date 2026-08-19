@@ -18,7 +18,7 @@ export const INITIAL_CONVERSATION_VIEW: ConversationViewState = {
   visible: false,
   panelOpen: false,
   mode: 'card',
-  expanded: false,
+  expanded: true,
   snapshot: null,
   error: null,
 }

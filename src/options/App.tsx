@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { DEFAULT_SETTINGS, rowDataFromSettings, validateSettings } from '@/dianzhi/domain/settings'
 import type { DianzhiSettings, SettingsProblem } from '@/dianzhi/domain/types'
 import { settingsCommand } from '@/events/config'
+import { About } from './about/About'
+import { UsageGuide } from './guide/UsageGuide'
 import { ToolsWorkspace } from './tools/ToolsWorkspace'
 import './App.css'
 
-export type OptionsSection = 'provider' | 'tools' | 'interaction'
+export type OptionsSection = 'provider' | 'tools' | 'interaction' | 'guide' | 'about'
 
 export interface OptionsViewProps {
   section: OptionsSection
@@ -14,6 +16,7 @@ export interface OptionsViewProps {
   errors: SettingsProblem[]
   testing: boolean
   revealKey: boolean
+  aboutVersion: string
   onSectionChange(section: OptionsSection): void
   onSettingsChange(settings: DianzhiSettings): void
   onRevealKey(): void
@@ -34,7 +37,7 @@ function FieldError({ problem, full }: { problem?: SettingsProblem; full?: boole
 }
 
 export function OptionsView(props: OptionsViewProps) {
-  const { settings } = props
+  const { settings, aboutVersion } = props
   const errorBoxRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
     if (props.errors.length > 0) errorBoxRef.current?.focus()
@@ -69,6 +72,8 @@ export function OptionsView(props: OptionsViewProps) {
               ['provider', 'AI 服务'],
               ['tools', '查询工具'],
               ['interaction', '交互与快捷键'],
+              ['guide', '使用指南'],
+              ['about', '关于'],
             ] as const
           ).map(([id, label]) => (
             <button
@@ -276,9 +281,15 @@ export function OptionsView(props: OptionsViewProps) {
                   />
                 </label>
               ))}
+              <p className="field-hint">
+                <kbd>Ctrl+Shift+1…9</kbd> 固定快捷键：数字对应工具标签右下角的序号，直接切换到第 N
+                个工具（详见「使用指南」）。
+              </p>
             </div>
           </section>
         )}
+        {props.section === 'guide' && <UsageGuide />}
+        {props.section === 'about' && <About version={aboutVersion} />}
         {props.errors.length > 0 && (
           <div className="form-errors" role="alert" tabIndex={-1} ref={errorBoxRef}>
             <p className="form-errors-title">请修正以下问题</p>
@@ -371,6 +382,7 @@ export default function App() {
       errors={errors}
       testing={testing}
       revealKey={revealKey}
+      aboutVersion={chrome.runtime.getManifest().version}
       onSectionChange={setSection}
       onSettingsChange={setSettings}
       onRevealKey={() => setRevealKey((value) => !value)}

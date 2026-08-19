@@ -99,6 +99,7 @@ export function SidePanelView({
               messages={snapshot.messages}
               mode="chat"
               reasoningEnabled={reasoningEnabled}
+              showMeta
             />
             {(state.error || latestAssistant?.errorMessage) && (
               <div className="dz-error" role="alert">

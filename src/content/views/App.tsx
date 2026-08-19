@@ -20,6 +20,7 @@ import {
 import { createSelectionController } from '../selection/controller'
 import { computePlacement, type AnchorRect, type Placement } from '../popover/placement'
 import { formatShortcut, matchesShortcut, toolShortcutNumber } from './shortcuts'
+import { useScrollGuard } from './scroll-guard'
 import './App.css'
 
 /* Header action glyphs — inline SVG (no emoji/text-as-icon), one stroke
@@ -100,6 +101,7 @@ export interface ContentAppProps {
   shortcuts: ShortcutSettings
   composerRef?: React.RefObject<HTMLTextAreaElement | null>
   bodyRef?: React.RefObject<HTMLDivElement | null>
+  onBodyScroll?(): void
   onComposerChange?(value: string): void
   onToolSelect(toolId: number): void
   onModeChange(mode: 'card' | 'chat'): void
@@ -122,6 +124,7 @@ export function ContentApp({
   shortcuts,
   composerRef,
   bodyRef,
+  onBodyScroll = () => undefined,
   onComposerChange = () => undefined,
   onToolSelect,
   onModeChange,
@@ -214,7 +217,7 @@ export function ContentApp({
           </div>
         </header>
 
-        <main ref={bodyRef} className="dz-body">
+        <main ref={bodyRef} className="dz-body" onScroll={onBodyScroll}>
           <MessageList
             messages={snapshot?.messages ?? []}
             mode={state.mode}
@@ -395,14 +398,23 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
     dispatch({ type: 'view.closed' })
   }, [extensionHost])
 
+  // Defer focusing until the stream ends; `streaming` flips to false so this
+  // effect re-runs once the reply completes. Scrolling is handled by
+  // `useScrollGuard`: pinned views follow new content (instantly while
+  // streaming, smoothly on discrete updates), scrolled-away views keep their
+  // position with no auto-scroll.
   useLayoutEffect(() => {
     if (!state.visible || state.mode !== 'chat') return
-    if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight
-    // Defer focusing until the stream ends; `streaming` flips to false so this
-    // effect re-runs once the reply completes.
     if (streaming) return
     composerRef.current?.focus()
   }, [state.visible, state.mode, streaming])
+
+  const onBodyScroll = useScrollGuard(bodyRef, {
+    visible: state.visible,
+    mode: state.mode,
+    streaming,
+    messages: state.snapshot?.messages,
+  })
 
   useLayoutEffect(() => {
     if (!state.visible || !anchor) return
@@ -489,6 +501,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       shortcuts={settings.shortcuts}
       composerRef={composerRef}
       bodyRef={bodyRef}
+      onBodyScroll={onBodyScroll}
       onComposerChange={setComposer}
       onToolSelect={(toolId) => void selectTool(toolId)}
       onModeChange={(mode) => dispatch({ type: 'view.mode', mode })}

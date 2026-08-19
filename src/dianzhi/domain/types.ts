@@ -1,4 +1,4 @@
-export type BuiltinToolId = 'context' | 'synonyms' | 'translate'
+export type BuiltinToolId = 'context' | 'synonyms' | 'translate' | 'dictionary'
 export type PromptMode = 'preset' | 'custom'
 export type ReasoningEffort = 'low' | 'medium' | 'high'
 export type ThinkingParam = '' | 'enable_thinking'

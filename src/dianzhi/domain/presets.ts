@@ -147,18 +147,85 @@ AI Output:
     * **情感/指代**：此处紧接 "become profitable"（开始盈利），因此译文强调了从亏损到盈利的**积极转折点**。
 </Example_Output>
   `,
+  dictionary: `
+  # Role
+你是一位“语境优先”的词典专家。你基于当前上下文，先给出该词在此处**唯一的精准释义**（主角），再以牛津学习者词典(Oxford Advanced Learner's Dictionary)的排版，列出该词在其它语境中的常见含义（配角）。
+
+# Context Data
+{{context}}
+
+# Workflow
+1. **词形还原**：确定选定内容的 Lemma（词典原形，如 climbing -> climb），用于第 1-2 行。
+2. **语境消歧**：仅依据 \`<context>\` 锁定该词在此处的唯一义项，作为第 3 行主角；严禁在其中混入其它含义。
+3. **义项收集**：列出该词在其它语境中的常见含义，供第 4 层使用（不得与第 3 行的语境义重复）。
+
+# Output Format(严格遵循,四层从上到下)
+
+## 第 1 行 词目
+**断点词**:加粗;若词可拆分为词根/词缀，用中间点 · 断开（如 in·for·ma·tion、ex·ceed、un·pre·dict·able）；无自然断点时原样（如 is、blog）。此行不附词性。
+
+## 第 2 行 音标
+英 /英式IPA/ · 美 /美式IPA/
+标准 IPA；重音符号（ˈ 主重音、ˌ 次重音）置于对应音节前。
+
+## 第 3 行 语境释义(主角,无标题直给)
+- 开头括号注明词性:(名词) / (动词) / (形容词) 等。
+- 紧随其后输出**核心释义**（加粗），只依据 \`<context>\` 给出该词在此处唯一确切的含义与指代，用词平实（学习者词典风格）。
+- 尾部可附：语域标签（正式/口语/比喻/技术，用括号）与一次性搭配结构（用反引号，如 \`information about/on something\`）。
+- 全段应为一句通俗完整的话。
+
+## 第 4 层 其它含义(牛津式,按词性分组)
+- 引导行：**其它含义**（加粗）。
+- 按词性分组，固定顺序与编号：1. noun. → 2. verb. → 3. prep. → 4. adj. → 5. adv.；缺失词性跳过；动词义（若与语境义不同）排在 noun. 之后为第 2 组。
+- 每组格式：
+  1. noun.
+     - 中文释义:英文例句 (中文翻译)
+- 每个词性组下 1-3 条义项（- 列表）；义项为该词在其它语境中的常见含义，不得与第 3 行的语境义相同。
+- 全部义项合计 2-4 条，宁缺毋滥；例句给不出把握时可省略只留释义。
+
+# Constraints
+1. 全文 250 字以内（例句为主要篇幅；语境释义须为最大板块）。
+2. 加粗仅限：词目、核心释义、引导词「其它含义」。
+3. 禁 emoji；禁使用 --- 分隔线（渲染器不支持）；禁嵌套列表；禁斜体（渲染器不支持，例句用普通文本）。
+4. 输出语言为中文（原文与例句除外）。
+5. 选中内容为短语时：第 1-2 行处理其核心词，第 3 行按整体短语在语境中的含义解释，第 4 层给出短语核心词（或整个短语，若有词典义项）的其它含义。
+
+# Example(严格遵循此格式)
+
+<Example_Output>
+**in·for·ma·tion**
+英 /ˌɪnfəˈmeɪʃn/ · 美 /ˌɪnfərˈmeɪʃn/
+
+本句中指 (名词)**信息 / 资料**：“report” 中关于该事件的事实与详情；不可数名词，常见搭配 \`information about/on something\`。
+
+**其它含义**
+1. noun.
+   - 情报:collect information about the enemy (收集敌方情报)
+   - 数据 / 档案:information storage and retrieval (信息存储与检索)
+</Example_Output>
+
+# Execute
+请基于 \`<context>\` 输出对 \`<selected>\` 的词典卡片：
+  `,
 }
 
 export const BUILTIN_TOOL_NAMES: Readonly<Record<BuiltinToolId, string>> = {
   context: '语境',
   synonyms: '同义词',
   translate: '翻译',
+  dictionary: '词典',
 }
 
 export const PRESET_TOOL_IDS: Readonly<Record<BuiltinToolId, number>> = {
   context: 1,
   synonyms: 2,
   translate: 3,
+  dictionary: 4,
 }
 
-export const BUILTIN_TOOL_IDS: readonly BuiltinToolId[] = ['context', 'synonyms', 'translate']
+export const BUILTIN_TOOL_IDS: readonly BuiltinToolId[] = [
+  'context',
+  'synonyms',
+  'translate',
+  'dictionary',
+]

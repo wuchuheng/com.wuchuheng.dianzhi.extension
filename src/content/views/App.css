@@ -236,6 +236,9 @@ textarea {
 }
 .dz-markdown {
   overflow-wrap: anywhere;
+  /* Keep model-authored line breaks (mirrors sidepanel): paragraphs keep
+     their newlines instead of being folded into spaces by HTML. */
+  white-space: pre-wrap;
   color: var(--d-text);
 }
 .dz-markdown :first-child {

@@ -23,6 +23,23 @@ function inline(source: string, keyPrefix: string): ReactNode[] {
   return nodes
 }
 
+const TABLE_DELIMITER = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/
+
+function splitCells(row: string): string[] {
+  // `row` is guaranteed to start and end with a pipe.
+  return row
+    .slice(1, -1)
+    .split(/(?<!\\)\|/)
+    .map((cell) => cell.trim().replace(/\\\|/g, '|'))
+}
+
+function alignFromDelimiter(cell: string): 'left' | 'right' | 'center' | undefined {
+  if (cell.startsWith(':') && cell.endsWith(':')) return 'center'
+  if (cell.startsWith(':')) return 'left'
+  if (cell.endsWith(':')) return 'right'
+  return undefined
+}
+
 export function Markdown({ source }: MarkdownProps) {
   const lines = source.replace(/\r\n/g, '\n').split('\n')
   const blocks: ReactNode[] = []
@@ -66,6 +83,40 @@ export function Markdown({ source }: MarkdownProps) {
         index += 1
       }
       blocks.push(<ol key={`ol-${index}`}>{items}</ol>)
+      continue
+    }
+    const headerLine = lines[index] ?? ''
+    if (/^\|.*\|\s*$/.test(headerLine) && TABLE_DELIMITER.test(lines[index + 1] ?? '')) {
+      const header = splitCells(headerLine)
+      const aligns = splitCells(lines[index + 1] ?? '').map(alignFromDelimiter)
+      const columnCount = header.length
+      const rows: string[][] = []
+      index += 2
+      while (index < lines.length && /^\|.*\|\s*$/.test(lines[index] ?? '')) {
+        rows.push(splitCells(lines[index] ?? ''))
+        index += 1
+      }
+      const cells = (row: string[], tag: 'th' | 'td', keyPrefix: string) =>
+        Array.from({ length: columnCount }, (_, col) => {
+          const Cell = tag
+          return (
+            <Cell key={col} style={aligns[col] ? { textAlign: aligns[col] } : undefined}>
+              {inline(row[col] ?? '', `${keyPrefix}-${col}`)}
+            </Cell>
+          )
+        })
+      blocks.push(
+        <table key={`t-${index}`}>
+          <thead>
+            <tr>{cells(header, 'th', 'th')}</tr>
+          </thead>
+          <tbody>
+            {rows.map((row, rowIndex) => (
+              <tr key={rowIndex}>{cells(row, 'td', `td-${rowIndex}`)}</tr>
+            ))}
+          </tbody>
+        </table>
+      )
       continue
     }
     if (line.startsWith('> ')) {

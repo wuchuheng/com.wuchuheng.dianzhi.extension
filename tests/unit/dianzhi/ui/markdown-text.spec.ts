@@ -15,6 +15,15 @@ describe('markdownToPlainText', () => {
     expect(markdownToPlainText('> quoted')).toBe('quoted')
   })
 
+  it('collapses table rows into pipes-joined cells and drops the delimiter row', () => {
+    const source = '| 单词 | 音标 |\n|------|------|\n| run | /rʌn/ |'
+    expect(markdownToPlainText(source)).toBe('单词 | 音标\nrun | /rʌn/')
+  })
+
+  it('strips inline markers inside table cells', () => {
+    expect(markdownToPlainText('| **a** | `b` |\n|---|---|\n| 1 | 2 |')).toBe('a | b\n1 | 2')
+  })
+
   it('keeps one blank line between paragraphs', () => {
     expect(markdownToPlainText('para one\n\n\n\npara two')).toBe('para one\n\npara two')
   })

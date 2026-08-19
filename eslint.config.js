@@ -61,6 +61,7 @@ export default tseslint.config(
       },
       parserOptions: {
         projectService: {
+          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 12,
           allowDefaultProject: [
             'eslint.config.js',
             '*.config.js',
@@ -73,6 +74,7 @@ export default tseslint.config(
             'tests/unit/dianzhi/ui/message-time.spec.ts',
             'tests/unit/dianzhi/ui/markdown-text.spec.ts',
             'tests/unit/dianzhi/ui/MessageList.spec.tsx',
+            'tests/unit/dianzhi/ui/Markdown.spec.tsx',
           ],
         },
         tsconfigRootDir: import.meta.dirname,

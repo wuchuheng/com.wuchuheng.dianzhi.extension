@@ -67,6 +67,7 @@ export default tseslint.config(
             '*.config.ts',
             'tests/unit/ep2cs-env.spec.ts',
             'tests/unit/domain/shortcuts.spec.ts',
+            'tests/unit/content/selection/words.spec.ts',
           ],
         },
         tsconfigRootDir: import.meta.dirname,

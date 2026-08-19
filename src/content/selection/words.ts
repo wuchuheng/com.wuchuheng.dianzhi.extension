@@ -12,6 +12,7 @@
  */
 
 const WORD_CHAR = /[\p{L}\p{N}'-]/u
+const WHITESPACE = /\s/
 
 interface TextPoint {
   node: Text
@@ -41,6 +42,10 @@ function resolveTextPoint(node: Node, offset: number, document: Document): TextP
 function wordStartOffset(text: Text, offset: number): number {
   const data = text.data
   let index = offset
+  // The boundary sits on the selection's leading whitespace: skip it instead
+  // of walking across into the previous word. Only its own word remains
+  // expandable and the whitespace is trimmed from the final range.
+  while (index < data.length && WHITESPACE.test(data.charAt(index))) index += 1
   while (index > 0 && WORD_CHAR.test(data.charAt(index - 1))) index -= 1
   return index
 }
@@ -48,13 +53,20 @@ function wordStartOffset(text: Text, offset: number): number {
 function wordEndOffset(text: Text, offset: number): number {
   const data = text.data
   let index = offset
+  // The boundary sits after the selection's trailing whitespace: skip back
+  // over it instead of walking forward into the next word. Only its own
+  // word remains expandable and the whitespace is trimmed from the range.
+  while (index > 0 && WHITESPACE.test(data.charAt(index - 1))) index -= 1
   while (index < data.length && WORD_CHAR.test(data.charAt(index))) index += 1
   return index
 }
 
 /**
- * Expands a selection range so both boundaries sit on whole-word edges.
- * Returns the input range unchanged when no expansion is possible.
+ * Expands a selection range so both boundaries sit on whole-word edges and
+ * any whitespace at the selection edges is trimmed off. Movement is allowed
+ * in both directions: the start may move forward (leading whitespace) and the
+ * end may move back (trailing whitespace). Returns the input range unchanged
+ * when no expansion or trim is possible.
  */
 export function expandRangeToWords(range: Range): Range {
   const document = range.startContainer.ownerDocument
@@ -71,7 +83,7 @@ export function expandRangeToWords(range: Range): Range {
     expanded.setEnd(end.node, to)
     return expanded
   }
-  if (from < start.offset) expanded.setStart(start.node, from)
-  if (to > end.offset) expanded.setEnd(end.node, to)
+  if (from !== start.offset) expanded.setStart(start.node, from)
+  if (to !== end.offset) expanded.setEnd(end.node, to)
   return expanded
 }

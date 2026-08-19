@@ -6,12 +6,20 @@ const crxManifest = defineManifest({
   name: '点知 Dianzhi',
   version: pkg.version,
   minimum_chrome_version: '141',
+  description:
+    '网页选词 AI 阅读助手:选中英文即得基于语境的精准释义、词典卡片、同义词辨析与翻译,并可继续对话。',
   icons: {
-    48: 'public/logo.png',
+    16: 'public/logo-16.png',
+    32: 'public/logo-32.png',
+    48: 'public/logo-48.png',
+    128: 'public/logo-128.png',
   },
   action: {
     default_icon: {
-      48: 'public/logo.png',
+      16: 'public/logo-16.png',
+      32: 'public/logo-32.png',
+      48: 'public/logo-48.png',
+      128: 'public/logo-128.png',
     },
     default_popup: 'src/popup/index.html',
   },

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Dianzhi logo: rounded-square terracotta tile (--d-brand #c85f32,
+       corner radius 18.75% of the tile, matching --d-radius-md at 48px)
+       with the white glyph 点 (--d-text-on-brand). -->
+  <rect width="128" height="128" rx="24" fill="#c85f32" />
+  <text
+    x="64"
+    y="67"
+    text-anchor="middle"
+    dominant-baseline="central"
+    font-family="'Noto Sans CJK SC','PingFang SC','Microsoft YaHei',sans-serif"
+    font-weight="700"
+    font-size="77"
+    fill="#ffffff"
+  >点</text>
+</svg>

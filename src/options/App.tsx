@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { DEFAULT_SETTINGS, rowDataFromSettings, validateSettings } from '@/dianzhi/domain/settings'
 import type { DianzhiSettings, SettingsProblem } from '@/dianzhi/domain/types'
 import { settingsCommand } from '@/events/config'
@@ -20,8 +20,13 @@ export interface OptionsViewProps {
   onSectionChange(section: OptionsSection): void
   onSettingsChange(settings: DianzhiSettings): void
   onRevealKey(): void
-  onSave(): void
   onTest(): void
+}
+
+const EMPTY_VALIDATION: { ok: true; errors: SettingsProblem[]; warnings: SettingsProblem[] } = {
+  ok: true,
+  errors: [],
+  warnings: [],
 }
 
 function FieldError({ problem, full }: { problem?: SettingsProblem; full?: boolean }) {
@@ -88,6 +93,11 @@ export function OptionsView(props: OptionsViewProps) {
         </nav>
       </aside>
       <main>
+        {props.status && (
+          <div className="status-toast" role="status" aria-live="polite">
+            {props.status}
+          </div>
+        )}
         {props.section === 'provider' && (
           <section>
             <h1>AI 服务</h1>
@@ -114,7 +124,7 @@ export function OptionsView(props: OptionsViewProps) {
                     value={settings.provider.apiKey}
                     onChange={(e) => updateProvider({ apiKey: e.target.value })}
                   />
-                  <button type="button" onClick={props.onRevealKey}>
+                  <button type="button" onClick={props.onRevealKey} style={{ width: '60px' }}>
                     {props.revealKey ? '隐藏' : '显示'}
                   </button>
                 </span>
@@ -308,12 +318,6 @@ export function OptionsView(props: OptionsViewProps) {
             ))}
           </div>
         )}
-        <footer className="save-bar">
-          <span role="status">{props.status}</span>
-          <button type="button" className="primary" onClick={props.onSave}>
-            保存设置
-          </button>
-        </footer>
       </main>
     </div>
   )
@@ -323,45 +327,80 @@ function requestId(prefix: string) {
   return `${prefix}-${Date.now()}`
 }
 
+function clearTimer(timerRef: { current: number | null }) {
+  if (timerRef.current !== null) {
+    window.clearTimeout(timerRef.current)
+    timerRef.current = null
+  }
+}
+
 export default function App() {
   const [section, setSection] = useState<OptionsSection>('provider')
   const [settings, setSettings] = useState<DianzhiSettings>(DEFAULT_SETTINGS)
   const [status, setStatus] = useState('正在加载…')
-  const [errors, setErrors] = useState<SettingsProblem[]>([])
   const [revealKey, setRevealKey] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const hydratedRef = useRef(false)
+  const lastSavedRef = useRef('')
+  const saveTimerRef = useRef<number | null>(null)
+  const statusTimerRef = useRef<number | null>(null)
+  const validation = useMemo(
+    () => (loaded ? validateSettings(settings) : EMPTY_VALIDATION),
+    [loaded, settings]
+  )
+
+  useEffect(() => {
+    return () => {
+      clearTimer(saveTimerRef)
+      clearTimer(statusTimerRef)
+    }
+  }, [])
+
   useEffect(() => {
     void settingsCommand
       .dispatch({ type: 'settings.get', requestId: requestId('load') })
       .then((value) => {
         setSettings(value)
         setStatus('')
+        setLoaded(true)
+        hydratedRef.current = true
+        lastSavedRef.current = JSON.stringify(rowDataFromSettings(value))
       })
       .catch(() => setStatus('设置加载失败'))
   }, [])
-  const save = () => {
-    const validation = validateSettings(settings)
-    setErrors(validation.errors)
+
+  useEffect(() => {
+    if (!hydratedRef.current) return
+    const snapshot = rowDataFromSettings(settings)
+    const serialized = JSON.stringify(snapshot)
+    if (serialized === lastSavedRef.current) return
     if (!validation.ok) {
-      setStatus('请修正标记的问题')
+      clearTimer(saveTimerRef)
       return
     }
-    setStatus('正在保存…')
-    void settingsCommand
-      .dispatch({
-        type: 'settings.save',
-        requestId: requestId('save'),
-        settings: rowDataFromSettings(settings),
-      })
-      .then((value) => {
-        setSettings(value)
-        setStatus('已保存')
-      })
-      .catch(() => setStatus('保存失败'))
-  }
+    clearTimer(saveTimerRef)
+    saveTimerRef.current = window.setTimeout(() => {
+      setStatus('正在保存…')
+      void settingsCommand
+        .dispatch({
+          type: 'settings.save',
+          requestId: requestId('save'),
+          settings: snapshot,
+        })
+        .then((value) => {
+          lastSavedRef.current = JSON.stringify(rowDataFromSettings(value))
+          setSettings(value)
+          setStatus('已保存')
+          clearTimer(statusTimerRef)
+          statusTimerRef.current = window.setTimeout(() => setStatus(''), 1400)
+        })
+        .catch(() => setStatus('保存失败'))
+    }, 350)
+    return () => clearTimer(saveTimerRef)
+  }, [settings, validation.ok])
+
   const test = () => {
-    const validation = validateSettings(settings)
-    setErrors(validation.errors)
     if (!validation.ok) {
       setStatus('请先修正配置')
       return
@@ -374,19 +413,23 @@ export default function App() {
       .catch((error: unknown) => setStatus(error instanceof Error ? error.message : '连接失败'))
       .finally(() => setTesting(false))
   }
+  const displayStatus = loaded && !validation.ok && !status ? '请修正标记的问题' : status
+
   return (
     <OptionsView
       section={section}
       settings={settings}
-      status={status}
-      errors={errors}
+      status={displayStatus}
+      errors={validation.errors}
       testing={testing}
       revealKey={revealKey}
       aboutVersion={chrome.runtime.getManifest().version}
       onSectionChange={setSection}
-      onSettingsChange={setSettings}
+      onSettingsChange={(next) => {
+        setStatus('')
+        setSettings(next)
+      }}
       onRevealKey={() => setRevealKey((value) => !value)}
-      onSave={save}
       onTest={test}
     />
   )

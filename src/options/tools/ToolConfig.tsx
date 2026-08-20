@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { Markdown } from '@/dianzhi/ui/Markdown'
+import { useEffect, useRef, useState } from 'react'
 import { BUILTIN_PROMPTS, PRESET_TOOL_IDS } from '@/dianzhi/domain/presets'
 import { toToolDefinition } from '@/dianzhi/domain/settings'
 import type { ToolUpdatePatch } from '@/dianzhi/domain/protocol'
@@ -11,18 +12,52 @@ export interface ToolConfigProps {
 }
 
 /**
- * The flexible configuration pane for the active tool. Name and prompt are
- * edited in a local draft and committed through one `onPatch` call; the reset
- * button restores a preset row's built-in prompt; the default select flips
- * `isDefault` on another tool (the server clears the previous default).
+ * The flexible configuration pane for the active tool. Name, enabled state,
+ * and prompt are edited in a local draft and autosaved through `onPatch`; the
+ * prompt editor opens as a preview popover; the reset button restores a
+ * preset row's built-in prompt.
  */
 export function ToolConfig(props: ToolConfigProps) {
-  const { tool } = props
+  const { tool, onPatch, onRemove } = props
   const presetPrompt = tool ? builtinPromptFor(tool.id) : null
   const promptMode = tool ? toToolDefinition(tool).promptMode : null
 
   const [draft, setDraft] = useState(() => initialDraft(tool))
   const [confirmingRemove, setConfirmingRemove] = useState(false)
+  const [promptOpen, setPromptOpen] = useState(false)
+  const [saveNotice, setSaveNotice] = useState<string | null>(null)
+  const saveTimerRef = useRef<number | null>(null)
+  const noticeTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
+      if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current)
+    }
+  }, [])
+
+  const dirty =
+    tool !== null &&
+    (draft.name !== tool.name || draft.prompt !== tool.prompt || draft.enabled !== tool.enabled)
+
+  useEffect(() => {
+    if (tool === null || !dirty) return
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
+    const patch: ToolUpdatePatch = {}
+    if (draft.name !== tool.name) patch.name = draft.name
+    if (draft.prompt !== tool.prompt) patch.prompt = draft.prompt
+    if (draft.enabled !== tool.enabled) patch.enabled = draft.enabled
+    if (Object.keys(patch).length === 0) return
+    saveTimerRef.current = window.setTimeout(() => {
+      onPatch(patch)
+      setSaveNotice('已保存')
+      if (noticeTimerRef.current !== null) window.clearTimeout(noticeTimerRef.current)
+      noticeTimerRef.current = window.setTimeout(() => setSaveNotice(null), 1200)
+    }, 350)
+    return () => {
+      if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current)
+    }
+  }, [draft.name, draft.prompt, draft.enabled, tool, dirty, onPatch])
 
   if (tool === null) {
     return (
@@ -33,20 +68,23 @@ export function ToolConfig(props: ToolConfigProps) {
     )
   }
 
-  const dirty =
-    draft.name !== tool.name || draft.prompt !== tool.prompt || draft.enabled !== tool.enabled
-
-  const commit = () => {
-    const patch: ToolUpdatePatch = {}
-    if (draft.name !== tool.name) patch.name = draft.name
-    if (draft.prompt !== tool.prompt) patch.prompt = draft.prompt
-    if (draft.enabled !== tool.enabled) patch.enabled = draft.enabled
-    if (Object.keys(patch).length > 0) props.onPatch(patch)
-  }
-
   return (
     <div className="tool-config-pane">
-      <h2 className="pane-title">工具配置</h2>
+      <div className="tool-config-header">
+        <h2 className="pane-title">工具配置</h2>
+        <button
+          type="button"
+          className="secondary tool-prompt-open"
+          onClick={() => setPromptOpen(true)}
+        >
+          编辑提示词
+        </button>
+      </div>
+      {saveNotice && (
+        <p className="tool-save-notice" role="status" aria-live="polite">
+          {saveNotice}
+        </p>
+      )}
       {!tool.enabled && (
         <p className="tool-field-hint" role="status">
           此工具已停用，配置仍可编辑。
@@ -78,11 +116,13 @@ export function ToolConfig(props: ToolConfigProps) {
       </label>
       <label>
         提示词
-        <textarea
-          aria-label="提示词"
-          value={draft.prompt}
-          onChange={(event) => setDraft({ ...draft, prompt: event.target.value })}
-        />
+        <button
+          type="button"
+          className="secondary tool-prompt-launch"
+          onClick={() => setPromptOpen(true)}
+        >
+          在弹窗中编辑
+        </button>
       </label>
       {tool.isPreset && (
         <p className="tool-field-hint">
@@ -93,51 +133,88 @@ export function ToolConfig(props: ToolConfigProps) {
         <button
           type="button"
           className="secondary"
-          onClick={() => props.onPatch({ prompt: presetPrompt })}
+          onClick={() => setDraft({ ...draft, prompt: presetPrompt })}
         >
           重置为内置提示词
         </button>
       )}
-      <div className="tool-config-actions">
-        <button type="button" className="primary" disabled={!dirty} onClick={commit}>
-          保存修改
-        </button>
-        {!tool.isPreset &&
-          (confirmingRemove ? (
-            <div className="tool-delete-confirm-group">
-              <p className="tool-delete-confirm">
-                删除后工具不再出现在列表中，可在左侧「已删除」中恢复。
-              </p>
-              <div className="tool-delete-actions">
-                <button
-                  type="button"
-                  className="danger"
-                  onClick={() => {
-                    setConfirmingRemove(false)
-                    props.onRemove()
-                  }}
-                >
-                  确认删除
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => setConfirmingRemove(false)}
-                >
-                  取消
-                </button>
+      {!tool.isPreset &&
+        (confirmingRemove ? (
+          <div className="tool-delete-confirm-group">
+            <p className="tool-delete-confirm">
+              删除后工具不再出现在列表中，可在左侧「已删除」中恢复。
+            </p>
+            <div className="tool-delete-actions">
+              <button
+                type="button"
+                className="danger"
+                onClick={() => {
+                  setConfirmingRemove(false)
+                  onRemove()
+                }}
+              >
+                确认删除
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setConfirmingRemove(false)}
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="danger"
+            aria-label={`删除工具 ${tool.name}`}
+            onClick={() => setConfirmingRemove(true)}
+          >
+            删除工具
+          </button>
+        ))}
+
+      <div className="tool-prompt-popover" hidden={!promptOpen}>
+        <button
+          type="button"
+          className="tool-prompt-backdrop"
+          aria-label="关闭提示词编辑器"
+          onClick={() => setPromptOpen(false)}
+        />
+        <section
+          className="tool-prompt-panel"
+          role="dialog"
+          aria-modal="true"
+          aria-label="提示词编辑器"
+        >
+          <div className="tool-prompt-panel-header">
+            <div>
+              <strong>提示词编辑器</strong>
+              <p className="tool-field-hint">左侧编辑 Markdown，右侧实时预览渲染结果。</p>
+            </div>
+            <button type="button" className="secondary" onClick={() => setPromptOpen(false)}>
+              关闭
+            </button>
+          </div>
+          <div className="tool-prompt-grid">
+            <label className="tool-prompt-source-pane">
+              Markdown 源码
+              <textarea
+                className="tool-prompt-source"
+                aria-label="提示词 Markdown 源码"
+                value={draft.prompt}
+                onChange={(event) => setDraft({ ...draft, prompt: event.target.value })}
+              />
+            </label>
+            <div className="tool-prompt-preview-pane">
+              <p className="tool-prompt-preview-title">渲染预览</p>
+              <div className="tool-prompt-preview">
+                <Markdown source={draft.prompt || ' '} />
               </div>
             </div>
-          ) : (
-            <button
-              type="button"
-              className="danger"
-              aria-label={`删除工具 ${tool.name}`}
-              onClick={() => setConfirmingRemove(true)}
-            >
-              删除工具
-            </button>
-          ))}
+          </div>
+        </section>
       </div>
     </div>
   )

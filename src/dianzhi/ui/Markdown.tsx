@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { createElement, type ReactNode } from 'react'
 
 export interface MarkdownProps {
   source: string
@@ -24,6 +24,85 @@ function inline(source: string, keyPrefix: string): ReactNode[] {
 }
 
 const TABLE_DELIMITER = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/
+const ALLOWED_HTML_TAGS = new Set([
+  'a',
+  'b',
+  'blockquote',
+  'br',
+  'code',
+  'del',
+  'div',
+  'em',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'hr',
+  'i',
+  'li',
+  'mark',
+  'ol',
+  'p',
+  'pre',
+  's',
+  'span',
+  'strong',
+  'table',
+  'tbody',
+  'td',
+  'th',
+  'thead',
+  'tr',
+  'u',
+  'ul',
+])
+const DROP_HTML_TAGS = new Set(['embed', 'iframe', 'object', 'script', 'style', 'svg', 'template'])
+
+function isSafeHref(value: string): boolean {
+  const href = value.trim().toLowerCase()
+  return href.startsWith('/') || href.startsWith('#') || /^(https?:|mailto:)/.test(href)
+}
+
+function rawHtmlNodes(source: string, keyPrefix: string): ReactNode[] {
+  const template = document.createElement('template')
+  template.innerHTML = source
+
+  const renderNode = (node: Node, key: string): ReactNode[] => {
+    if (node.nodeType === Node.TEXT_NODE) return [node.textContent ?? '']
+    if (node.nodeType !== Node.ELEMENT_NODE) return []
+
+    const element = node as HTMLElement
+    const tag = element.tagName.toLowerCase()
+    if (DROP_HTML_TAGS.has(tag)) return []
+
+    const children = Array.from(element.childNodes).flatMap((child, index) =>
+      renderNode(child, `${key}-${index}`)
+    )
+    if (!ALLOWED_HTML_TAGS.has(tag)) return children
+
+    const props: Record<string, string> = { key }
+    const className = element.getAttribute('class')
+    if (className) props.className = className
+    const title = element.getAttribute('title')
+    if (title) props.title = title
+    if (tag === 'a') {
+      const href = element.getAttribute('href')
+      if (href && isSafeHref(href)) props.href = href
+    }
+    if (tag === 'br' || tag === 'hr') return [createElement(tag, props)]
+    return [createElement(tag, props, children)]
+  }
+
+  return Array.from(template.content.childNodes).flatMap((node, index) =>
+    renderNode(node, `${keyPrefix}-${index}`)
+  )
+}
+
+function isRawHtmlBlock(line: string): boolean {
+  return /^\s*<\/?[a-z][\w-]*(?:\s[^>]*)?>/i.test(line)
+}
 
 function splitCells(row: string): string[] {
   // `row` is guaranteed to start and end with a pipe.
@@ -47,6 +126,15 @@ export function Markdown({ source }: MarkdownProps) {
     const line = lines[index] ?? ''
     if (!line.trim()) {
       index += 1
+      continue
+    }
+    if (isRawHtmlBlock(line)) {
+      const html: string[] = []
+      while (index < lines.length && (lines[index] ?? '').trim()) {
+        html.push(lines[index] ?? '')
+        index += 1
+      }
+      blocks.push(<div key={`html-${index}`}>{rawHtmlNodes(html.join('\n'), `html-${index}`)}</div>)
       continue
     }
     const heading = line.match(/^(#{1,3})\s+(.+)$/)

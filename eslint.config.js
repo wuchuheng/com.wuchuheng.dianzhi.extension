@@ -78,6 +78,8 @@ export default tseslint.config(
             'tests/unit/dianzhi/ui/Markdown.spec.tsx',
             'tests/unit/dianzhi/ui/ToolTabs.spec.tsx',
             'tests/unit/dianzhi/protocol.spec.ts',
+            'tests/unit/options/App.spec.tsx',
+            'tests/unit/options/ToolConfig.spec.tsx',
           ],
         },
         tsconfigRootDir: import.meta.dirname,

@@ -79,3 +79,19 @@ describe('Markdown tables', () => {
     expect(host?.querySelector('table')).toBeNull()
   })
 })
+
+describe('Markdown raw HTML', () => {
+  it('renders allowed HTML elements but excludes unsafe content and attributes', async () => {
+    const host = await renderMarkdown(
+      '<div class="example"><mark>重点</mark><br /><a href="/docs">文档</a></div>\n\n<script>alert(1)</script><a href="javascript:alert(1)" onclick="alert(1)">危险链接</a>'
+    )
+
+    expect(host?.querySelector('.example mark')?.textContent).toBe('重点')
+    expect(host?.querySelector('.example br')).not.toBeNull()
+    expect(host?.querySelector('a[href="/docs"]')?.textContent).toBe('文档')
+    expect(host?.querySelector('script')).toBeNull()
+    expect(host?.querySelector('a[href^="javascript:"]')).toBeNull()
+    expect(host?.querySelector('[onclick]')).toBeNull()
+    expect(host?.querySelectorAll('a[href]')).toHaveLength(1)
+  })
+})

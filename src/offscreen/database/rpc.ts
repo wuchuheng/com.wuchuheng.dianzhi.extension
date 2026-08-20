@@ -116,7 +116,6 @@ const MUTATIONS = new Set<DatabaseOperation>([
   'migrateLegacy',
 ])
 
-const MAX_TOOL_LENGTH = 2000
 const MAX_SETTINGS_DATA_LENGTH = 100_000
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -128,11 +127,11 @@ function isPositiveInteger(value: unknown): value is number {
 }
 
 function isToolName(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0 && value.length <= MAX_TOOL_LENGTH
+  return typeof value === 'string' && value.trim().length > 0
 }
 
 function isToolPrompt(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0 && value.length <= MAX_TOOL_LENGTH
+  return typeof value === 'string' && value.trim().length > 0
 }
 
 function isOrderedIds(value: unknown): value is number[] {

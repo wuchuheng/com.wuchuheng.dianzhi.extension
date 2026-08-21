@@ -61,7 +61,7 @@ export default tseslint.config(
       },
       parserOptions: {
         projectService: {
-          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 12,
+          maximumDefaultProjectFileMatchCount_THIS_WILL_SLOW_DOWN_LINTING: 14,
           allowDefaultProject: [
             'eslint.config.js',
             '*.config.js',
@@ -72,10 +72,12 @@ export default tseslint.config(
             'tests/unit/content/selection/context.spec.ts',
             'tests/unit/content/views/scroll-guard.spec.ts',
             'tests/unit/content/views/useScrollGuard.spec.tsx',
+            'tests/unit/content/views/App.spec.tsx',
             'tests/unit/dianzhi/ui/message-time.spec.ts',
             'tests/unit/dianzhi/ui/markdown-text.spec.ts',
             'tests/unit/dianzhi/ui/MessageList.spec.tsx',
             'tests/unit/dianzhi/ui/Markdown.spec.tsx',
+            'tests/unit/dianzhi/ui/MarkdownStyles.spec.tsx',
             'tests/unit/dianzhi/ui/ToolTabs.spec.tsx',
             'tests/unit/dianzhi/protocol.spec.ts',
             'tests/unit/options/App.spec.tsx',

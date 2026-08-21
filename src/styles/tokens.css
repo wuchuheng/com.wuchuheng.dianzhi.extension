@@ -60,6 +60,9 @@
   --d-radius-sm: 8px;
   --d-radius-xs: 6px;
 
+  /* elevation */
+  --d-shadow-floating: 0 2px 8px rgb(16 24 40 / 0.12);
+
   /* type rhythm */
   font-family:
     Inter,

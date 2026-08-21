@@ -80,6 +80,27 @@ describe('Markdown tables', () => {
   })
 })
 
+describe('Markdown horizontal rules', () => {
+  it('renders a standalone --- line as a horizontal rule instead of paragraph text', async () => {
+    const host = await renderMarkdown('Before\n\n---\n\nAfter')
+    expect(host?.querySelector('hr')).not.toBeNull()
+    expect(
+      [...(host?.querySelectorAll('p') ?? [])].map((paragraph) => paragraph.textContent)
+    ).toEqual(['Before', 'After'])
+  })
+})
+
+describe('Markdown headings', () => {
+  it('renders heading levels one through five', async () => {
+    const host = await renderMarkdown('# one\n## two\n### three\n#### four\n##### five')
+    expect(host?.querySelector('h1')?.textContent).toBe('one')
+    expect(host?.querySelector('h2')?.textContent).toBe('two')
+    expect(host?.querySelector('h3')?.textContent).toBe('three')
+    expect(host?.querySelector('h4')?.textContent).toBe('four')
+    expect(host?.querySelector('h5')?.textContent).toBe('five')
+  })
+})
+
 describe('Markdown raw HTML', () => {
   it('renders allowed HTML elements but excludes unsafe content and attributes', async () => {
     const host = await renderMarkdown(

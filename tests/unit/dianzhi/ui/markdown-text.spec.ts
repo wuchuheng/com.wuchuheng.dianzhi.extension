@@ -15,6 +15,11 @@ describe('markdownToPlainText', () => {
     expect(markdownToPlainText('> quoted')).toBe('quoted')
   })
 
+  it('unwraps fourth- and fifth-level headings', () => {
+    expect(markdownToPlainText('#### Detail')).toBe('Detail')
+    expect(markdownToPlainText('##### Note')).toBe('Note')
+  })
+
   it('collapses table rows into pipes-joined cells and drops the delimiter row', () => {
     const source = '| 单词 | 音标 |\n|------|------|\n| run | /rʌn/ |'
     expect(markdownToPlainText(source)).toBe('单词 | 音标\nrun | /rʌn/')
@@ -26,6 +31,10 @@ describe('markdownToPlainText', () => {
 
   it('keeps one blank line between paragraphs', () => {
     expect(markdownToPlainText('para one\n\n\n\npara two')).toBe('para one\n\npara two')
+  })
+
+  it('omits horizontal rules because they have no plain-text content', () => {
+    expect(markdownToPlainText('Before\n\n---\n\nAfter')).toBe('Before\n\nAfter')
   })
 
   it('returns an empty string for blank input', () => {

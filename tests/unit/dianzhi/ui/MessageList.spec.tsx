@@ -55,29 +55,39 @@ afterEach(() => {
 })
 
 describe('MessageList meta', () => {
-  it('renders the created time and a copy button on messages when enabled', async () => {
+  it('renders the created time and both copy actions on messages when enabled', async () => {
     await renderMessageList(true, assistantMessage())
     const meta = host?.querySelector('.dz-message-meta')
     expect(meta).not.toBeNull()
     const time = meta?.querySelector('time[datetime]')
     expect(time?.textContent).toBe(formatMessageTime(assistantMessage().createdAt))
-    expect(meta?.querySelector('.dz-message-copy')).not.toBeNull()
+    expect(meta?.querySelector('[aria-label="复制纯文本"]')).not.toBeNull()
+    expect(meta?.querySelector('[aria-label="复制 Markdown"]')).not.toBeNull()
     // Meta sits below the bubble content, right-aligned (last child).
     expect(host?.querySelector('.dz-message')?.lastElementChild).toBe(meta)
   })
 
   it('copies the reply as plain text when the copy button is clicked', async () => {
     await renderMessageList(true, assistantMessage())
-    const button = host?.querySelector<HTMLButtonElement>('.dz-message-copy')
+    const button = host?.querySelector<HTMLButtonElement>('[aria-label="复制纯文本"]')
     await act(async () => {
       button?.click()
     })
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('hello world')
   })
 
+  it('copies the original Markdown when the Markdown copy button is clicked', async () => {
+    await renderMessageList(true, assistantMessage())
+    const button = host?.querySelector<HTMLButtonElement>('[aria-label="复制 Markdown"]')
+    await act(async () => {
+      button?.click()
+    })
+    expect(navigator.clipboard.writeText).toHaveBeenCalledWith('**hello** world')
+  })
+
   it('shows a 已复制 confirmation without shifting layout', async () => {
     await renderMessageList(true, assistantMessage())
-    const button = host?.querySelector<HTMLButtonElement>('.dz-message-copy')
+    const button = host?.querySelector<HTMLButtonElement>('[aria-label="复制纯文本"]')
     expect(host?.querySelector('.dz-copy-toast')).toBeNull()
     await act(async () => {
       button?.click()
@@ -89,14 +99,17 @@ describe('MessageList meta', () => {
 
   it('disables the copy button while the message is still streaming', async () => {
     await renderMessageList(true, assistantMessage({ status: 'streaming' }))
-    const button = host?.querySelector<HTMLButtonElement>('.dz-message-copy')
-    expect(button?.disabled).toBe(true)
+    const plainButton = host?.querySelector<HTMLButtonElement>('[aria-label="复制纯文本"]')
+    const markdownButton = host?.querySelector<HTMLButtonElement>('[aria-label="复制 Markdown"]')
+    expect(plainButton?.disabled).toBe(true)
+    expect(markdownButton?.disabled).toBe(true)
   })
 
   it('does not render meta when the prop is off (popover surfaces)', async () => {
     await renderMessageList(false, assistantMessage())
     expect(host?.querySelector('.dz-message-meta')).toBeNull()
-    expect(host?.querySelector('.dz-message-copy')).toBeNull()
+    expect(host?.querySelector('[aria-label="复制纯文本"]')).toBeNull()
+    expect(host?.querySelector('[aria-label="复制 Markdown"]')).toBeNull()
   })
 
   it('renders meta on user messages too, copying the user text', async () => {
@@ -106,7 +119,7 @@ describe('MessageList meta', () => {
     expect(meta).not.toBeNull()
     expect(meta?.querySelector('time[datetime]')).not.toBeNull()
     await act(async () => {
-      meta?.querySelector<HTMLButtonElement>('.dz-message-copy')?.click()
+      meta?.querySelector<HTMLButtonElement>('[aria-label="复制纯文本"]')?.click()
     })
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('你好')
   })

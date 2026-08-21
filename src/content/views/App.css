@@ -49,6 +49,9 @@
   --d-radius-sm: 8px;
   --d-radius-xs: 6px;
 
+  /* elevation */
+  --d-shadow-floating: 0 2px 8px rgb(16 24 40 / 0.12);
+
   color: var(--d-text);
   font-family:
     Inter,
@@ -220,14 +223,15 @@ textarea {
 .dz-body {
   min-height: 100px;
   overflow-y: auto;
-  padding: 12px;
+  padding: 12px 12px 40px;
 }
 .dz-messages {
   display: grid;
-  gap: 10px;
+  gap: 28px;
 }
 .dz-message {
   min-width: 0;
+  position: relative;
 }
 .dz-message.is-user {
   margin-left: 28px;
@@ -281,18 +285,106 @@ textarea {
 }
 .dz-markdown h1,
 .dz-markdown h2,
-.dz-markdown h3 {
+.dz-markdown h3,
+.dz-markdown h4,
+.dz-markdown h5 {
   margin: 0 0 8px;
+  font-weight: 700;
   line-height: 1.3;
 }
 .dz-markdown h1 {
-  font-size: 17px;
+  font-size: 32px;
 }
 .dz-markdown h2 {
-  font-size: 15px;
+  font-size: 24px;
 }
 .dz-markdown h3 {
+  font-size: 19px;
+}
+.dz-markdown h4 {
+  font-size: 16px;
+}
+.dz-markdown h5 {
   font-size: 14px;
+}
+.dz-markdown strong {
+  font-weight: 700;
+}
+.dz-markdown hr {
+  height: 0;
+  margin: 12px 0;
+  border: 0;
+  border-top: 1px solid var(--d-border);
+}
+.dz-message-meta {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  min-height: 24px;
+  gap: 8px;
+  padding: 2px 4px;
+  border: 1px solid var(--d-border);
+  border-radius: var(--d-radius-sm);
+  background: var(--d-surface);
+  box-shadow: var(--d-shadow-floating);
+  color: var(--d-text-muted);
+  font-size: 11px;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+.dz-message.is-user .dz-message-meta {
+  right: 0;
+  left: auto;
+}
+.dz-message:hover .dz-message-meta,
+.dz-message:focus-within .dz-message-meta {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.dz-message-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 2px 6px;
+  border: 1px solid var(--d-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--d-text-muted);
+  line-height: 1.4;
+  cursor: pointer;
+}
+.dz-message-copy:hover:not(:disabled) {
+  border-color: var(--d-border-brand);
+  color: var(--d-text);
+}
+.dz-message-copy:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.dz-copy-toast {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  padding: 2px 7px;
+  border-radius: var(--d-radius-xs);
+  background: var(--d-text-secondary);
+  color: var(--d-text-on-brand);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 1;
 }
 .dz-markdown ul,
 .dz-markdown ol {

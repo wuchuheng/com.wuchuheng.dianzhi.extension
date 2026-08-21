@@ -9,7 +9,7 @@ export interface MessageListProps {
   messages: readonly MessageRecord[]
   mode: 'card' | 'chat'
   reasoningEnabled: boolean
-  /** Render the created time and a copy button on every chat bubble (Side Panel). */
+  /** Render the time plus plain-text and Markdown copy actions on every message bubble. */
   showMeta?: boolean
 }
 
@@ -32,9 +32,39 @@ function CopyGlyph() {
   )
 }
 
-function CopyButton({ content, disabled }: { content: string; disabled: boolean }) {
+function MarkdownGlyph() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width={12}
+      height={12}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m7 8-4 4 4 4" />
+      <path d="m17 8 4 4-4 4" />
+      <path d="m14 5-4 14" />
+    </svg>
+  )
+}
+
+function CopyButton({
+  content,
+  disabled,
+  format,
+}: {
+  content: string
+  disabled: boolean
+  format: 'plainText' | 'markdown'
+}) {
   const [copied, setCopied] = useState(false)
   const timerRef = useRef<number | null>(null)
+  const isMarkdown = format === 'markdown'
+  const label = isMarkdown ? '复制 Markdown' : '复制纯文本'
 
   useEffect(() => {
     return () => {
@@ -45,7 +75,7 @@ function CopyButton({ content, disabled }: { content: string; disabled: boolean 
   const onCopy = async () => {
     if (!content) return
     try {
-      await navigator.clipboard.writeText(markdownToPlainText(content))
+      await navigator.clipboard.writeText(isMarkdown ? content : markdownToPlainText(content))
     } catch {
       return
     }
@@ -58,13 +88,13 @@ function CopyButton({ content, disabled }: { content: string; disabled: boolean 
     <>
       <button
         type="button"
-        className="dz-message-copy"
+        className={`dz-message-copy${isMarkdown ? ' is-markdown' : ''}`}
         disabled={disabled || !content}
         onClick={onCopy}
-        aria-label="复制回复"
-        title="复制回复"
+        aria-label={label}
+        title={label}
       >
-        <CopyGlyph />
+        {isMarkdown ? <MarkdownGlyph /> : <CopyGlyph />}
       </button>
       {copied && (
         <span className="dz-copy-toast" role="status">
@@ -103,7 +133,16 @@ function Message({
       {showMeta && (
         <div className="dz-message-meta">
           <time dateTime={message.createdAt}>{formatMessageTime(message.createdAt)}</time>
-          <CopyButton content={message.content} disabled={message.status === 'streaming'} />
+          <CopyButton
+            content={message.content}
+            disabled={message.status === 'streaming'}
+            format="plainText"
+          />
+          <CopyButton
+            content={message.content}
+            disabled={message.status === 'streaming'}
+            format="markdown"
+          />
         </div>
       )}
     </article>

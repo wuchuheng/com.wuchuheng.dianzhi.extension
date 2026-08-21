@@ -12,6 +12,7 @@ import { Composer } from '@/dianzhi/ui/Composer'
 import { ConversationStatus } from '@/dianzhi/ui/ConversationStatus'
 import { MessageList } from '@/dianzhi/ui/MessageList'
 import { ToolTabs } from '@/dianzhi/ui/ToolTabs'
+import { markdownToPlainText } from '@/dianzhi/ui/markdown-text'
 import {
   contentConversationCommand,
   contentSettingsCommand,
@@ -20,6 +21,7 @@ import {
 import { createSelectionController } from '../selection/controller'
 import { computePlacement, type AnchorRect, type Placement } from '../popover/placement'
 import { formatShortcut, matchesShortcut, toolShortcutNumber } from './shortcuts'
+import { openOptionsPageFromContent } from './open-options-page'
 import { useScrollGuard } from './scroll-guard'
 import './App.css'
 
@@ -92,6 +94,15 @@ function IconClose() {
   )
 }
 
+function IconCopy() {
+  return (
+    <svg {...actionSvgProps()}>
+      <rect x="8" y="8" width="12" height="12" rx="2" />
+      <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" />
+    </svg>
+  )
+}
+
 export interface ContentAppProps {
   state: ConversationViewState
   placement: Placement
@@ -150,6 +161,14 @@ export function ContentApp({
   const arrowTop = placement.direction === 'below' ? placement.y - 6 : placement.y + panelHeight - 6
   const shortcutTip = (shortcut: string) => ` (${formatShortcut(shortcut)})`
   const expandLabel = state.expanded ? '收起宽屏' : '展开宽屏'
+  const onCopyLatestReply = async () => {
+    if (!latestAssistant?.content || streaming) return
+    try {
+      await navigator.clipboard.writeText(markdownToPlainText(latestAssistant.content))
+    } catch {
+      return
+    }
+  }
   return (
     <div className="dz-layer" data-dianzhi-popover="true">
       <div
@@ -181,6 +200,15 @@ export function ContentApp({
             <div className="dz-header-main" />
           )}
           <div className="dz-actions">
+            <button
+              type="button"
+              aria-label="复制纯文本"
+              title="复制纯文本"
+              disabled={streaming || !latestAssistant?.content}
+              onClick={() => void onCopyLatestReply()}
+            >
+              <IconCopy />
+            </button>
             <button
               type="button"
               aria-label={state.mode === 'card' ? '展开对话' : '显示卡片'}
@@ -532,7 +560,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
           payload: { conversationId },
         }))
       }
-      onOpenSettings={() => void chrome.runtime.openOptionsPage()}
+      onOpenSettings={() => openOptionsPageFromContent()}
     />
   )
 }

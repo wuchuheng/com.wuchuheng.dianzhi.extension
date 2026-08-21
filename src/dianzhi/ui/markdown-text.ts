@@ -6,7 +6,7 @@
  */
 function stripInline(line: string): string {
   return line
-    .replace(/^(#{1,3})\s+/, '')
+    .replace(/^(#{1,5})\s+/, '')
     .replace(/^>\s?/, '')
     .replace(/^[-*]\s+/, '')
     .replace(/^\d+\.\s+/, '')
@@ -24,6 +24,7 @@ export function markdownToPlainText(source: string): string {
       if (out.length > 0 && out[out.length - 1] !== '') out.push('')
       continue
     }
+    if (/^-{3,}\s*$/.test(line)) continue
     const table = /^\|([^|].*)\|\s*$/.exec(line)
     if (table) {
       const body = table[1] ?? ''

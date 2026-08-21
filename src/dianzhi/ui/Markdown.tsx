@@ -137,7 +137,7 @@ export function Markdown({ source }: MarkdownProps) {
       blocks.push(<div key={`html-${index}`}>{rawHtmlNodes(html.join('\n'), `html-${index}`)}</div>)
       continue
     }
-    const heading = line.match(/^(#{1,3})\s+(.+)$/)
+    const heading = line.match(/^(#{1,5})\s+(.+)$/)
     if (heading) {
       const content = inline(heading[2] ?? '', `h-${index}`)
       const level = heading[1]?.length
@@ -146,10 +146,19 @@ export function Markdown({ source }: MarkdownProps) {
           <h1 key={index}>{content}</h1>
         ) : level === 2 ? (
           <h2 key={index}>{content}</h2>
-        ) : (
+        ) : level === 3 ? (
           <h3 key={index}>{content}</h3>
+        ) : level === 4 ? (
+          <h4 key={index}>{content}</h4>
+        ) : (
+          <h5 key={index}>{content}</h5>
         )
       )
+      index += 1
+      continue
+    }
+    if (/^-{3,}\s*$/.test(line)) {
+      blocks.push(<hr key={index} />)
       index += 1
       continue
     }

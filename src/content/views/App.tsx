@@ -21,6 +21,7 @@ import {
 import { createSelectionController } from '../selection/controller'
 import { computePlacement, type AnchorRect, type Placement } from '../popover/placement'
 import { formatShortcut, matchesShortcut, toolShortcutNumber } from './shortcuts'
+import { log, logError, Scope } from '@/events/logger'
 import { openOptionsPageFromContent } from './open-options-page'
 import { useScrollGuard } from './scroll-guard'
 import { useStreamingHeightController } from './use-streaming-height-controller'
@@ -355,12 +356,27 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
     [sendCommand, state.snapshot?.conversation.id]
   )
   const togglePanel = useCallback(() => {
-    withConversation((conversationId) => ({
+    const conversationId = state.snapshot?.conversation.id
+    if (!conversationId) {
+      logError(Scope.CONTENT_SCRIPT, 'Side Panel toggle ignored because the page has no conversation.')
+      return
+    }
+    log(Scope.CONTENT_SCRIPT, 'Page requested Side Panel toggle.', { conversationId })
+    void sendCommand({
       type: 'panel.toggle',
       requestId: requestId('panel'),
       payload: { conversationId },
-    }))
-  }, [requestId, withConversation])
+    })
+      .then((result) =>
+        log(Scope.CONTENT_SCRIPT, 'Side Panel toggle completed.', {
+          conversationId,
+          returnedSnapshot: result.snapshot !== null,
+        })
+      )
+      .catch((error: unknown) =>
+        logError(Scope.CONTENT_SCRIPT, 'Side Panel toggle failed.', error)
+      )
+  }, [requestId, sendCommand, state.snapshot?.conversation.id])
 
   useEffect(() => {
     void contentSettingsCommand
@@ -503,6 +519,10 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       }
       if (matchesShortcut(event, settings.shortcuts.dock)) {
         event.preventDefault()
+        log(Scope.CONTENT_SCRIPT, 'Page received Side Panel toggle shortcut.', {
+          hasConversation: state.snapshot !== null,
+          panelOpen: state.panelOpen,
+        })
         togglePanel()
         return
       }
@@ -526,10 +546,10 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       }
     }
     document.addEventListener('pointerdown', onPointerDown)
-    document.addEventListener('keydown', onKeyDown)
+    document.addEventListener('keydown', onKeyDown, true)
     return () => {
       document.removeEventListener('pointerdown', onPointerDown)
-      document.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('keydown', onKeyDown, true)
     }
   }, [closePopover, extensionHost, requestId, selectTool, settings.shortcuts, state, togglePanel])
 

@@ -8,6 +8,7 @@ import type { DianzhiSettings } from '@/dianzhi/domain/types'
 import type { ConversationCommand, ConversationUpdate } from '@/dianzhi/domain/protocol'
 import { SIDEPANEL_PORT_NAME } from '@/dianzhi/domain/protocol'
 import { extensionConversationCommand, settingsCommand } from '@/events/config'
+import { log, logError, Scope } from '@/events/logger'
 import { matchesShortcut, toolShortcutNumber } from '@/dianzhi/domain/shortcuts'
 import {
   INITIAL_PANEL_STATE,
@@ -150,6 +151,7 @@ export default function App() {
   const [settings, setSettings] = useState<DianzhiSettings>(DEFAULT_SETTINGS)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const handoffAcknowledged = useRef(false)
+  const panelPortRef = useRef<chrome.runtime.Port | null>(null)
 
   const command = useCallback(async (value: ConversationCommand) => {
     const result = await extensionConversationCommand.dispatch(value)
@@ -168,6 +170,8 @@ export default function App() {
       if (disposed) return
       const current = chrome.runtime.connect({ name: SIDEPANEL_PORT_NAME })
       port = current
+      panelPortRef.current = current
+      log(Scope.EXTENSION_PAGE, 'Side Panel port connected.')
       dispatch({ type: 'panel.connected' })
       current.onMessage.addListener((value: unknown) => {
         if (
@@ -180,13 +184,22 @@ export default function App() {
       })
       current.onDisconnect.addListener(() => {
         if (disposed || port !== current) return
+        log(Scope.EXTENSION_PAGE, 'Side Panel port disconnected; scheduling reconnect.')
         port = null
+        panelPortRef.current = null
         dispatch({ type: 'panel.disconnected' })
         reconnectTimer = window.setTimeout(connect, 100)
       })
       void chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
-        if (!disposed && port === current && tab?.id)
-          current.postMessage({ type: 'ready', tabId: tab.id })
+        if (disposed || port !== current || !tab?.id) {
+          logError(Scope.EXTENSION_PAGE, 'Side Panel could not bind its port to an active tab.')
+          return
+        }
+        log(Scope.EXTENSION_PAGE, 'Side Panel binding port to active tab.', {
+          tabId: tab.id,
+          windowId: tab.windowId,
+        })
+        current.postMessage({ type: 'ready', tabId: tab.id, windowId: tab.windowId })
       })
     }
 
@@ -195,6 +208,7 @@ export default function App() {
       disposed = true
       if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
       port?.disconnect()
+      panelPortRef.current = null
     }
   }, [])
 
@@ -245,11 +259,22 @@ export default function App() {
         matchesShortcut(event, settings.shortcuts.dock)
       ) {
         event.preventDefault()
-        withConversation((conversationId) => ({
-          type: 'panel.close',
-          requestId: requestId('close'),
-          payload: { conversationId },
-        }))
+        const port = panelPortRef.current
+        log(Scope.EXTENSION_PAGE, 'Side Panel close shortcut received.', {
+          shortcut: matchesShortcut(event, settings.shortcuts.dock) ? 'dock' : 'close',
+          hasConversation: state.snapshot !== null,
+          portConnected: port !== null,
+        })
+        if (!port) {
+          logError(Scope.EXTENSION_PAGE, 'Side Panel close shortcut ignored because its port is disconnected.')
+          return
+        }
+        try {
+          port.postMessage({ type: 'close' })
+          log(Scope.EXTENSION_PAGE, 'Side Panel close request posted to background.')
+        } catch (error) {
+          logError(Scope.EXTENSION_PAGE, 'Side Panel close request could not be posted.', error)
+        }
       } else if (toolNumber !== null) {
         event.preventDefault()
         const tool = state.snapshot?.tools[toolNumber - 1]
@@ -267,8 +292,8 @@ export default function App() {
         if (toolId) selectTool(toolId)
       }
     }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
   }, [selectTool, settings.shortcuts, state.snapshot, withConversation])
 
   return (

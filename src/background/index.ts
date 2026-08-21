@@ -34,7 +34,7 @@ import { log, logError, Scope } from '@/events/logger'
 const SETTINGS_KEY = 'dianzhi.settings'
 const SESSION_KEY = 'dianzhi.tab-conversations'
 const nativeSidePanel = chrome.sidePanel as typeof chrome.sidePanel & {
-  close(options: { tabId: number }): Promise<void>
+  close(options: { windowId: number }): Promise<void>
 }
 
 function parseSettingsCommand(value: unknown): SettingsCommand {
@@ -112,7 +112,7 @@ const manager = createConversationManager({
   },
   sidePanel: {
     open: async (tabId) => chrome.sidePanel.open({ tabId }),
-    close: async (tabId) => nativeSidePanel.close({ tabId }),
+    close: async (windowId) => nativeSidePanel.close({ windowId }),
   },
 })
 managerRef.current = manager

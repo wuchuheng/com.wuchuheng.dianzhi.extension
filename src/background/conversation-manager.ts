@@ -9,6 +9,7 @@ import type {
   MessageRecord,
 } from '@/dianzhi/domain/protocol'
 import { SIDEPANEL_PORT_NAME } from '@/dianzhi/domain/protocol'
+import { log, logError, Scope } from '@/events/logger'
 import type { DianzhiSettings } from '@/dianzhi/domain/types'
 import type { OffscreenClient } from './offscreen-client'
 import type { ProviderRunHandle, ProviderRunInput } from './provider-runner'
@@ -19,6 +20,7 @@ export interface TabConversationState {
   activeToolId: number
   activeConversationId: number
   panelOpen: boolean
+  windowId?: number
 }
 
 export interface ConversationSessionStore {
@@ -34,6 +36,11 @@ interface PendingHandoff {
   superseded: boolean
 }
 
+interface PanelTabBinding {
+  tabId: number
+  windowId: number
+}
+
 export interface ConversationManagerDependencies {
   database: OffscreenClient
   loadSettings(): Promise<DianzhiSettings>
@@ -45,7 +52,7 @@ export interface ConversationManagerDependencies {
   session: ConversationSessionStore
   sidePanel: {
     open(tabId: number): Promise<void>
-    close(tabId: number): Promise<void>
+    close(windowId: number): Promise<void>
   }
   setTimeout?(callback: () => void, milliseconds: number): ReturnType<typeof globalThis.setTimeout>
   clearTimeout?(handle: ReturnType<typeof globalThis.setTimeout>): void
@@ -78,7 +85,7 @@ export function createConversationManager(dependencies: ConversationManagerDepen
   const liveRuns = new Map<number, ProviderRunHandle>()
   const subscribers = new Map<number, Set<chrome.runtime.Port>>()
   const pendingHandoffs = new Map<number, PendingHandoff>()
-  const panelTabs = new Map<chrome.runtime.Port, number>()
+  const panelTabs = new Map<chrome.runtime.Port, PanelTabBinding>()
   const pendingPanelCloses = new Map<number, ReturnType<typeof globalThis.setTimeout>>()
   const schedule = dependencies.setTimeout ?? globalThis.setTimeout
   const cancel = dependencies.clearTimeout ?? globalThis.clearTimeout
@@ -125,7 +132,9 @@ export function createConversationManager(dependencies: ConversationManagerDepen
         state.activeConversationId > 0 &&
         Number.isSafeInteger(state.activeToolId) &&
         state.activeToolId > 0 &&
-        typeof state.panelOpen === 'boolean'
+        typeof state.panelOpen === 'boolean' &&
+        (state.windowId === undefined ||
+          (Number.isSafeInteger(state.windowId) && state.windowId > 0))
       ) {
         tabStates.set(numericTabId, { ...state })
       }
@@ -246,13 +255,18 @@ export function createConversationManager(dependencies: ConversationManagerDepen
 
   /**
    * Idempotent panel closure: no-op when the panel is already marked closed,
-   * and treats a browser rejection ("No active tab-specific side panel", e.g.
-   * after a manual close or a disconnect race) as the desired outcome.
+   * and treats a browser rejection after a manual close or disconnect race as
+   * the desired outcome.
    */
-  async function closePanelIfOpen(tabId: number, conversationId: number): Promise<void> {
+  async function closePanelIfOpen(
+    tabId: number,
+    conversationId: number,
+    windowId?: number
+  ): Promise<void> {
     if (!tabStates.get(tabId)?.panelOpen) return
     cancelPendingPanelClose(tabId)
-    await dependencies.sidePanel.close(tabId).catch(() => undefined)
+    const resolvedWindowId = windowId ?? tabStates.get(tabId)?.windowId
+    if (resolvedWindowId) await dependencies.sidePanel.close(resolvedWindowId).catch(() => undefined)
     await markPanelClosed(tabId, conversationId)
   }
 
@@ -376,6 +390,7 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       activeToolId: tool.id,
       activeConversationId: stored.conversation.id,
       panelOpen: previous?.panelOpen ?? false,
+      windowId: sender.tab?.windowId,
     })
     await persistStates()
     const assistant = await dependencies.database.request('appendAssistant', {
@@ -418,15 +433,19 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       const tabId = sender.tab?.id
       if (!tabId)
         throw invalid('The Side Panel must be toggled from a content-script user gesture.')
+      log(Scope.BACKGROUND, 'Content Side Panel command received.', {
+        type: command.type,
+        tabId,
+        panelOpen: tabStates.get(tabId)?.panelOpen ?? false,
+      })
 
-      // Toggle-close: the panel is already open and showing this conversation.
+      // Toggle-close is tab scoped: a hidden or stale content-script view may
+      // hold an older conversation ID while this tab's Side Panel is open.
       if (command.type === 'panel.toggle') {
         const panelState = tabStates.get(tabId)
-        if (
-          panelState?.panelOpen &&
-          panelState.activeConversationId === command.payload.conversationId
-        ) {
-          await closePanelIfOpen(tabId, command.payload.conversationId)
+        if (panelState?.panelOpen) {
+          log(Scope.BACKGROUND, 'Content Side Panel toggle is closing the open panel.', { tabId })
+          await closePanelIfOpen(tabId, panelState.activeConversationId, sender.tab?.windowId)
           const settings = await dependencies.loadSettings()
           return {
             accepted: true,
@@ -434,6 +453,10 @@ export function createConversationManager(dependencies: ConversationManagerDepen
           }
         }
       }
+      log(Scope.BACKGROUND, 'Content Side Panel command is opening the panel.', {
+        tabId,
+        conversationId: command.payload.conversationId,
+      })
       let resolveReady!: () => void
       let rejectReady!: (error: unknown) => void
       const ready = new Promise<void>((resolve, reject) => {
@@ -474,6 +497,10 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       try {
         await dependencies.sidePanel.open(tabId)
         opened = true
+        log(Scope.BACKGROUND, 'Chrome Side Panel open completed; awaiting panel readiness.', {
+          tabId,
+          conversationId: command.payload.conversationId,
+        })
         const settings = await dependencies.loadSettings()
         const snapshot = await loadSnapshot(command.payload.conversationId, settings)
         if (snapshot.conversation.tabId !== tabId) {
@@ -484,8 +511,10 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       } catch (error) {
         takePendingHandoff(command.payload.conversationId, pending)
         if (opened && !pending.superseded) {
-          await dependencies.sidePanel.close(tabId).catch(() => undefined)
+          const windowId = sender.tab?.windowId
+          if (windowId) await dependencies.sidePanel.close(windowId).catch(() => undefined)
         }
+        logError(Scope.BACKGROUND, 'Chrome Side Panel open or handoff failed.', error)
         if (error instanceof DianzhiError) throw error
         throw new DianzhiError({
           code: 'SIDE_PANEL_OPEN_FAILED',
@@ -628,6 +657,10 @@ export function createConversationManager(dependencies: ConversationManagerDepen
           type: 'panel.handoffReady',
           conversationId: command.payload.conversationId,
         })
+        log(Scope.BACKGROUND, 'Side Panel rendered and handoff completed.', {
+          tabId: pending.tabId,
+          conversationId: command.payload.conversationId,
+        })
         pending.resolve()
         return { accepted: true, snapshot }
       } catch (error) {
@@ -675,20 +708,40 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       }
     }
 
-    port.onMessage.addListener((message: unknown) => {
+    port.onMessage.addListener(async (message: unknown) => {
       if (typeof message !== 'object' || message === null) return
-      const input = message as { type?: unknown; tabId?: unknown; conversationId?: unknown }
-      if (input.type === 'ready' && Number.isSafeInteger(input.tabId) && Number(input.tabId) > 0) {
+      const input = message as {
+        type?: unknown
+        tabId?: unknown
+        windowId?: unknown
+        conversationId?: unknown
+      }
+      if (
+        input.type === 'ready' &&
+        Number.isSafeInteger(input.tabId) &&
+        Number(input.tabId) > 0 &&
+        Number.isSafeInteger(input.windowId) &&
+        Number(input.windowId) > 0
+      ) {
         const tabId = Number(input.tabId)
+        const windowId = Number(input.windowId)
+        log(Scope.BACKGROUND, 'Side Panel port ready received.', { tabId, windowId })
         cancelPendingPanelClose(tabId)
-        panelTabs.set(port, tabId)
+        panelTabs.set(port, { tabId, windowId })
         const pending = [...pendingHandoffs.entries()].find(
           ([, handoff]) => handoff.tabId === tabId
         )
         const state = tabStates.get(tabId)
         const conversationId =
           pending?.[0] ?? (state?.panelOpen ? state.activeConversationId : null)
-        if (!conversationId) return
+        if (!conversationId) {
+          log(Scope.BACKGROUND, 'Side Panel has no active conversation for its tab.', { tabId })
+          return
+        }
+        log(Scope.BACKGROUND, 'Side Panel subscribing to the active conversation.', {
+          tabId,
+          conversationId,
+        })
         subscribe(conversationId)
         if (!liveSnapshots.has(conversationId)) {
           void dependencies
@@ -697,6 +750,27 @@ export function createConversationManager(dependencies: ConversationManagerDepen
             .then((snapshot) => port.postMessage({ type: 'conversation.sync', snapshot }))
             .catch(() => undefined)
         }
+        return
+      }
+      if (input.type === 'close') {
+        const binding = panelTabs.get(port)
+        if (!binding) {
+          logError(Scope.BACKGROUND, 'Side Panel close request ignored because the port has no tab binding.')
+          return
+        }
+        const { tabId, windowId } = binding
+        const conversationId = tabStates.get(tabId)?.activeConversationId
+        log(Scope.BACKGROUND, 'Side Panel close request received.', {
+          tabId,
+          hasConversation: conversationId !== undefined,
+        })
+        try {
+          await dependencies.sidePanel.close(windowId)
+          log(Scope.BACKGROUND, 'Chrome Side Panel close completed.', { tabId, windowId })
+        } catch (error) {
+          logError(Scope.BACKGROUND, 'Chrome Side Panel close failed.', error)
+        }
+        if (conversationId) await markPanelClosed(tabId, conversationId)
         return
       }
       if (input.type !== 'subscribe' || !Number.isSafeInteger(input.conversationId)) return
@@ -711,9 +785,10 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       ports.delete(port)
       if (ports.size === 0) subscribers.delete(conversationId)
     }
-    const tabId = panelTabs.get(port)
+    const binding = panelTabs.get(port)
     panelTabs.delete(port)
-    if (!tabId) return
+    if (!binding) return
+    const { tabId } = binding
     const pending = [...pendingHandoffs.entries()].find(([, handoff]) => handoff.tabId === tabId)
     const conversationId = pending?.[0] ?? tabStates.get(tabId)?.activeConversationId
     if (!conversationId) return

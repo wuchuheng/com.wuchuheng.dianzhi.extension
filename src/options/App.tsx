@@ -13,6 +13,7 @@ export interface OptionsViewProps {
   section: OptionsSection
   settings: DianzhiSettings
   status: string
+  connectionStatus: string
   errors: SettingsProblem[]
   testing: boolean
   revealKey: boolean
@@ -63,7 +64,7 @@ export function OptionsView(props: OptionsViewProps) {
 
   return (
     <div className="options-shell">
-      <aside>
+      <aside className="options-sidebar">
         <div className="options-brand">
           <span>点</span>
           <div>
@@ -92,7 +93,7 @@ export function OptionsView(props: OptionsViewProps) {
           ))}
         </nav>
       </aside>
-      <main>
+      <main className="options-content" tabIndex={-1}>
         {props.status && (
           <div className="status-toast" role="status" aria-live="polite">
             {props.status}
@@ -104,118 +105,140 @@ export function OptionsView(props: OptionsViewProps) {
             <p className="lead">
               连接任意 OpenAI 兼容服务。密钥只保存在本地数据库中，不会同步到云端。
             </p>
-            <div className="settings-card grid-two">
-              <label className="span-two">
-                API 地址
-                <input
-                  {...fieldProps('provider.baseUrl')}
-                  value={settings.provider.baseUrl}
-                  onChange={(e) => updateProvider({ baseUrl: e.target.value })}
-                />
-              </label>
-              <FieldError problem={errorFor('provider.baseUrl')} full />
-              <label>
-                API Key
-                <span className="secret">
-                  <input
-                    {...fieldProps('provider.apiKey')}
-                    type={props.revealKey ? 'text' : 'password'}
-                    autoComplete="off"
-                    value={settings.provider.apiKey}
-                    onChange={(e) => updateProvider({ apiKey: e.target.value })}
-                  />
-                  <button type="button" onClick={props.onRevealKey} style={{ width: '60px' }}>
-                    {props.revealKey ? '隐藏' : '显示'}
+            <div className="provider-settings">
+              <fieldset className="settings-card provider-connection">
+                <legend>连接</legend>
+                <div className="grid-two">
+                  <div className="field-control span-two">
+                    <label>
+                      API 地址
+                      <input
+                        {...fieldProps('provider.baseUrl')}
+                        value={settings.provider.baseUrl}
+                        onChange={(e) => updateProvider({ baseUrl: e.target.value })}
+                        placeholder="https://api.example.com/v1"
+                      />
+                    </label>
+                    <p className="field-hint">填写 OpenAI 兼容服务的 Base URL。</p>
+                    <FieldError problem={errorFor('provider.baseUrl')} />
+                  </div>
+                  <div className="field-control">
+                    <label>
+                      API 密钥
+                      <span className="secret">
+                        <input
+                          {...fieldProps('provider.apiKey')}
+                          type={props.revealKey ? 'text' : 'password'}
+                          autoComplete="off"
+                          value={settings.provider.apiKey}
+                          onChange={(e) => updateProvider({ apiKey: e.target.value })}
+                        />
+                        <button type="button" onClick={props.onRevealKey}>
+                          {props.revealKey ? '隐藏' : '显示'}
+                        </button>
+                      </span>
+                    </label>
+                  </div>
+                  <div className="field-control">
+                    <label>
+                      模型
+                      <input
+                        {...fieldProps('provider.model')}
+                        value={settings.provider.model}
+                        onChange={(e) => updateProvider({ model: e.target.value })}
+                        placeholder="例如：openai/gpt-5"
+                      />
+                    </label>
+                    <FieldError problem={errorFor('provider.model')} />
+                  </div>
+                </div>
+                <div className="connection-actions">
+                  <button
+                    type="button"
+                    className="primary"
+                    onClick={props.onTest}
+                    disabled={props.testing}
+                  >
+                    {props.testing ? '测试中…' : '测试连接'}
                   </button>
-                </span>
-              </label>
-              <label>
-                模型
-                <input
-                  {...fieldProps('provider.model')}
-                  value={settings.provider.model}
-                  onChange={(e) => updateProvider({ model: e.target.value })}
-                />
-              </label>
-              <FieldError problem={errorFor('provider.model')} />
-              <label>
-                温度 <output>{settings.provider.temperature.toFixed(1)}</output>
-                <input
-                  {...fieldProps('provider.temperature')}
-                  type="range"
-                  min="0"
-                  max="2"
-                  step="0.1"
-                  value={settings.provider.temperature}
-                  onChange={(e) => updateProvider({ temperature: Number(e.target.value) })}
-                />
-              </label>
-              <label>
-                思考开关参数
-                <select
-                  value={settings.provider.thinkingParam}
-                  onChange={(e) =>
-                    updateProvider({
-                      thinkingParam: e.target.value as DianzhiSettings['provider']['thinkingParam'],
-                    })
-                  }
-                >
-                  <option value="">不使用（仅发送 reasoning_effort）</option>
-                  <option value="enable_thinking">
-                    enable_thinking（百炼 / Qwen / DeepSeek 网关）
-                  </option>
-                </select>
-              </label>
-              <label className="switch-row">
-                <input
-                  type="checkbox"
-                  checked={settings.provider.reasoningEnabled}
-                  onChange={(e) => updateProvider({ reasoningEnabled: e.target.checked })}
-                />
-                推理模式
-              </label>
-              <p className="field-hint">
-                未勾选时，网关模式（enable_thinking）会发送 enable_thinking:false 明确关闭推理；
-                “不使用”模式（OpenAI 兼容）无关闭参数，不发送任何字段，服务商默认行为仍会生效。
-              </p>
-              <label>
-                推理强度
-                <select
-                  value={settings.provider.reasoningEffort}
-                  disabled={
-                    !settings.provider.reasoningEnabled || Boolean(settings.provider.thinkingParam)
-                  }
-                  onChange={(e) =>
-                    updateProvider({
-                      reasoningEffort: e.target
-                        .value as DianzhiSettings['provider']['reasoningEffort'],
-                    })
-                  }
-                >
-                  <option value="low">低</option>
-                  <option value="medium">中</option>
-                  <option value="high">高</option>
-                </select>
-              </label>
-              <label className="span-two">
-                额外请求字段（JSON）
-                <textarea
-                  {...fieldProps('provider.extraBody')}
-                  value={settings.provider.extraBody}
-                  onChange={(e) => updateProvider({ extraBody: e.target.value })}
-                  placeholder='{"top_p": 0.9}'
-                />
-              </label>
-              <FieldError problem={errorFor('provider.extraBody')} full />
+                  {props.connectionStatus && (
+                    <p className="connection-status" role="status">
+                      {props.connectionStatus}
+                    </p>
+                  )}
+                </div>
+              </fieldset>
+              <fieldset className="settings-card provider-behavior">
+                <legend>回复行为</legend>
+                <div className="grid-two">
+                  <div className="field-control">
+                    <label>
+                      温度 <output>{settings.provider.temperature.toFixed(1)}</output>
+                      <input
+                        {...fieldProps('provider.temperature')}
+                        type="range"
+                        min="0"
+                        max="2"
+                        step="0.1"
+                        value={settings.provider.temperature}
+                        onChange={(e) => updateProvider({ temperature: Number(e.target.value) })}
+                      />
+                    </label>
+                  </div>
+                  <label className="switch-row">
+                    <input
+                      {...fieldProps('provider.reasoningEnabled')}
+                      type="checkbox"
+                      checked={settings.provider.reasoningEnabled}
+                      onChange={(e) => updateProvider({ reasoningEnabled: e.target.checked })}
+                    />
+                    推理模式
+                  </label>
+                  {settings.provider.reasoningEnabled && (
+                    <div className="field-control">
+                      <label>
+                        推理强度
+                        <select
+                          value={settings.provider.reasoningEffort}
+                          onChange={(e) =>
+                            updateProvider({
+                              reasoningEffort: e.target
+                                .value as DianzhiSettings['provider']['reasoningEffort'],
+                            })
+                          }
+                        >
+                          <option value="auto">自动（推荐）</option>
+                          <option value="low">低</option>
+                          <option value="medium">中</option>
+                          <option value="high">高</option>
+                        </select>
+                      </label>
+                    </div>
+                  )}
+                  <p className="field-hint span-two">
+                    自动使用模型默认策略；更高强度可能增加响应时间和费用。部分服务商会使用自己的默认强度。
+                  </p>
+                </div>
+              </fieldset>
+              <details className="settings-card provider-advanced">
+                <summary>
+                  高级设置 <span>仅在需要额外请求参数时展开</span>
+                </summary>
+                <div className="field-control">
+                  <label>
+                    额外请求字段（JSON）
+                    <textarea
+                      {...fieldProps('provider.extraBody')}
+                      value={settings.provider.extraBody}
+                      onChange={(e) => updateProvider({ extraBody: e.target.value })}
+                      placeholder='{"top_p": 0.9}'
+                    />
+                  </label>
+                  <p className="field-hint">推理字段由上方开关管理，不能在这里覆盖。</p>
+                  <FieldError problem={errorFor('provider.extraBody')} />
+                </div>
+              </details>
             </div>
-            <button
-              type="button"
-              className="secondary"
-              onClick={props.onTest}
-              disabled={props.testing}
-            >
-              {props.testing ? '测试中…' : '测试连接'}
-            </button>
           </section>
         )}
         {props.section === 'tools' && (
@@ -340,6 +363,7 @@ export default function App() {
   const [status, setStatus] = useState('正在加载…')
   const [revealKey, setRevealKey] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [connectionStatus, setConnectionStatus] = useState('')
   const [loaded, setLoaded] = useState(false)
   const hydratedRef = useRef(false)
   const lastSavedRef = useRef('')
@@ -402,15 +426,17 @@ export default function App() {
 
   const test = () => {
     if (!validation.ok) {
-      setStatus('请先修正配置')
+      setConnectionStatus('请先修正连接配置')
       return
     }
     setTesting(true)
-    setStatus('正在测试连接…')
+    setConnectionStatus('正在测试连接…')
     void settingsCommand
       .dispatch({ type: 'settings.testProvider', requestId: requestId('test'), settings })
-      .then(() => setStatus('连接成功'))
-      .catch((error: unknown) => setStatus(error instanceof Error ? error.message : '连接失败'))
+      .then(() => setConnectionStatus('连接成功：服务和模型可用'))
+      .catch((error: unknown) =>
+        setConnectionStatus(error instanceof Error ? error.message : '连接失败')
+      )
       .finally(() => setTesting(false))
   }
   const displayStatus = loaded && !validation.ok && !status ? '请修正标记的问题' : status
@@ -420,6 +446,7 @@ export default function App() {
       section={section}
       settings={settings}
       status={displayStatus}
+      connectionStatus={connectionStatus}
       errors={validation.errors}
       testing={testing}
       revealKey={revealKey}
@@ -427,6 +454,7 @@ export default function App() {
       onSectionChange={setSection}
       onSettingsChange={(next) => {
         setStatus('')
+        setConnectionStatus('')
         setSettings(next)
       }}
       onRevealKey={() => setRevealKey((value) => !value)}

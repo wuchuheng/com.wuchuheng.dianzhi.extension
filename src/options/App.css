@@ -78,19 +78,21 @@
 }
 
 .options-shell {
-  min-height: 100vh;
+  height: 100dvh;
+  min-height: 0;
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 248px minmax(0, 1fr);
   width: min(100%, 1560px);
   justify-content: center;
-  gap: 24px;
-  padding: 34px 20px 40px;
+  gap: 16px;
+  padding: 16px;
   margin: 0 auto;
 }
-.options-shell aside {
-  position: sticky;
-  top: 24px;
-  align-self: start;
+.options-sidebar {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  padding: 0;
 }
 .options-brand {
   display: flex;
@@ -104,6 +106,7 @@
   place-items: center;
   width: 38px;
   height: 38px;
+  border: 0;
   border-radius: 11px;
   color: var(--d-text-on-brand);
   background: var(--d-brand);
@@ -130,6 +133,9 @@
   font-size: var(--d-text-label);
   font-weight: 600;
   cursor: pointer;
+  transition:
+    background 150ms ease,
+    color 150ms ease;
 }
 .options-shell nav button:hover {
   background: var(--d-surface-soft);
@@ -139,8 +145,16 @@
   background: var(--d-surface-brand);
   font-weight: 650;
 }
-.options-shell main {
+.options-content {
   min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 28px clamp(20px, 4vw, 56px) 48px;
+  scroll-padding-block: 24px;
+}
+.options-content > section {
+  width: min(100%, 960px);
+  margin: 0 auto;
 }
 .status-toast {
   position: fixed;
@@ -176,6 +190,60 @@
   padding: 18px;
   background: rgba(255, 255, 255, 0.85);
   box-shadow: 0 6px 22px rgba(55, 42, 28, 0.04);
+}
+.provider-settings {
+  display: grid;
+  gap: 16px;
+}
+fieldset.settings-card {
+  min-inline-size: 0;
+  margin: 0;
+}
+.settings-card legend {
+  padding: 0 5px;
+  color: var(--d-text);
+  font-size: var(--d-text-title);
+  font-weight: 700;
+}
+.field-control {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.connection-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+.connection-status {
+  margin: 0;
+  color: var(--d-text-secondary);
+  font-size: var(--d-text-label);
+  line-height: 1.5;
+}
+.provider-advanced {
+  padding: 0;
+}
+.provider-advanced summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 18px;
+  cursor: pointer;
+  color: var(--d-text);
+  font-size: var(--d-text-title);
+  font-weight: 700;
+}
+.provider-advanced summary span {
+  color: var(--d-text-muted);
+  font-size: var(--d-text-hint);
+  font-weight: 500;
+}
+.provider-advanced .field-control {
+  padding: 0 18px 18px;
 }
 .grid-two {
   display: grid;
@@ -226,6 +294,7 @@ input[type='range'] {
   border-radius: var(--d-radius-sm) 0 0 var(--d-radius-sm);
 }
 .secret button {
+  flex: 0 0 60px;
   border: 1px solid var(--d-border-strong);
   border-left: 0;
   border-radius: 0 var(--d-radius-sm) var(--d-radius-sm) 0;
@@ -234,6 +303,7 @@ input[type='range'] {
   background: var(--d-surface-soft);
   font-size: var(--d-text-label);
   font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
 }
 .secret button:hover {
@@ -246,7 +316,6 @@ input[type='range'] {
   min-height: 39px;
 }
 .field-hint {
-  grid-column: 1 / -1;
   margin: -4px 0 0;
   color: var(--d-text-muted);
   font-size: var(--d-text-hint);
@@ -294,19 +363,26 @@ input[type='range'] {
 }
 @media (max-width: 760px) {
   .options-shell {
+    height: auto;
+    min-height: 100dvh;
     grid-template-columns: 1fr;
-    gap: 20px;
+    gap: 14px;
     width: 100%;
-    padding: 20px 14px 32px;
+    padding: 14px;
   }
-  .options-shell aside {
-    position: static;
+  .options-sidebar {
+    min-height: 0;
+    padding: 0;
   }
   .options-shell nav {
     grid-template-columns: repeat(3, 1fr);
   }
   .options-shell nav button {
     text-align: center;
+  }
+  .options-content {
+    overflow: visible;
+    padding: 18px 4px 32px;
   }
   .grid-two {
     grid-template-columns: 1fr;

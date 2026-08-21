@@ -1,7 +1,6 @@
 export type BuiltinToolId = 'context' | 'synonyms' | 'translate' | 'dictionary'
 export type PromptMode = 'preset' | 'custom'
-export type ReasoningEffort = 'low' | 'medium' | 'high'
-export type ThinkingParam = '' | 'enable_thinking'
+export type ReasoningEffort = 'auto' | 'low' | 'medium' | 'high'
 export type TriggerMode = 'mouseup' | 'alt-mouseup'
 
 export interface ProviderSettings {
@@ -11,7 +10,6 @@ export interface ProviderSettings {
   temperature: number
   reasoningEnabled: boolean
   reasoningEffort: ReasoningEffort
-  thinkingParam: ThinkingParam
   extraBody: string
 }
 

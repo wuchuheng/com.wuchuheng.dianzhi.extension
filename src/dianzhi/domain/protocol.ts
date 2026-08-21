@@ -198,16 +198,8 @@ function isRequestId(value: unknown): value is string {
 
 function isProviderSettings(value: unknown): value is ProviderSettings {
   if (!isRecord(value)) return false
-  const {
-    baseUrl,
-    apiKey,
-    model,
-    temperature,
-    reasoningEnabled,
-    reasoningEffort,
-    thinkingParam,
-    extraBody,
-  } = value
+  const { baseUrl, apiKey, model, temperature, reasoningEnabled, reasoningEffort, extraBody } =
+    value
   return (
     typeof baseUrl === 'string' &&
     typeof apiKey === 'string' &&
@@ -215,8 +207,10 @@ function isProviderSettings(value: unknown): value is ProviderSettings {
     typeof temperature === 'number' &&
     Number.isFinite(temperature) &&
     typeof reasoningEnabled === 'boolean' &&
-    (reasoningEffort === 'low' || reasoningEffort === 'medium' || reasoningEffort === 'high') &&
-    (thinkingParam === '' || thinkingParam === 'enable_thinking') &&
+    (reasoningEffort === 'auto' ||
+      reasoningEffort === 'low' ||
+      reasoningEffort === 'medium' ||
+      reasoningEffort === 'high') &&
     typeof extraBody === 'string'
   )
 }

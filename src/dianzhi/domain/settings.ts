@@ -16,8 +16,7 @@ export const DEFAULT_ROW: SettingsRowData = {
     model: 'deepseek-chat',
     temperature: 0.7,
     reasoningEnabled: false,
-    reasoningEffort: 'medium',
-    thinkingParam: '',
+    reasoningEffort: 'auto',
     extraBody: '',
   },
   ui: {
@@ -173,6 +172,9 @@ export function validateSettings(settings: DianzhiSettings): SettingsValidation 
   if (!settings.provider.model.trim()) {
     addProblem(errors, 'provider.model', 'Model is required.')
   }
+  if (!['auto', 'low', 'medium', 'high'].includes(settings.provider.reasoningEffort)) {
+    addProblem(errors, 'provider.reasoningEffort', 'Reasoning strength is invalid.')
+  }
   if (
     !Number.isFinite(settings.provider.temperature) ||
     settings.provider.temperature < 0 ||
@@ -188,10 +190,6 @@ export function validateSettings(settings: DianzhiSettings): SettingsValidation 
       addProblem(errors, 'provider.extraBody', 'Extra request fields must be a JSON object.')
     }
   }
-  if (!['', 'enable_thinking'].includes(settings.provider.thinkingParam)) {
-    addProblem(errors, 'provider.thinkingParam', 'Thinking parameter mode is invalid.')
-  }
-
   for (const [key, value] of Object.entries(settings.shortcuts)) {
     if (key === 'triggerMode') continue
     if (!SHORTCUT_PATTERN.test(value)) {

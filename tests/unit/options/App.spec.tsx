@@ -105,4 +105,74 @@ describe('Options autosave', () => {
     )
     expect(container.textContent).toContain('已保存')
   })
+
+  it('groups provider configuration and keeps advanced request JSON collapsed', async () => {
+    const container = await renderApp()
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('fieldset.provider-connection')).not.toBeNull()
+    expect(container.querySelector('fieldset.provider-behavior')).not.toBeNull()
+    const advanced = container.querySelector<HTMLDetailsElement>('details.provider-advanced')
+    expect(advanced).not.toBeNull()
+    expect(advanced?.open).toBe(false)
+  })
+
+  it('uses a persistent navigation rail and a separately scrollable content pane', async () => {
+    const container = await renderApp()
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('aside.options-sidebar')).not.toBeNull()
+    expect(container.querySelector('main.options-content')).not.toBeNull()
+  })
+
+  it('reveals reasoning strength only after reasoning is enabled', async () => {
+    const container = await renderApp()
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(
+      Array.from(container.querySelectorAll('label')).some((label) =>
+        label.textContent?.includes('推理强度')
+      )
+    ).toBe(false)
+
+    const reasoningToggle = container.querySelector<HTMLInputElement>(
+      '#provider\\.reasoningEnabled'
+    )
+    expect(reasoningToggle).not.toBeNull()
+    await act(async () => {
+      reasoningToggle!.click()
+    })
+
+    expect(
+      Array.from(container.querySelectorAll('label')).some((label) =>
+        label.textContent?.includes('推理强度')
+      )
+    ).toBe(true)
+  })
+
+  it('shows connection feedback beside the connection test action', async () => {
+    const container = await renderApp()
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    const testButton = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === '测试连接'
+    )
+    expect(testButton).toBeDefined()
+    await act(async () => {
+      testButton!.click()
+      await Promise.resolve()
+    })
+
+    expect(
+      container.querySelector('.provider-connection .connection-status')?.textContent
+    ).toContain('连接成功')
+  })
 })

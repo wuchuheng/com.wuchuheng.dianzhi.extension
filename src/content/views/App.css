@@ -221,9 +221,30 @@ textarea {
   background: var(--d-border);
 }
 .dz-body {
-  min-height: 100px;
-  overflow-y: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: hidden;
   padding: 12px 12px 40px;
+}
+.dz-body.is-scrollable {
+  overflow-y: auto;
+  scrollbar-color: var(--d-border-strong) transparent;
+  scrollbar-width: thin;
+}
+.dz-body.is-scrollable::-webkit-scrollbar {
+  width: 8px;
+}
+.dz-body.is-scrollable::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dz-body.is-scrollable::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--d-border-strong);
+  background-clip: padding-box;
+}
+.dz-body.is-scrollable::-webkit-scrollbar-thumb:hover {
+  background-color: var(--d-text-faint);
 }
 .dz-messages {
   display: grid;

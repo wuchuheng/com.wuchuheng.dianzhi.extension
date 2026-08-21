@@ -61,7 +61,7 @@ function visibleState(): ConversationViewState {
   }
 }
 
-async function render(onOpenSettings = vi.fn()) {
+async function render(onOpenSettings = vi.fn(), bodyScrollable = false) {
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
@@ -81,6 +81,7 @@ async function render(onOpenSettings = vi.fn()) {
         onStop={() => undefined}
         onRetry={() => undefined}
         onOpenSettings={onOpenSettings}
+        bodyScrollable={bodyScrollable}
       />
     )
   })
@@ -115,5 +116,32 @@ describe('ContentApp title actions', () => {
   it('does not render a settings button in the normal content popover', async () => {
     await render()
     expect(host?.querySelector('[aria-label="打开设置"]')).toBeNull()
+  })
+
+  it('only enables message-body scrolling when the panel is at its height cap', async () => {
+    await render()
+    expect(host?.querySelector('.dz-body')?.classList.contains('is-scrollable')).toBe(false)
+
+    await act(async () => {
+      root?.render(
+        <ContentApp
+          state={visibleState()}
+          placement={placement}
+          reasoningEnabled={false}
+          shortcuts={DEFAULT_SETTINGS.shortcuts}
+          onToolSelect={() => undefined}
+          onModeChange={() => undefined}
+          onExpand={() => undefined}
+          onClose={() => undefined}
+          onDock={() => undefined}
+          onSend={() => undefined}
+          onStop={() => undefined}
+          onRetry={() => undefined}
+          onOpenSettings={() => undefined}
+          bodyScrollable={true}
+        />
+      )
+    })
+    expect(host?.querySelector('.dz-body')?.classList.contains('is-scrollable')).toBe(true)
   })
 })

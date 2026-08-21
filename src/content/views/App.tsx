@@ -23,6 +23,7 @@ import { computePlacement, type AnchorRect, type Placement } from '../popover/pl
 import { formatShortcut, matchesShortcut, toolShortcutNumber } from './shortcuts'
 import { openOptionsPageFromContent } from './open-options-page'
 import { useScrollGuard } from './scroll-guard'
+import { useStreamingHeightController } from './use-streaming-height-controller'
 import './App.css'
 
 /* Header action glyphs — inline SVG (no emoji/text-as-icon), one stroke
@@ -107,6 +108,7 @@ export interface ContentAppProps {
   state: ConversationViewState
   placement: Placement
   panelHeight?: number
+  bodyScrollable?: boolean
   reasoningEnabled: boolean
   composerValue?: string
   shortcuts: ShortcutSettings
@@ -130,6 +132,7 @@ export function ContentApp({
   state,
   placement,
   panelHeight = 280,
+  bodyScrollable = false,
   reasoningEnabled,
   composerValue = '',
   shortcuts,
@@ -178,7 +181,7 @@ export function ContentApp({
       <div
         ref={panelRef}
         className={`dz-popover${state.expanded ? ' is-expanded' : ''}`}
-        style={{ left: placement.x, top: placement.y, width: placement.width }}
+        style={{ left: placement.x, top: placement.y, width: placement.width, height: panelHeight }}
         role="dialog"
         aria-label="点知查询"
       >
@@ -245,7 +248,11 @@ export function ContentApp({
           </div>
         </header>
 
-        <main ref={bodyRef} className="dz-body" onScroll={onBodyScroll}>
+        <main
+          ref={bodyRef}
+          className={`dz-body${bodyScrollable ? ' is-scrollable' : ''}`}
+          onScroll={onBodyScroll}
+        >
           <MessageList
             messages={snapshot?.messages ?? []}
             mode={state.mode}
@@ -443,25 +450,33 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
     streaming,
     messages: state.snapshot?.messages,
   })
+  const maximumPanelHeight = Math.min(560, Math.max(0, window.innerHeight - 16))
+
+  useStreamingHeightController({
+    panelRef,
+    visible: state.visible,
+    targetVersion: state.snapshot,
+    expanded: state.expanded,
+    mode: state.mode,
+    minimumHeight: 280,
+    maximumHeight: maximumPanelHeight,
+    reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    onHeightChange: setPanelHeight,
+  })
 
   useLayoutEffect(() => {
     if (!state.visible || !anchor) return
     const frame = window.requestAnimationFrame(() => {
-      const measuredHeight = Math.min(
-        panelRef.current?.offsetHeight ?? 280,
-        window.innerHeight - 16
-      )
-      setPanelHeight(measuredHeight)
       setPlacement(
         computePlacement(
           anchor,
-          { width: state.expanded ? 544 : 380, height: measuredHeight },
+          { width: state.expanded ? 544 : 380, height: panelHeight },
           { width: window.innerWidth, height: window.innerHeight }
         )
       )
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [anchor, state.visible, state.expanded, state.snapshot, state.mode])
+  }, [anchor, panelHeight, state.visible, state.expanded])
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -523,6 +538,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       state={state}
       placement={placement}
       panelHeight={panelHeight}
+      bodyScrollable={panelHeight >= maximumPanelHeight}
       panelRef={panelRef}
       reasoningEnabled={settings.provider.reasoningEnabled}
       composerValue={composer}

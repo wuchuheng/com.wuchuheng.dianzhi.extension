@@ -25,7 +25,6 @@ import { log, logError, Scope } from '@/events/logger'
 import { openOptionsPageFromContent } from './open-options-page'
 import { useScrollGuard } from './scroll-guard'
 import { useStreamingHeightController } from './use-streaming-height-controller'
-import './App.css'
 
 /* Header action glyphs — inline SVG (no emoji/text-as-icon), one stroke
  * family matching Phosphor's 24-box outline style. */

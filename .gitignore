@@ -37,3 +37,4 @@ web-sqlite-js/
 
 # Transient brainstorm session state
 .superpowers/
+tmp/

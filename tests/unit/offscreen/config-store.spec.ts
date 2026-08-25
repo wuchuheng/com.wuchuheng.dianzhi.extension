@@ -11,7 +11,7 @@ describe('ConfigStore customer-tool ID allocation', () => {
     const config = createConfigStore(connection, clock)
     await config.ensurePresets()
     const first = await config.createTool({ name: '自定义1', prompt: 'p1' })
-    expect(first.id).toBeGreaterThanOrEqual(1025)
+    expect(first.id).toBe(1025)
     const second = await config.createTool({ name: '自定义2', prompt: 'p2' })
     expect(second.id).toBe(first.id + 1)
   })
@@ -60,7 +60,7 @@ describe('ConfigStore customer-tool ID allocation', () => {
         ],
       },
     })
-    expect(mapping.myCustom).toBeGreaterThanOrEqual(1025)
+    expect(mapping.myCustom).toBe(1025)
     const row = db
       .prepare('SELECT is_preset AS isPreset FROM tools WHERE id = ?')
       .get(mapping.myCustom) as { isPreset: number }
@@ -70,5 +70,16 @@ describe('ConfigStore customer-tool ID allocation', () => {
       .get() as { toolId: number; toolIdLegacy: string | null }
     expect(conv.toolId).toBe(mapping.myCustom)
     expect(conv.toolIdLegacy).toBeNull()
+  })
+
+  it('does not reuse ids after soft removal', async () => {
+    const { connection } = createNodeDatabase()
+    const config = createConfigStore(connection, clock)
+    await config.ensurePresets()
+    const first = await config.createTool({ name: '自定义A', prompt: 'p' })
+    expect(first.id).toBe(1025)
+    await config.softRemoveTool(1025)
+    const second = await config.createTool({ name: '自定义B', prompt: 'p' })
+    expect(second.id).toBe(1026)
   })
 })

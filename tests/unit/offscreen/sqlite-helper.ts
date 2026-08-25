@@ -7,9 +7,17 @@ export interface NodeDb {
   connection: DatabaseConnection
 }
 
+/**
+ * ConfigStore emits positional `?` bindings only, and the vendored migration
+ * DDL runs directly on the raw `db` (see createNodeDatabase), so every
+ * statement that reaches the wrapper is single-statement SQL with positional
+ * params. Named-object params would need name-binding this helper cannot
+ * emulate faithfully — reject them rather than silently binding positionally.
+ */
 function toList(params: SqlParams | undefined): SqlValue[] {
   if (params === undefined) return []
-  return Array.isArray(params) ? params : Object.values(params)
+  if (Array.isArray(params)) return params
+  throw new Error('sqlite-helper does not support named-object parameters')
 }
 
 function bindValue(value: SqlValue): unknown {
@@ -28,11 +36,9 @@ export function createNodeDatabase(): NodeDb {
 
   const connection: DatabaseConnection = {
     async exec(sql, params) {
+      // Uniform prepared path: statements without bindings run the same way,
+      // returning real change counts instead of fabricating { changes: 0 }.
       const list = toList(params)
-      if (list.length === 0) {
-        db.exec(sql)
-        return { changes: 0 }
-      }
       const stmt = db.prepare(sql)
       const info = stmt.run(...list.map(bindValue))
       return { changes: info.changes, lastInsertRowid: info.lastInsertRowid }

@@ -73,6 +73,7 @@ export default tseslint.config(
             'tests/unit/content/views/scroll-guard.spec.ts',
             'tests/unit/content/views/useScrollGuard.spec.tsx',
             'tests/unit/content/views/App.spec.tsx',
+            'tests/unit/dianzhi/presets.spec.ts',
             'tests/unit/dianzhi/ui/message-time.spec.ts',
             'tests/unit/dianzhi/ui/markdown-text.spec.ts',
             'tests/unit/dianzhi/ui/MessageList.spec.tsx',

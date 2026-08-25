@@ -65,6 +65,51 @@ describe('assembleSelectionContext', () => {
     expect(result!.blockCount).toBe(3)
   })
 
+  it('resolves a selection inside a <figcaption> to a valid context block', () => {
+    // Listing captions are not in the old hardcoded block selector, so this
+    // used to return null and the popover would never open.
+    document.body.innerHTML =
+      '<figure><pre><code>impl Example { fn area(&self) }</code></pre><figcaption>Implementing the can_hold method on Rectangle</figcaption></figure>'
+    const selection = selectText(document, 'Implementing')
+    const result = assembleSelectionContext(selection, {
+      targetWords: 100,
+      maxWords: 100,
+      maxBlocks: 10,
+    })
+    expect(result).not.toBeNull()
+    expect(result!.selectedText).toBe('Implementing')
+    expect(result!.contextText).toContain('<selected>Implementing</selected>')
+    expect(result!.contextText.startsWith('<context>')).toBe(true)
+  })
+
+  it('resolves a selection inside a <summary> to a valid context block', () => {
+    document.body.innerHTML = '<details><summary>How it works</summary><p>body</p></details>'
+    const selection = selectText(document, 'How it works')
+    const result = assembleSelectionContext(selection, {
+      targetWords: 100,
+      maxWords: 100,
+      maxBlocks: 10,
+    })
+    expect(result).not.toBeNull()
+    expect(result!.selectedText).toBe('How it works')
+  })
+
+  it('resolves a selection inside an inline span to its parent block, not the span', () => {
+    document.body.innerHTML = '<p>Before <span>target</span> after</p>'
+    const selection = selectText(document, 'target')
+    const result = assembleSelectionContext(selection, {
+      targetWords: 100,
+      maxWords: 100,
+      maxBlocks: 10,
+    })
+    expect(result).not.toBeNull()
+    // The span itself is inline, so it must resolve to the <p>, keeping the
+    // whole paragraph as the single context block rather than a fragment.
+    expect(result!.contextText).toContain('Before')
+    expect(result!.contextText).toContain('after')
+    expect(result!.contextText).toContain('<selected>target</selected>')
+  })
+
   it('returns null for collapsed or empty selections', () => {
     document.body.innerHTML = '<p>hello world</p>'
     const collapsed = {

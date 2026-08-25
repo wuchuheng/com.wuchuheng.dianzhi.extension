@@ -10,7 +10,55 @@ export interface SelectionContext {
   blockCount: number
 }
 
-const BLOCK_SELECTOR = 'p,li,blockquote,pre,td,th,h1,h2,h3,h4,h5,h6,article,section,main,aside,div'
+/**
+ * Block-level computed `display` values. An element is treated as a context
+ * unit when it lays its text out as a block, regardless of its tag name — so
+ * selections inside `figcaption`, `caption`, `summary`, `dt`/`dd`, or any
+ * framework component resolve correctly without a hardcoded tag list.
+ */
+const BLOCK_DISPLAYS = new Set([
+  'block',
+  'flow-root',
+  'list-item',
+  'table',
+  'table-row',
+  'table-cell',
+  'table-caption',
+  'flex',
+  'grid',
+])
+
+/** Returns true when `element` lays out its text as a block-level unit. */
+function isBlockElement(element: Element): boolean {
+  return BLOCK_DISPLAYS.has(getComputedStyle(element).display)
+}
+
+/**
+ * Nearest block-level ancestor of `node`. Inline wrappers (`span`, `code`,
+ * `a`, …) are skipped so a selection inside them resolves to the surrounding
+ * paragraph/block rather than a bare inline fragment.
+ */
+function nearestBlock(node: Node): Element | null {
+  const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement
+  if (!element) return null
+  let current: Element | null = element
+  while (current) {
+    if (isBlockElement(current)) return current
+    current = current.parentElement
+  }
+  return null
+}
+
+function meaningfulBlocks(document: Document): Element[] {
+  return [...document.querySelectorAll('*')].filter((element) => {
+    if (!isBlockElement(element)) return false
+    if (!element.textContent?.trim()) return false
+    const childBlocks = [...element.children].some(
+      (child) => isBlockElement(child) && Boolean(child.textContent?.trim())
+    )
+    return !childBlocks
+  })
+}
 
 /**
  * Removes literal HTML tag-like fragments (e.g. `<div>` or `</span>`) from
@@ -23,21 +71,6 @@ const LITERAL_HTML_TAG = /<\/?[a-zA-Z][a-zA-Z0-9]*[^>]*>/g
 
 export function stripLiteralTags(value: string): string {
   return value.replace(LITERAL_HTML_TAG, '')
-}
-
-function nearestBlock(node: Node): Element | null {
-  const element = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement
-  return element?.closest(BLOCK_SELECTOR) ?? null
-}
-
-function meaningfulBlocks(document: Document): Element[] {
-  return [...document.querySelectorAll(BLOCK_SELECTOR)].filter((element) => {
-    if (!element.textContent?.trim()) return false
-    const childBlocks = [...element.children].some(
-      (child) => child.matches(BLOCK_SELECTOR) && Boolean(child.textContent?.trim())
-    )
-    return !childBlocks
-  })
 }
 
 function textBefore(range: Range, block: Element): string {

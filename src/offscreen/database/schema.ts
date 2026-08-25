@@ -136,10 +136,18 @@ CREATE INDEX idx_messages_conversation_sequence ON messages(conversation_id, seq
 /**
  * Schema release 2.1.0: presets own tool ids 1..1024, customer-created
  * (custom) tools start at 1025. Any custom tool already sitting in the
- * reserved range is moved up by 1024 and conversations.tool_id follows;
- * the AUTOINCREMENT counter is lifted above the floor so a plain INSERT
- * can never reuse a preset id. Runs before runtime `ensurePresets`, which
- * can then seed the next preset (e.g. `english` at id 5) collision-free.
+ * reserved range is moved up by 1024 and conversations.tool_id follows.
+ * The `tools` AUTOINCREMENT counter is lifted to at least 1024 as a
+ * defensive backstop so even a plain INSERT (no explicit id) stays at or
+ * above the floor; the floor itself is enforced primarily by the
+ * explicit-id allocation in `createTool`/`migrateLegacy`, which always
+ * allocate `MAX(1025, maxId + 1)`. Runs before runtime `ensurePresets`,
+ * which can then seed the next preset (e.g. `english` at id 5)
+ * collision-free. The `+1024` renumber can only abort outright (PRIMARY
+ * KEY violation surfacing as a DB-open failure) if a custom tool already
+ * holds an id `>= 1029` while another sits below 1025 — that requires
+ * ~1021 lifetime AUTOINCREMENT-allocated custom ids (soft-removed rows
+ * keep their ids), effectively unreachable.
  */
 export const TOOL_ID_RELEASE = {
   version: '2.1.0',
@@ -157,5 +165,7 @@ UPDATE conversations
 UPDATE tools SET id = id + 1024 WHERE is_preset = 0 AND id < 1025;
 
 UPDATE sqlite_sequence SET seq = MAX(seq, 1024) WHERE name = 'tools';
+
+DROP TABLE IF EXISTS tool_floor_map;
 `,
 } as const

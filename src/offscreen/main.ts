@@ -3,7 +3,7 @@ import { log, logError, Scope } from '@/events/logger'
 import openDB from '@/vendor/web-sqlite'
 import { createConfigStore } from './database/config-store'
 import { createDatabaseRpc } from './database/rpc'
-import { CONFIG_RELEASE, SCHEMA_RELEASE } from './database/schema'
+import { CONFIG_RELEASE, SCHEMA_RELEASE, TOOL_ID_RELEASE } from './database/schema'
 import { createConversationStore, type DatabaseConnection } from './database/store'
 
 function assertRuntimeCapabilities(): void {
@@ -22,7 +22,7 @@ async function initialize(): Promise<void> {
   assertRuntimeCapabilities()
   const db = (await openDB('dianzhi.sqlite3', {
     debug: false,
-    releases: [SCHEMA_RELEASE, CONFIG_RELEASE],
+    releases: [SCHEMA_RELEASE, CONFIG_RELEASE, TOOL_ID_RELEASE],
   })) as DatabaseConnection
   await db.exec('PRAGMA foreign_keys = ON')
 

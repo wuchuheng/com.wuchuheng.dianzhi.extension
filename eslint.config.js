@@ -83,6 +83,7 @@ export default tseslint.config(
             'tests/unit/dianzhi/protocol.spec.ts',
             'tests/unit/dianzhi/settings.spec.ts',
             'tests/unit/offscreen/config-store.spec.ts',
+            'tests/unit/offscreen/migration-2-1-0.spec.ts',
             'tests/unit/offscreen/sqlite-helper.ts',
             'tests/unit/options/App.spec.tsx',
             'tests/unit/options/ToolConfig.spec.tsx',

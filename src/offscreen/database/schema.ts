@@ -132,3 +132,30 @@ CREATE INDEX idx_conversations_tab_selection ON conversations(tab_id, selection_
 CREATE INDEX idx_messages_conversation_sequence ON messages(conversation_id, sequence);
 `,
 } as const
+
+/**
+ * Schema release 2.1.0: presets own tool ids 1..1024, customer-created
+ * (custom) tools start at 1025. Any custom tool already sitting in the
+ * reserved range is moved up by 1024 and conversations.tool_id follows;
+ * the AUTOINCREMENT counter is lifted above the floor so a plain INSERT
+ * can never reuse a preset id. Runs before runtime `ensurePresets`, which
+ * can then seed the next preset (e.g. `english` at id 5) collision-free.
+ */
+export const TOOL_ID_RELEASE = {
+  version: '2.1.0',
+  migrationSQL: `
+PRAGMA foreign_keys = ON;
+
+CREATE TEMP TABLE tool_floor_map AS
+SELECT id AS old_id, id + 1024 AS new_id
+  FROM tools WHERE is_preset = 0 AND id < 1025;
+
+UPDATE conversations
+   SET tool_id = (SELECT new_id FROM tool_floor_map WHERE old_id = tool_id)
+ WHERE tool_id IN (SELECT old_id FROM tool_floor_map);
+
+UPDATE tools SET id = id + 1024 WHERE is_preset = 0 AND id < 1025;
+
+UPDATE sqlite_sequence SET seq = MAX(seq, 1024) WHERE name = 'tools';
+`,
+} as const

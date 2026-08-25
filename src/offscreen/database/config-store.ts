@@ -64,7 +64,7 @@ const TOOL_COLUMNS = `id, name, prompt, is_preset AS isPreset, is_default AS isD
 
 const PRESET_INSERT_SQL = `INSERT INTO tools (
   id, name, prompt, is_preset, is_default, enabled, sort_order, deleted_at, created_at, updated_at
-) VALUES (?, ?, ?, 1, 0, 1, ?, NULL, ?, ?)`
+) VALUES (?, ?, ?, 1, 0, 1, (SELECT COALESCE(MAX(sort_order),0)+1 FROM tools WHERE deleted_at IS NULL), NULL, ?, ?)`
 
 const CUSTOM_TOOL_INSERT_SQL = `INSERT INTO tools (
   id, name, prompt, is_preset, is_default, enabled, sort_order, deleted_at, created_at, updated_at
@@ -159,7 +159,6 @@ async function ensurePresetsInner(
       id,
       BUILTIN_TOOL_NAMES[builtinId],
       BUILTIN_PROMPTS[builtinId],
-      id,
       now,
       now,
     ])

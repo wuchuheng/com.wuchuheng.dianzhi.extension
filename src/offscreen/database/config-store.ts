@@ -3,6 +3,7 @@ import {
   BUILTIN_PROMPTS,
   BUILTIN_TOOL_IDS,
   BUILTIN_TOOL_NAMES,
+  CUSTOM_TOOL_ID_START,
   PRESET_TOOL_IDS,
 } from '@/dianzhi/domain/presets'
 import { mergeSettings } from '@/dianzhi/domain/settings'
@@ -78,18 +79,6 @@ const PRESET_TOOL_IDS_ORDERED: readonly number[] = BUILTIN_TOOL_IDS.map((id) => 
 const PRESET_ID_BY_NAME: Readonly<Record<string, number>> = Object.fromEntries(
   BUILTIN_TOOL_IDS.map((name) => [name, PRESET_TOOL_IDS[name]] as const)
 ) as Readonly<Record<string, number>>
-
-function integerId(value: number | bigint | undefined, operation: string): number {
-  const id = Number(value)
-  if (!Number.isSafeInteger(id) || id < 1) {
-    throw new DianzhiError({
-      code: 'DB_UNAVAILABLE',
-      message: `SQLite did not return a valid ID for ${operation}.`,
-      context: { operation },
-    })
-  }
-  return id
-}
 
 function toolNotFound(id: number): DianzhiError {
   return new DianzhiError({
@@ -205,12 +194,16 @@ export function createConfigStore(db: DatabaseConnection, clock: () => string): 
   async function createTool(input: { name: string; prompt: string }): Promise<ToolRecord> {
     const now = clock()
     const id = await db.transaction(async (tx) => {
-      const inserted = await tx.exec(
-        `INSERT INTO tools (name, prompt, is_preset, is_default, enabled, sort_order, deleted_at, created_at, updated_at)
-         VALUES (?, ?, 0, 0, 1, (SELECT COALESCE(MAX(sort_order),0)+1 FROM tools WHERE deleted_at IS NULL), NULL, ?, ?)`,
-        [input.name, input.prompt, now, now]
+      const rows = await tx.query<{ maxId: number }>(
+        'SELECT COALESCE(MAX(id), 0) AS maxId FROM tools'
       )
-      return integerId(inserted.lastInsertRowid, 'createTool')
+      const id = Math.max(CUSTOM_TOOL_ID_START, (rows[0]?.maxId ?? 0) + 1)
+      await tx.exec(
+        `INSERT INTO tools (id, name, prompt, is_preset, is_default, enabled, sort_order, deleted_at, created_at, updated_at)
+         VALUES (?, ?, ?, 0, 0, 1, (SELECT COALESCE(MAX(sort_order),0)+1 FROM tools WHERE deleted_at IS NULL), NULL, ?, ?)`,
+        [id, input.name, input.prompt, now, now]
+      )
+      return id
     })
     const rows = await db.query<ToolRecord>(`SELECT ${TOOL_COLUMNS} FROM tools WHERE id = ?`, [id])
     const row = rows[0]
@@ -386,7 +379,7 @@ export function createConfigStore(db: DatabaseConnection, clock: () => string): 
         mapping[builtinId] = PRESET_TOOL_IDS[builtinId]
       }
 
-      let nextId = 4
+      let nextId = CUSTOM_TOOL_ID_START
       const usedIds = new Set<number>([...PRESET_TOOL_IDS_ORDERED])
       for (const legacyTool of legacyTools) {
         const presetId = presetIdForLegacy(legacyTool.id)

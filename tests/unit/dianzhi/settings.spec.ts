@@ -6,6 +6,7 @@ import {
   validateSettings,
 } from '@/dianzhi/domain/settings'
 import { BUILTIN_PROMPTS } from '@/dianzhi/domain/presets'
+import type { ToolDefinition } from '@/dianzhi/domain/types'
 
 describe('composed settings with the english preset', () => {
   it('builds a 5-tool default list including the english preset', () => {
@@ -32,7 +33,7 @@ describe('composed settings with the english preset', () => {
       isDefault: false,
       promptMode: 'preset',
       customPrompt: '',
-    }
+    } satisfies ToolDefinition
     expect(effectivePrompt(tool)).toBe(BUILTIN_PROMPTS.english)
   })
 })

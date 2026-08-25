@@ -1,4 +1,4 @@
-export type BuiltinToolId = 'context' | 'synonyms' | 'translate' | 'dictionary'
+export type BuiltinToolId = 'context' | 'synonyms' | 'translate' | 'dictionary' | 'english'
 export type PromptMode = 'preset' | 'custom'
 export type ReasoningEffort = 'auto' | 'low' | 'medium' | 'high'
 export type TriggerMode = 'mouseup' | 'alt-mouseup'

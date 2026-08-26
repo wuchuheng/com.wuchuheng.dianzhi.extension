@@ -78,11 +78,12 @@ export function SidePanelView({
   const setupRef = useRef<HTMLDivElement | null>(null)
   const [setupHeight, setSetupHeight] = useState(0)
   const [setupDismissed, setSetupDismissed] = useState(false)
-  const showSetup = needsSettings && !setupDismissed
-
-  useEffect(() => {
+  const [previousNeedsSettings, setPreviousNeedsSettings] = useState(needsSettings)
+  if (previousNeedsSettings !== needsSettings) {
+    setPreviousNeedsSettings(needsSettings)
     if (!needsSettings) setSetupDismissed(false)
-  }, [needsSettings])
+  }
+  const showSetup = needsSettings && !setupDismissed
 
   // Grows the provider-setup panel to fit its content with no cap; the popover
   // caps the same shared logic because its floating panel has a max height.
@@ -277,7 +278,7 @@ export default function App() {
       })
       setSettings(saved)
     },
-    [requestId, settings]
+    [settings]
   )
 
   useEffect(() => {

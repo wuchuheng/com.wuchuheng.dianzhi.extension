@@ -156,21 +156,23 @@ export function ContentApp({
   onSaveProvider,
   panelRef,
 }: ContentAppProps) {
-  if (!state.visible) return null
   const snapshot = state.snapshot
   const latestAssistant =
     [...(snapshot?.messages ?? [])].reverse().find((message) => message.role === 'assistant') ??
     null
-  const streaming = latestAssistant?.status === 'streaming'
-  const canRetry = latestAssistant?.status === 'error' || latestAssistant?.status === 'stopped'
   const needsSettings =
     state.error?.code === 'PROVIDER_NOT_CONFIGURED' ||
     latestAssistant?.errorCode === 'PROVIDER_NOT_CONFIGURED'
   const [setupDismissed, setSetupDismissed] = useState(false)
-  useEffect(() => {
+  const [previousNeedsSettings, setPreviousNeedsSettings] = useState(needsSettings)
+  if (previousNeedsSettings !== needsSettings) {
+    setPreviousNeedsSettings(needsSettings)
     if (!needsSettings) setSetupDismissed(false)
-  }, [needsSettings])
+  }
   const showSetup = needsSettings && !setupDismissed
+  if (!state.visible) return null
+  const streaming = latestAssistant?.status === 'streaming'
+  const canRetry = latestAssistant?.status === 'error' || latestAssistant?.status === 'stopped'
   const arrowTop = placement.direction === 'below' ? placement.y - 6 : placement.y + panelHeight - 6
   const shortcutTip = (shortcut: string) => ` (${formatShortcut(shortcut)})`
   const expandLabel = state.expanded ? '收起宽屏' : '展开宽屏'

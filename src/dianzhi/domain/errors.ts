@@ -13,6 +13,7 @@ export type DianzhiErrorCode =
   | 'TOOL_NOT_FOUND'
   | 'TOOL_LAST_ENABLED'
   | 'TOOL_ORDER_INVALID'
+  | 'TOOL_NOT_REMOVED'
   | 'TOOL_PRESET_INVALID'
 
 export interface DianzhiErrorShape {

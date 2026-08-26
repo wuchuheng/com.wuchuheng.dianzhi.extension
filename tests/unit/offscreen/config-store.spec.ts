@@ -83,3 +83,57 @@ describe('ConfigStore customer-tool ID allocation', () => {
     expect(second.id).toBe(1026)
   })
 })
+
+describe('ConfigStore permanent deletion', () => {
+  it('permanently deletes a soft-removed tool', async () => {
+    const { connection, db } = createNodeDatabase()
+    const config = createConfigStore(connection, clock)
+    await config.ensurePresets()
+    const tool = await config.createTool({ name: '临时工具', prompt: 'p' })
+    await config.softRemoveTool(tool.id)
+    await config.deleteTool(tool.id)
+    const row = db.prepare('SELECT COUNT(*) AS count FROM tools WHERE id = ?').get(tool.id) as {
+      count: number
+    }
+    expect(row.count).toBe(0)
+    const list = await config.listTools(true)
+    expect(list.some((item) => item.id === tool.id)).toBe(false)
+  })
+
+  it('rejects permanently deleting a tool that is not in deleted status', async () => {
+    const { connection } = createNodeDatabase()
+    const config = createConfigStore(connection, clock)
+    await config.ensurePresets()
+    const tool = await config.createTool({ name: '活跃工具', prompt: 'p' })
+    await expect(config.deleteTool(tool.id)).rejects.toMatchObject({
+      code: 'TOOL_NOT_REMOVED',
+    })
+  })
+
+  it('rejects permanently deleting an unknown tool id', async () => {
+    const { connection } = createNodeDatabase()
+    const config = createConfigStore(connection, clock)
+    await expect(config.deleteTool(999_999)).rejects.toMatchObject({
+      code: 'TOOL_NOT_FOUND',
+    })
+  })
+
+  it('keeps conversations when a tool is permanently deleted', async () => {
+    const { connection, db } = createNodeDatabase()
+    const now = clock()
+    db.prepare(
+      `INSERT INTO conversations (selection_key, tab_id, tool_id, tool_name, title, selected_text, context_text, prompt_snapshot, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(0, 1, 1050, '旧工具', 't', 's', 'c', 'p', now, now)
+    db.prepare(
+      `INSERT INTO tools (id, name, prompt, is_preset, is_default, enabled, sort_order, deleted_at, created_at, updated_at)
+       VALUES (?, ?, ?, 0, 0, 1, 1, ?, ?, ?)`
+    ).run(1050, '旧工具', 'p', now, now, now)
+    const config = createConfigStore(connection, clock)
+    await config.deleteTool(1050)
+    const conv = db
+      .prepare('SELECT COUNT(*) AS count FROM conversations WHERE tool_id = 1050')
+      .get() as { count: number }
+    expect(conv.count).toBe(1)
+  })
+})

@@ -54,6 +54,7 @@ export interface ConfigStore {
   reorderTools(orderedIds: number[]): Promise<void>
   softRemoveTool(id: number): Promise<void>
   restoreTool(id: number): Promise<void>
+  deleteTool(id: number): Promise<void>
   getSettings(): Promise<string | null>
   saveSettings(data: string): Promise<void>
   migrateLegacy(input: { legacySettings: LegacySettingsDocument }): Promise<Record<string, number>>
@@ -343,6 +344,23 @@ export function createConfigStore(db: DatabaseConnection, clock: () => string): 
     )
   }
 
+  async function deleteTool(id: number): Promise<void> {
+    const result = await db.exec('DELETE FROM tools WHERE id = ? AND deleted_at IS NOT NULL', [id])
+    if (Number(result.changes ?? 0) !== 1) {
+      const rows = await db.query<{ deletedAt: string | null }>(
+        'SELECT deleted_at AS deletedAt FROM tools WHERE id = ?',
+        [id]
+      )
+      const row = rows[0]
+      if (!row) throw toolNotFound(id)
+      throw new DianzhiError({
+        code: 'TOOL_NOT_REMOVED',
+        message: 'The tool must be removed before it can be permanently deleted.',
+        context: { id },
+      })
+    }
+  }
+
   async function getSettings(): Promise<string | null> {
     const rows = await db.query<{ data: string }>('SELECT data FROM settings WHERE id = 1')
     return rows[0]?.data ?? null
@@ -464,6 +482,7 @@ export function createConfigStore(db: DatabaseConnection, clock: () => string): 
     reorderTools,
     softRemoveTool,
     restoreTool,
+    deleteTool,
     getSettings,
     saveSettings,
     migrateLegacy,

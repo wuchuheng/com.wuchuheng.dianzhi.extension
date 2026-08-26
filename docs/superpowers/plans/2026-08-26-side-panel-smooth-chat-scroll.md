@@ -214,12 +214,12 @@ import { createStreamingValueController } from '@/dianzhi/ui/streaming-value-con
 2. The `controllerRef` initializer (currently lines 27–32) — change to:
 
 ```ts
-  const controllerRef = useRef(
-    createStreamingValueController(minimumHeight, {
-      min: minimumHeight,
-      max: maximumHeight,
-    })
-  )
+const controllerRef = useRef(
+  createStreamingValueController(minimumHeight, {
+    min: minimumHeight,
+    max: maximumHeight,
+  })
+)
 ```
 
 3. Line 51 — `controllerRef.current.getHeight()` → `controllerRef.current.getValue()`.
@@ -227,10 +227,10 @@ import { createStreamingValueController } from '@/dianzhi/ui/streaming-value-con
 4. The re-created controller in the previously-invisible branch (currently lines 57–60) — change to:
 
 ```ts
-      controllerRef.current = createStreamingValueController(targetHeight, {
-        min: minimumHeight,
-        max: maximumHeight,
-      })
+controllerRef.current = createStreamingValueController(targetHeight, {
+  min: minimumHeight,
+  max: maximumHeight,
+})
 ```
 
 - [ ] **Step 6: Update the eslint allow-list**
@@ -331,8 +331,7 @@ export function isNearBottom(container: {
   clientHeight: number
 }): boolean {
   return (
-    container.scrollHeight - container.scrollTop - container.clientHeight <=
-    SCROLL_FOLLOW_THRESHOLD
+    container.scrollHeight - container.scrollTop - container.clientHeight <= SCROLL_FOLLOW_THRESHOLD
   )
 }
 
@@ -482,7 +481,7 @@ function stubMatchMedia(matches: boolean) {
 3. In the top-level `beforeEach` (after `installChrome()`, around line 73), add:
 
 ```ts
-  stubMatchMedia(false)
+stubMatchMedia(false)
 ```
 
 4. Append this new `describe` block at the end of the file:
@@ -660,6 +659,7 @@ describe('Side Panel smooth chat scroll', () => {
 
 Run: `pnpm exec vitest run tests/unit/sidepanel/App.spec.tsx`
 Expected: FAIL — the 5 new cases fail on the current instant-snap code:
+
 - `glides…`: old code never schedules an animation frame (`frameCallback` stays null).
 - `keeps following within 150px…`: the old 80px guard treats a 120px gap as unpinned, so no follow.
 - `pauses following…`: after resuming within the guard the old code snaps instead of gliding, so no frame is scheduled.
@@ -687,24 +687,24 @@ import { useScrollFollow } from './scroll-follow'
 2. Replace the whole per-view scroll block (from `const historyRef = useRef...` through the `onHistoryScroll` callback, currently lines 53–87) with:
 
 ```tsx
-  const historyRef = useRef<HTMLDivElement | null>(null)
-  const composerRef = useRef<HTMLTextAreaElement | null>(null)
-  const hasSnapshot = snapshot !== null
-  const viewKey = `${snapshot?.conversation.id ?? ''}:${snapshot?.activeToolId ?? ''}`
+const historyRef = useRef<HTMLDivElement | null>(null)
+const composerRef = useRef<HTMLTextAreaElement | null>(null)
+const hasSnapshot = snapshot !== null
+const viewKey = `${snapshot?.conversation.id ?? ''}:${snapshot?.activeToolId ?? ''}`
 
-  useEffect(() => {
-    // Focus the chat input once a conversation is attached; `streaming` flips
-    // stay in the deps so focus returns to the input right after a send.
-    if (!hasSnapshot) return
-    composerRef.current?.focus()
-  }, [viewKey, streaming, hasSnapshot])
+useEffect(() => {
+  // Focus the chat input once a conversation is attached; `streaming` flips
+  // stay in the deps so focus returns to the input right after a send.
+  if (!hasSnapshot) return
+  composerRef.current?.focus()
+}, [viewKey, streaming, hasSnapshot])
 
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  const onHistoryScroll = useScrollFollow(historyRef, {
-    reducedMotion,
-    messages: snapshot?.messages,
-    viewKey,
-  })
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const onHistoryScroll = useScrollFollow(historyRef, {
+  reducedMotion,
+  messages: snapshot?.messages,
+  viewKey,
+})
 ```
 
 (`viewKey`, `historyRef`, `composerRef`, `hasSnapshot`, and the focus effect are unchanged in purpose; `pinnedRef`, `previousViewKey`, the old `messages` snap-sync effect, and the old `onHistoryScroll` are gone.)

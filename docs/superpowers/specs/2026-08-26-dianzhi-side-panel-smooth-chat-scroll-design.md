@@ -27,14 +27,14 @@ left untouched.
 
 ## 2. Decisions
 
-| Decision          | Choice                                                                                           | Rationale                                                                                             |
-| ----------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| Target surface    | Side Panel chat only                                                                             | The popover already animates smoothly; the user's reference is its feel, not its surface              |
-| Mechanism         | Reuse the popover's easing: generalize `createStreamingHeightController` into a numeric controller and drive `scrollTop` with it | The Side Panel has a fixed `100dvh` layout — the panel height cannot grow, so the animated dimension is the scroll position |
-| Follow style      | Rate-adaptive glide for **all** content growth while pinned (streaming or discrete)              | One animation model; the rate estimator naturally speeds up under token-stream growth and glides briskly on a burst |
-| View transitions  | Entering chat / switching tools anchors **instantly**; no animation                              | Expected behavior for a mode switch; avoids a long glide across a full changed history                |
-| Bottom guard      | `SCROLL_FOLLOW_THRESHOLD = 150` (was `SCROLL_PIN_THRESHOLD = 80`)                                 | Explicit requirement                                                                                  |
-| Reduced motion    | Jump to the new bottom directly (no rAF glide)                                                    | `prefers-reduced-motion`; CSS cannot stop a rAF-driven `scrollTop` loop                               |
+| Decision         | Choice                                                                                                                           | Rationale                                                                                                                   |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Target surface   | Side Panel chat only                                                                                                             | The popover already animates smoothly; the user's reference is its feel, not its surface                                    |
+| Mechanism        | Reuse the popover's easing: generalize `createStreamingHeightController` into a numeric controller and drive `scrollTop` with it | The Side Panel has a fixed `100dvh` layout — the panel height cannot grow, so the animated dimension is the scroll position |
+| Follow style     | Rate-adaptive glide for **all** content growth while pinned (streaming or discrete)                                              | One animation model; the rate estimator naturally speeds up under token-stream growth and glides briskly on a burst         |
+| View transitions | Entering chat / switching tools anchors **instantly**; no animation                                                              | Expected behavior for a mode switch; avoids a long glide across a full changed history                                      |
+| Bottom guard     | `SCROLL_FOLLOW_THRESHOLD = 150` (was `SCROLL_PIN_THRESHOLD = 80`)                                                                | Explicit requirement                                                                                                        |
+| Reduced motion   | Jump to the new bottom directly (no rAF glide)                                                                                   | `prefers-reduced-motion`; CSS cannot stop a rAF-driven `scrollTop` loop                                                     |
 
 ## 3. Architecture
 
@@ -59,6 +59,7 @@ rate; `advance(now)` moves towards the target at a rate clamped to
 and `isSettled()`/`getValue()` round it out.
 
 Consumers:
+
 - `src/content/views/use-streaming-height-controller.ts` — update the import and the two
   `createStreamingHeightController(...)` calls to `createStreamingValueController(...)`
   with `min`/`max` keys. Behavior-neutral.
@@ -80,8 +81,7 @@ export function isNearBottom(container: {
   clientHeight: number
 }): boolean {
   return (
-    container.scrollHeight - container.scrollTop - container.clientHeight <=
-    SCROLL_FOLLOW_THRESHOLD
+    container.scrollHeight - container.scrollTop - container.clientHeight <= SCROLL_FOLLOW_THRESHOLD
   )
 }
 
@@ -126,22 +126,22 @@ effect does nothing — history stays exactly where the user left it.
 
 ## 4. Behavior matrix
 
-| State                                             | Result                                                                                        |
-| ------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Pinned (<150px from bottom), stream adds a line   | View glides down smoothly at a rate matching recent content growth                            |
-| Pinned, discrete burst (own message / completion) | Fast glide to the new bottom (recent-rate estimator saturates toward the max speed)           |
-| Entering chat / switching tools                   | Instant anchor to the latest message, no animation                                             |
-| User scrolls >150px above the bottom              | Following pauses; new content does not move the viewport                                      |
-| User returns within 150px of the bottom           | Following resumes on the next update                                                          |
-| Reduced motion                                    | Jump straight to the new bottom                                                               |
-| Content shorter than the container                | Treated as pinned; target clamped to 0                                                        |
+| State                                             | Result                                                                              |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Pinned (<150px from bottom), stream adds a line   | View glides down smoothly at a rate matching recent content growth                  |
+| Pinned, discrete burst (own message / completion) | Fast glide to the new bottom (recent-rate estimator saturates toward the max speed) |
+| Entering chat / switching tools                   | Instant anchor to the latest message, no animation                                  |
+| User scrolls >150px above the bottom              | Following pauses; new content does not move the viewport                            |
+| User returns within 150px of the bottom           | Following resumes on the next update                                                |
+| Reduced motion                                    | Jump straight to the new bottom                                                     |
+| Content shorter than the container                | Treated as pinned; target clamped to 0                                              |
 
 ## 5. Tests
 
 - **`tests/unit/dianzhi/ui/streaming-value-controller.spec.ts`** (moved + renamed): the
   existing four controller cases unchanged except import and `min`/`max` option keys.
 - **`tests/unit/sidepanel/scroll-follow.spec.ts`** (new): `SCROLL_FOLLOW_THRESHOLD ===
-  150`; `isNearBottom` is pinned at gap 0 and 150, unpinned at gap 151 and beyond; a view
+150`; `isNearBottom` is pinned at gap 0 and 150, unpinned at gap 151 and beyond; a view
   shorter than its container counts as pinned.
 - **`tests/unit/sidepanel/App.spec.tsx`** (extend, same `createRoot` + `act` style,
   stubbed `requestAnimationFrame`/`cancelAnimationFrame` and defined
@@ -158,17 +158,17 @@ effect does nothing — history stays exactly where the user left it.
 
 ## 6. Files changed
 
-| Path                                                              | Change                                                                        |
-| ----------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `src/dianzhi/ui/streaming-value-controller.ts`                    | **moved + renamed** from `src/content/views/streaming-height-controller.ts`; `min`/`max` options |
-| `src/content/views/use-streaming-height-controller.ts`            | updated import + option keys (behavior-neutral)                               |
-| `src/sidepanel/scroll-follow.ts`                                  | **new**: `SCROLL_FOLLOW_THRESHOLD = 150`, `isNearBottom`, `useScrollFollow`   |
-| `src/sidepanel/scroll-pin.ts`                                     | **deleted** (superseded by `scroll-follow.ts`)                                 |
-| `src/sidepanel/App.tsx`                                           | drop inline pin/scroll effects; wire `onHistoryScroll = useScrollFollow(...)` |
-| `tests/unit/dianzhi/ui/streaming-value-controller.spec.ts`        | **moved + renamed** from `tests/unit/content/views/streaming-height-controller.spec.ts` |
-| `tests/unit/sidepanel/scroll-follow.spec.ts`                      | **new** threshold + predicate tests                                           |
-| `tests/unit/sidepanel/App.spec.tsx`                               | extended smooth-follow + guard cases                                           |
-| `docs/superpowers/specs/2026-08-26-dianzhi-side-panel-smooth-chat-scroll-design.md` | this document                                                     |
+| Path                                                                                | Change                                                                                           |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `src/dianzhi/ui/streaming-value-controller.ts`                                      | **moved + renamed** from `src/content/views/streaming-height-controller.ts`; `min`/`max` options |
+| `src/content/views/use-streaming-height-controller.ts`                              | updated import + option keys (behavior-neutral)                                                  |
+| `src/sidepanel/scroll-follow.ts`                                                    | **new**: `SCROLL_FOLLOW_THRESHOLD = 150`, `isNearBottom`, `useScrollFollow`                      |
+| `src/sidepanel/scroll-pin.ts`                                                       | **deleted** (superseded by `scroll-follow.ts`)                                                   |
+| `src/sidepanel/App.tsx`                                                             | drop inline pin/scroll effects; wire `onHistoryScroll = useScrollFollow(...)`                    |
+| `tests/unit/dianzhi/ui/streaming-value-controller.spec.ts`                          | **moved + renamed** from `tests/unit/content/views/streaming-height-controller.spec.ts`          |
+| `tests/unit/sidepanel/scroll-follow.spec.ts`                                        | **new** threshold + predicate tests                                                              |
+| `tests/unit/sidepanel/App.spec.tsx`                                                 | extended smooth-follow + guard cases                                                             |
+| `docs/superpowers/specs/2026-08-26-dianzhi-side-panel-smooth-chat-scroll-design.md` | this document                                                                                    |
 
 ## 7. Non-goals
 

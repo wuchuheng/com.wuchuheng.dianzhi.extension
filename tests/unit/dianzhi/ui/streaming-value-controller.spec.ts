@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { createStreamingValueController } from '@/dianzhi/ui/streaming-value-controller'
+import {
+  createContinuousGrowthController,
+  createStreamingValueController,
+} from '@/dianzhi/ui/streaming-value-controller'
 
 describe('streaming value controller', () => {
   it('advances by equal distances between unchanged generation updates', () => {
@@ -67,5 +70,65 @@ describe('streaming value controller', () => {
     // 80px over a floor-speed 200ms chase would be exactly 96; a faster chase
     // moves more, so the remembered burst rate survived the seed.
     expect(value).toBeGreaterThan(80 + 16)
+  })
+})
+
+describe('continuous growth controller', () => {
+  const create = () =>
+    createContinuousGrowthController(100, {
+      followTimeMs: 400,
+      cruiseSpeed: 40,
+      maximumSpeed: 200,
+      accelerationPerSecond: 400,
+      decelerationPerSecond: 200,
+    })
+
+  it('chases a growing target without jumping to it', () => {
+    const controller = create()
+    controller.setStreaming(true, 0)
+    controller.observeTarget(140)
+    expect(controller.advance(0)).toBe(100)
+    const after100ms = controller.advance(100)
+    expect(after100ms).toBeGreaterThan(100)
+    expect(after100ms).toBeLessThan(140)
+  })
+
+  it('keeps its cruise alive through a quiet gap while streaming', () => {
+    const controller = create()
+    controller.setStreaming(true, 0)
+    controller.observeTarget(110)
+    controller.advance(0)
+    controller.advance(500)
+    expect(controller.getValue()).toBe(110)
+
+    controller.advance(1_500)
+    expect(controller.isRunning()).toBe(true)
+    expect(controller.getSpeed()).toBeGreaterThanOrEqual(40)
+
+    controller.observeTarget(150)
+    expect(controller.advance(1_600)).toBeGreaterThan(110)
+  })
+
+  it('drains the final backlog and decelerates to rest after completion', () => {
+    const controller = create()
+    controller.setStreaming(true, 0)
+    controller.observeTarget(180)
+    controller.advance(0)
+    controller.advance(200)
+    controller.setStreaming(false, 200)
+
+    for (let now = 300; now <= 3_000; now += 100) controller.advance(now)
+    expect(controller.getValue()).toBe(180)
+    expect(controller.getSpeed()).toBe(0)
+    expect(controller.isRunning()).toBe(false)
+  })
+
+  it('caps catch-up speed for a large Markdown reflow', () => {
+    const controller = create()
+    controller.setStreaming(true, 0)
+    controller.observeTarget(2_000)
+    controller.advance(0)
+    controller.advance(1_000)
+    expect(controller.getSpeed()).toBe(200)
   })
 })

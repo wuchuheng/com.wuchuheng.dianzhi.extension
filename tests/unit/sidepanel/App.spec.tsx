@@ -264,19 +264,17 @@ describe('Side Panel smooth chat scroll', () => {
     vi.unstubAllGlobals()
   })
 
-  it('glides to the newest bottom while pinned as a reply streams', async () => {
+  it('synchronizes to the newest bottom without a competing scroll animation', async () => {
     await openEmptyHistory()
     defineMetrics()
 
     await syncMessages([message(1, 'first line')])
-    expect(frameCallback).not.toBeNull()
-    driveFrames()
+    expect(frameCallback).toBeNull()
     expect(history().scrollTop).toBe(700)
 
     grow(1300)
     await syncMessages([message(1, 'first line\nsecond line'), message(2, 'third line')])
-    expect(frameCallback).not.toBeNull()
-    driveFrames()
+    expect(frameCallback).toBeNull()
     expect(history().scrollTop).toBe(1000)
   })
 
@@ -289,8 +287,7 @@ describe('Side Panel smooth chat scroll', () => {
     userScroll(700 - 120)
     grow(1200)
     await syncMessages([message(1, 'first line'), message(2, 'grown')])
-    expect(frameCallback).not.toBeNull()
-    driveFrames()
+    expect(frameCallback).toBeNull()
     expect(history().scrollTop).toBe(900)
   })
 
@@ -310,8 +307,7 @@ describe('Side Panel smooth chat scroll', () => {
     userScroll(1200 - 300 - 50)
     grow(1400)
     await syncMessages([message(1, 'first line'), message(2, 'grown again')])
-    expect(frameCallback).not.toBeNull()
-    driveFrames()
+    expect(frameCallback).toBeNull()
     expect(history().scrollTop).toBe(1100)
   })
 
@@ -340,7 +336,7 @@ describe('Side Panel smooth chat scroll', () => {
       port.emitMessage({ type: 'conversation.sync', snapshot: other })
       await Promise.resolve()
     })
-    expect(history().scrollTop).toBe(1000)
+    expect(history().scrollTop).toBe(700)
   })
 })
 

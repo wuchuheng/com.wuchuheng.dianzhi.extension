@@ -98,6 +98,15 @@
 .dz-message.is-assistant {
   align-self: flex-start;
 }
+.dz-streaming-message-growth {
+  align-self: flex-start;
+  width: 92%;
+  overflow: hidden;
+}
+.dz-streaming-message-growth-content > .dz-message {
+  box-sizing: border-box;
+  max-width: 100%;
+}
 .dz-message-role {
   margin-bottom: 4px;
   color: var(--d-text-muted);

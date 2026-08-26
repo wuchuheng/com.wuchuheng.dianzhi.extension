@@ -6,7 +6,7 @@ Make the AI provider settings easy to configure: separate connection, response b
 
 ## Current Phase
 
-Phase 4 — complete
+Phase 7 — in progress
 
 ## Phases
 
@@ -35,6 +35,29 @@ Phase 4 — complete
 - [x] Inspect the final diff for unrelated changes.
 - **Status:** complete
 
+### Phase 5: Approve Side Panel message-toolbar design
+
+- [x] Confirm pending, terminal throughput, toolbar states, and retry scope.
+- [x] Remove artificial message-height reveal delay from the approved architecture.
+- [x] Commit the approved design as `92234e7`.
+- **Status:** complete
+
+### Phase 6: Write implementation plan
+
+- [x] Map current Side Panel, shared message UI, provider runner, and SQLite boundaries.
+- [x] Write the TDD implementation plan with exact interfaces, tests, and commits.
+- [x] Self-review the plan against the approved design.
+- **Status:** complete
+
+### Phase 7: Implement Side Panel message toolbar and throughput
+
+- [ ] Task 1: Persist the terminal throughput contract.
+- [ ] Task 2: Calculate throughput at the provider-runner boundary.
+- [ ] Task 3: Build the permanent message toolbar.
+- [ ] Task 4: Remove message clipping and animate scroll only.
+- [ ] Task 5: Run automated gates and real Chrome verification.
+- **Status:** in progress
+
 ## Decisions Made
 
 | Decision                                                        | Rationale                                                                          |
@@ -43,6 +66,10 @@ Phase 4 — complete
 | Use Connection, Response behavior, and Advanced settings groups | Matches the user’s task flow and removes advanced JSON from the default scan path. |
 | Keep reasoning strength after the reasoning switch              | It is useful, but should be shown only when it can be acted upon.                  |
 | Use inline test status                                          | A connection result must be distinguishable from automatic save status.            |
+| Render Side Panel stream content at natural height              | Text must paint immediately; smooth scrolling must not gate visibility.             |
+| Show throughput only after a terminal state                     | Avoid a noisy live estimate and preserve one stable result.                         |
+| Retry only the latest failed assistant message                  | Matches the approved recovery affordance and avoids branching old history.          |
+| Implement directly on `main`                                   | Explicit user instruction after worktree isolation was offered.                     |
 
 ## Errors Encountered
 
@@ -50,3 +77,6 @@ Phase 4 — complete
 | ------------------------------------------ | ------: | -------------------------------------------------------------------------------- |
 | Initial plan-file path typo                |       1 | Corrected before creating project files.                                         |
 | Repository-wide lint scans unrelated trees |       1 | Verify changed production files separately and report the repository limitation. |
+| Large plan self-review patch missed formatted context | 1 | Split the correction into small, line-local patches after inspecting exact text. |
+| Combined provider-plan correction assumed duplicated sed output | 2 | Inspect numbered source lines and patch the test and implementation blocks separately. |
+| Plan audit shell pattern contained a raw backtick | 1 | Remove the backtick from the regex and rerun the read-only audit. |

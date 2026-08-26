@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { Composer } from '@/dianzhi/ui/Composer'
-import { ConversationStatus } from '@/dianzhi/ui/ConversationStatus'
 import { MessageList } from '@/dianzhi/ui/MessageList'
 import { ToolTabs } from '@/dianzhi/ui/ToolTabs'
 import { ProviderSetup } from '@/dianzhi/ui/ProviderSetup'
@@ -69,7 +68,7 @@ export function SidePanelView({
   }, [viewKey, streaming, hasSnapshot])
 
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  const onHistoryScroll = useScrollFollow(historyRef, {
+  const { onScroll: onHistoryScroll, onStreamingHeightDelta } = useScrollFollow(historyRef, {
     reducedMotion,
     messages: snapshot?.messages,
     viewKey,
@@ -110,6 +109,9 @@ export function SidePanelView({
               mode="chat"
               reasoningEnabled={reasoningEnabled}
               showMeta
+              smoothStreamingGrowth
+              reducedMotion={reducedMotion}
+              onStreamingHeightDelta={onStreamingHeightDelta}
             />
             {showSetup ? (
               <div
@@ -137,7 +139,7 @@ export function SidePanelView({
             ) : null}
           </main>
           <footer className="dz-panel-composer">
-            <ConversationStatus message={latestAssistant} />
+            {/* <ConversationStatus message={latestAssistant} /> */}
             {retryable && (
               <button type="button" className="dz-secondary" onClick={onRetry}>
                 重试

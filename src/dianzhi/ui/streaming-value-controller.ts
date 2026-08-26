@@ -6,10 +6,92 @@ export interface StreamingValueControllerOptions {
   rateMemoryMs?: number
 }
 
+export interface ContinuousGrowthControllerOptions {
+  followTimeMs?: number
+  cruiseSpeed?: number
+  maximumSpeed?: number
+  accelerationPerSecond?: number
+  decelerationPerSecond?: number
+}
+
 const DEFAULT_MAXIMUM_VALUE = Number.POSITIVE_INFINITY
 const DEFAULT_MINIMUM_SPEED = 80
 const DEFAULT_MAXIMUM_SPEED = 1600
 const DEFAULT_RATE_MEMORY_MS = 260
+
+/**
+ * Continuously chases a rendered streaming message's natural height. The
+ * controller stays alive at a cruise speed for the whole generation, so short
+ * token gaps do not create separate stop-start animation cycles. Once the
+ * stream completes, it drains the final backlog and decelerates to rest.
+ */
+export function createContinuousGrowthController(
+  initialValue: number,
+  options: ContinuousGrowthControllerOptions = {}
+) {
+  const followTimeSeconds = (options.followTimeMs ?? 400) / 1_000
+  const cruiseSpeed = options.cruiseSpeed ?? 40
+  const maximumSpeed = Math.max(options.maximumSpeed ?? 480, cruiseSpeed)
+  const accelerationPerSecond = options.accelerationPerSecond ?? 1_200
+  const decelerationPerSecond = options.decelerationPerSecond ?? 600
+  let value = Math.max(0, initialValue)
+  let target = value
+  let speed = 0
+  let streaming = false
+  let lastAdvancedAt: number | null = null
+
+  function setStreaming(nextStreaming: boolean, now: number) {
+    streaming = nextStreaming
+    if (lastAdvancedAt === null) lastAdvancedAt = now
+  }
+
+  function advance(now: number): number {
+    if (lastAdvancedAt === null) {
+      lastAdvancedAt = now
+      return value
+    }
+    const elapsedSeconds = Math.max(0, now - lastAdvancedAt) / 1_000
+    lastAdvancedAt = now
+    let backlog = Math.max(0, target - value)
+    if (!streaming && backlog <= 0.5) {
+      value = target
+      backlog = 0
+    }
+    const catchUpSpeed = backlog / followTimeSeconds
+    const desiredSpeed = Math.min(
+      maximumSpeed,
+      backlog > 0
+        ? Math.max(streaming ? cruiseSpeed : 0, catchUpSpeed)
+        : streaming
+          ? cruiseSpeed
+          : 0
+    )
+    const speedDelta =
+      desiredSpeed > speed
+        ? accelerationPerSecond * elapsedSeconds
+        : decelerationPerSecond * elapsedSeconds
+    speed += Math.sign(desiredSpeed - speed) * Math.min(Math.abs(desiredSpeed - speed), speedDelta)
+    value = Math.min(target, value + speed * elapsedSeconds)
+    return value
+  }
+
+  return {
+    advance,
+    getValue: () => value,
+    getSpeed: () => speed,
+    isRunning: () => streaming || value < target || speed > 0,
+    jumpToTarget: () => {
+      value = target
+      speed = 0
+      return value
+    },
+    observeTarget: (nextTarget: number) => {
+      target = Math.max(0, nextTarget)
+      if (target < value) value = target
+    },
+    setStreaming,
+  }
+}
 
 /**
  * Interpolates a numeric value toward an observed target at a speed that tracks

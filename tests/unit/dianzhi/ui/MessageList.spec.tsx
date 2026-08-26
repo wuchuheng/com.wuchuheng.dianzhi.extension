@@ -8,6 +8,8 @@ import type { MessageRecord } from '@/dianzhi/domain/protocol'
 
 let root: Root | undefined
 let host: HTMLDivElement | undefined
+let resizeCallback: ResizeObserverCallback | undefined
+let frameCallback: FrameRequestCallback | undefined
 
 function assistantMessage(overrides: Partial<MessageRecord> = {}): MessageRecord {
   const at = new Date(2026, 2, 5, 14, 7).toISOString()
@@ -27,13 +29,27 @@ function assistantMessage(overrides: Partial<MessageRecord> = {}): MessageRecord
   }
 }
 
-async function renderMessageList(showMeta: boolean, message: MessageRecord) {
+async function renderMessageList(
+  showMeta: boolean,
+  message: MessageRecord,
+  smoothStreamingGrowth = false,
+  reducedMotion = false,
+  onStreamingHeightDelta?: (delta: number) => void
+) {
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
   await act(async () => {
     root.render(
-      <MessageList messages={[message]} mode="chat" reasoningEnabled={false} showMeta={showMeta} />
+      <MessageList
+        messages={[message]}
+        mode="chat"
+        reasoningEnabled={false}
+        showMeta={showMeta}
+        smoothStreamingGrowth={smoothStreamingGrowth}
+        reducedMotion={reducedMotion}
+        onStreamingHeightDelta={onStreamingHeightDelta}
+      />
     )
   })
   return host
@@ -44,10 +60,31 @@ beforeEach(() => {
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
     configurable: true,
   })
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      constructor(callback: ResizeObserverCallback) {
+        resizeCallback = callback
+      }
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    }
+  )
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    frameCallback = callback
+    return 1
+  })
+  vi.stubGlobal('cancelAnimationFrame', () => {
+    frameCallback = undefined
+  })
 })
 
 afterEach(() => {
+  vi.unstubAllGlobals()
   vi.clearAllMocks()
+  resizeCallback = undefined
+  frameCallback = undefined
   act(() => root?.unmount())
   root = undefined
   host?.remove()
@@ -122,5 +159,110 @@ describe('MessageList meta', () => {
       meta?.querySelector<HTMLButtonElement>('[aria-label="复制纯文本"]')?.click()
     })
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('你好')
+  })
+})
+
+describe('MessageList streaming growth', () => {
+  it('keeps the latest assistant message in one growth host across completion', async () => {
+    await renderMessageList(true, assistantMessage({ status: 'streaming' }), true)
+    expect(
+      host?.querySelector('.dz-streaming-message-growth .dz-message.is-assistant')
+    ).not.toBeNull()
+
+    await act(async () => {
+      root?.render(
+        <MessageList
+          messages={[assistantMessage({ status: 'completed' })]}
+          mode="chat"
+          reasoningEnabled={false}
+          showMeta
+          smoothStreamingGrowth
+        />
+      )
+    })
+    expect(
+      host?.querySelector('.dz-streaming-message-growth .dz-message.is-assistant')
+    ).not.toBeNull()
+    const completedHost = host?.querySelector<HTMLDivElement>('.dz-streaming-message-growth')
+    const completedMessage = completedHost?.querySelector<HTMLElement>('.dz-message')
+    act(() => {
+      resizeCallback?.(
+        [{ target: completedMessage!, contentRect: { height: 100 } } as ResizeObserverEntry],
+        {} as ResizeObserver
+      )
+    })
+    expect(completedHost?.style.height).toBe('')
+  })
+
+  it('does not add the growth host to user messages', async () => {
+    await renderMessageList(true, assistantMessage({ role: 'user', status: 'streaming' }), true)
+    expect(host?.querySelector('.dz-streaming-message-growth')).toBeNull()
+    await act(async () => {
+      root?.render(
+        <MessageList
+          messages={[assistantMessage({ role: 'user', status: 'streaming' })]}
+          mode="chat"
+          reasoningEnabled={false}
+          showMeta
+          smoothStreamingGrowth
+        />
+      )
+    })
+    expect(host?.querySelector('.dz-streaming-message-growth')).toBeNull()
+  })
+
+  it('reveals a newly measured rendered row over animation frames', async () => {
+    const onStreamingHeightDelta = vi.fn()
+    await renderMessageList(
+      true,
+      assistantMessage({ status: 'streaming' }),
+      true,
+      false,
+      onStreamingHeightDelta
+    )
+    const growthHost = host?.querySelector<HTMLDivElement>('.dz-streaming-message-growth')
+    const message = growthHost?.querySelector<HTMLElement>('.dz-message')
+    expect(growthHost).not.toBeNull()
+    expect(message).not.toBeNull()
+
+    act(() => {
+      resizeCallback?.(
+        [{ target: message!, contentRect: { height: 100 } } as ResizeObserverEntry],
+        {} as ResizeObserver
+      )
+    })
+    expect(growthHost?.style.height).toBe('100px')
+
+    act(() => {
+      resizeCallback?.(
+        [{ target: message!, contentRect: { height: 140 } } as ResizeObserverEntry],
+        {} as ResizeObserver
+      )
+    })
+    expect(frameCallback).toBeDefined()
+    act(() => frameCallback?.(0))
+    act(() => frameCallback?.(100))
+    const animatedHeight = Number.parseFloat(growthHost?.style.height ?? '0')
+    expect(animatedHeight).toBeGreaterThan(100)
+    expect(Number.parseFloat(growthHost?.style.height ?? '0')).toBeLessThan(140)
+    expect(onStreamingHeightDelta).toHaveBeenCalledWith(animatedHeight - 100)
+  })
+
+  it('reveals a newly measured row immediately under reduced motion', async () => {
+    await renderMessageList(true, assistantMessage({ status: 'streaming' }), true, true)
+    const growthHost = host?.querySelector<HTMLDivElement>('.dz-streaming-message-growth')
+    const message = growthHost?.querySelector<HTMLElement>('.dz-message')
+    act(() => {
+      resizeCallback?.(
+        [{ target: message!, contentRect: { height: 100 } } as ResizeObserverEntry],
+        {} as ResizeObserver
+      )
+      resizeCallback?.(
+        [{ target: message!, contentRect: { height: 140 } } as ResizeObserverEntry],
+        {} as ResizeObserver
+      )
+    })
+    expect(growthHost?.style.height).toBe('140px')
+    expect(frameCallback).toBeUndefined()
   })
 })

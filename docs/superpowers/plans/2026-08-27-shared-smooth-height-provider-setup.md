@@ -288,15 +288,15 @@ In `src/content/views/App.tsx`:
 1. Replace the `useStreamingHeightController({...})` call (currently lines 469–479) with:
 
 ```tsx
-  useStreamingHeight({
-    elementRef: panelRef,
-    visible: state.visible,
-    targetVersion: [state.snapshot, state.expanded, state.mode],
-    minimumHeight: 280,
-    maximumHeight: maximumPanelHeight,
-    reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
-    onHeightChange: setPanelHeight,
-  })
+useStreamingHeight({
+  elementRef: panelRef,
+  visible: state.visible,
+  targetVersion: [state.snapshot, state.expanded, state.mode],
+  minimumHeight: 280,
+  maximumHeight: maximumPanelHeight,
+  reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  onHeightChange: setPanelHeight,
+})
 ```
 
 2. Replace the import (line 27) `import { useStreamingHeightController } from './use-streaming-height-controller'` with:
@@ -404,9 +404,9 @@ describe('ProviderSetup', () => {
       setValue(host!.querySelector<HTMLInputElement>('[aria-label="模型"]')!, 'claude-opus-4-8')
     })
     await act(async () => {
-      host?.querySelector<HTMLFormElement>('.dz-provider-setup')?.dispatchEvent(
-        new Event('submit', { bubbles: true, cancelable: true })
-      )
+      host
+        ?.querySelector<HTMLFormElement>('.dz-provider-setup')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     })
     expect(onSave).toHaveBeenCalledTimes(1)
     expect(onSave).toHaveBeenCalledWith({ ...provider, model: 'claude-opus-4-8' })
@@ -415,9 +415,9 @@ describe('ProviderSetup', () => {
   it('renders an inline error when saving fails and keeps the panel open', async () => {
     renderSetup({ onSave: vi.fn().mockRejectedValue(new Error('网络错误')) })
     await act(async () => {
-      host?.querySelector<HTMLFormElement>('.dz-provider-setup')?.dispatchEvent(
-        new Event('submit', { bubbles: true, cancelable: true })
-      )
+      host
+        ?.querySelector<HTMLFormElement>('.dz-provider-setup')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     })
     expect(host?.querySelector('.dz-provider-setup-error')?.textContent).toContain('网络错误')
   })
@@ -618,29 +618,29 @@ In `src/content/views/App.tsx`:
 4. After the `needsSettings` computation (line 163), add local dismissal state:
 
 ```ts
-  const [setupDismissed, setSetupDismissed] = useState(false)
-  useEffect(() => {
-    if (!needsSettings) setSetupDismissed(false)
-  }, [needsSettings])
-  const showSetup = needsSettings && !setupDismissed
+const [setupDismissed, setSetupDismissed] = useState(false)
+useEffect(() => {
+  if (!needsSettings) setSetupDismissed(false)
+}, [needsSettings])
+const showSetup = needsSettings && !setupDismissed
 ```
 
 5. Replace the error-banner block (lines 261–270) with:
 
 ```tsx
-          {showSetup ? (
-            <ProviderSetup
-              provider={providerSettings}
-              onSave={(provider) =>
-                onSaveProvider(provider).then(() => setSetupDismissed(true))
-              }
-              onOpenSettings={onOpenSettings}
-            />
-          ) : (state.error || latestAssistant?.errorMessage) ? (
-            <div className="dz-error" role="alert">
-              <span>{state.error?.message ?? latestAssistant?.errorMessage}</span>
-            </div>
-          ) : null}
+{
+  showSetup ? (
+    <ProviderSetup
+      provider={providerSettings}
+      onSave={(provider) => onSaveProvider(provider).then(() => setSetupDismissed(true))}
+      onOpenSettings={onOpenSettings}
+    />
+  ) : state.error || latestAssistant?.errorMessage ? (
+    <div className="dz-error" role="alert">
+      <span>{state.error?.message ?? latestAssistant?.errorMessage}</span>
+    </div>
+  ) : null
+}
 ```
 
 - [ ] **Step 3: Wire the container App**
@@ -648,17 +648,17 @@ In `src/content/views/App.tsx`:
 In `src/content/views/App.tsx`, in the default `App` component, add a `saveProvider` callback next to the other callbacks (after `withConversation`):
 
 ```ts
-  const saveProvider = useCallback(
-    async (provider: ProviderSettings) => {
-      const saved = await contentSettingsCommand.dispatch({
-        type: 'settings.save',
-        requestId: requestId('settings'),
-        settings: { ...settings, provider },
-      })
-      setSettings(saved)
-    },
-    [requestId, settings]
-  )
+const saveProvider = useCallback(
+  async (provider: ProviderSettings) => {
+    const saved = await contentSettingsCommand.dispatch({
+      type: 'settings.save',
+      requestId: requestId('settings'),
+      settings: { ...settings, provider },
+    })
+    setSettings(saved)
+  },
+  [requestId, settings]
+)
 ```
 
 and pass it into `ContentApp` (in the render around lines 555–597):
@@ -715,9 +715,9 @@ describe('ContentApp provider setup', () => {
     expect(host?.querySelector('.dz-error')).toBeNull()
 
     await act(async () => {
-      host?.querySelector<HTMLFormElement>('.dz-provider-setup')?.dispatchEvent(
-        new Event('submit', { bubbles: true, cancelable: true })
-      )
+      host
+        ?.querySelector<HTMLFormElement>('.dz-provider-setup')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     })
     expect(onSaveProvider).toHaveBeenCalledTimes(1)
     // Dismissed after a successful save.
@@ -782,49 +782,49 @@ import type { ProviderSettings } from '@/dianzhi/domain/types'
 4. Next to the existing `reducedMotion` / hook block (where `useScrollFollow` is called), add the setup state, dismissal reset, and the shared (uncapped) height hook:
 
 ```ts
-  const setupRef = useRef<HTMLDivElement | null>(null)
-  const [setupHeight, setSetupHeight] = useState(0)
-  const [setupDismissed, setSetupDismissed] = useState(false)
-  const showSetup = needsSettings && !setupDismissed
+const setupRef = useRef<HTMLDivElement | null>(null)
+const [setupHeight, setSetupHeight] = useState(0)
+const [setupDismissed, setSetupDismissed] = useState(false)
+const showSetup = needsSettings && !setupDismissed
 
-  useEffect(() => {
-    if (!needsSettings) setSetupDismissed(false)
-  }, [needsSettings])
+useEffect(() => {
+  if (!needsSettings) setSetupDismissed(false)
+}, [needsSettings])
 
-  useStreamingHeight({
-    elementRef: setupRef,
-    visible: showSetup,
-    targetVersion: snapshot,
-    reducedMotion,
-    onHeightChange: setSetupHeight,
-  })
+useStreamingHeight({
+  elementRef: setupRef,
+  visible: showSetup,
+  targetVersion: snapshot,
+  reducedMotion,
+  onHeightChange: setSetupHeight,
+})
 ```
 
-   (`snapshot` and `reducedMotion` are already computed in `SidePanelView`.)
+(`snapshot` and `reducedMotion` are already computed in `SidePanelView`.)
 
 5. Replace the error-banner branch in the history `<main>` (currently the `{(state.error || latestAssistant?.errorMessage) && (...)}` block) with:
 
 ```tsx
-          {showSetup ? (
-            <div ref={setupRef} className="dz-provider-setup-host" style={{ height: setupHeight }}>
-              <ProviderSetup
-                provider={providerSettings}
-                onSave={(provider) =>
-                  onSaveProvider(provider).then(() => setSetupDismissed(true))
-                }
-                onOpenSettings={onOpenSettings}
-              />
-            </div>
-          ) : (state.error || latestAssistant?.errorMessage) ? (
-            <div className="dz-error" role="alert">
-              <span>{state.error?.message ?? latestAssistant?.errorMessage}</span>
-              {needsSettings && (
-                <button type="button" onClick={onOpenSettings}>
-                  打开设置
-                </button>
-              )}
-            </div>
-          ) : null}
+{
+  showSetup ? (
+    <div ref={setupRef} className="dz-provider-setup-host" style={{ height: setupHeight }}>
+      <ProviderSetup
+        provider={providerSettings}
+        onSave={(provider) => onSaveProvider(provider).then(() => setSetupDismissed(true))}
+        onOpenSettings={onOpenSettings}
+      />
+    </div>
+  ) : state.error || latestAssistant?.errorMessage ? (
+    <div className="dz-error" role="alert">
+      <span>{state.error?.message ?? latestAssistant?.errorMessage}</span>
+      {needsSettings && (
+        <button type="button" onClick={onOpenSettings}>
+          打开设置
+        </button>
+      )}
+    </div>
+  ) : null
+}
 ```
 
 - [ ] **Step 3: Wire the container App**
@@ -832,20 +832,20 @@ import type { ProviderSettings } from '@/dianzhi/domain/types'
 In the default `App` component (sidepanel `src/sidepanel/App.tsx`), add a `saveProvider` callback and pass both new props into `SidePanelView`:
 
 ```ts
-  const saveProvider = useCallback(
-    async (provider: ProviderSettings) => {
-      const saved = await settingsCommand.dispatch({
-        type: 'settings.save',
-        requestId: requestId('settings'),
-        settings: { ...settings, provider },
-      })
-      setSettings(saved)
-    },
-    [requestId, settings]
-  )
+const saveProvider = useCallback(
+  async (provider: ProviderSettings) => {
+    const saved = await settingsCommand.dispatch({
+      type: 'settings.save',
+      requestId: requestId('settings'),
+      settings: { ...settings, provider },
+    })
+    setSettings(saved)
+  },
+  [requestId, settings]
+)
 ```
 
-   In the `<SidePanelView ... />` render add:
+In the `<SidePanelView ... />` render add:
 
 ```tsx
       providerSettings={settings.provider}
@@ -897,9 +897,9 @@ describe('Side Panel provider setup panel', () => {
     })
     expect(host?.querySelector('.dz-provider-setup')).not.toBeNull()
     await act(async () => {
-      host?.querySelector<HTMLFormElement>('.dz-provider-setup')?.dispatchEvent(
-        new Event('submit', { bubbles: true, cancelable: true })
-      )
+      host
+        ?.querySelector<HTMLFormElement>('.dz-provider-setup')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     })
     expect(settingsDispatch).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'settings.save' })
@@ -924,7 +924,10 @@ describe('Side Panel provider setup panel', () => {
     })
     const panel = host?.querySelector<HTMLDivElement>('.dz-provider-setup-host')
     expect(panel).not.toBeNull()
-    Object.defineProperty(panel as HTMLDivElement, 'offsetHeight', { value: 900, configurable: true })
+    Object.defineProperty(panel as HTMLDivElement, 'offsetHeight', {
+      value: 900,
+      configurable: true,
+    })
 
     await act(async () => {
       port.emitMessage({ type: 'conversation.sync', snapshot: unconfigured('need setup again') })

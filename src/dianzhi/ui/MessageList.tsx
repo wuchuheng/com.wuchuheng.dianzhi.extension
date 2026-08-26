@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import type { MessageRecord } from '@/dianzhi/domain/protocol'
 import { formatMessageTime } from './message-time'
 import { markdownToPlainText } from './markdown-text'
 import { Markdown } from './Markdown'
 import { Reasoning } from './Reasoning'
+import { StreamingMessageGrowth } from './StreamingMessageGrowth'
 
 export interface MessageListProps {
   messages: readonly MessageRecord[]
@@ -11,6 +12,12 @@ export interface MessageListProps {
   reasoningEnabled: boolean
   /** Render the time plus plain-text and Markdown copy actions on every message bubble. */
   showMeta?: boolean
+  /** Smoothly reveals new rendered rows in the actively streaming assistant message. */
+  smoothStreamingGrowth?: boolean
+  /** Disables animated height interpolation for accessibility. */
+  reducedMotion?: boolean
+  /** Receives the committed per-frame height increase of the streaming message. */
+  onStreamingHeightDelta?(delta: number): void
 }
 
 function CopyGlyph() {
@@ -149,7 +156,15 @@ function Message({
   )
 }
 
-export function MessageList({ messages, mode, reasoningEnabled, showMeta }: MessageListProps) {
+export function MessageList({
+  messages,
+  mode,
+  reasoningEnabled,
+  showMeta,
+  smoothStreamingGrowth = false,
+  reducedMotion = false,
+  onStreamingHeightDelta,
+}: MessageListProps) {
   const visible =
     mode === 'card'
       ? messages.filter((message) => message.role === 'assistant').slice(-1)
@@ -157,16 +172,28 @@ export function MessageList({ messages, mode, reasoningEnabled, showMeta }: Mess
   if (visible.length === 0) {
     return <div className="dz-empty">正在理解所选内容…</div>
   }
+  const latestAssistantId = [...visible]
+    .reverse()
+    .find((message) => message.role === 'assistant')?.id
   return (
     <div className={`dz-messages is-${mode}`} role="log" aria-live="polite">
-      {visible.map((message) => (
-        <Message
-          key={message.id}
-          message={message}
-          reasoningEnabled={reasoningEnabled}
-          showMeta={showMeta}
-        />
-      ))}
+      {visible.map((message) => {
+        const content = (
+          <Message message={message} reasoningEnabled={reasoningEnabled} showMeta={showMeta} />
+        )
+        return smoothStreamingGrowth && message.id === latestAssistantId ? (
+          <StreamingMessageGrowth
+            key={message.id}
+            streaming={message.status === 'streaming'}
+            reducedMotion={reducedMotion}
+            onHeightDelta={onStreamingHeightDelta}
+          >
+            {content}
+          </StreamingMessageGrowth>
+        ) : (
+          <Fragment key={message.id}>{content}</Fragment>
+        )
+      })}
     </div>
   )
 }

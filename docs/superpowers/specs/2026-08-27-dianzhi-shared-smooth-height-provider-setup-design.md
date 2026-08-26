@@ -25,16 +25,16 @@ Two requirements:
 
 ## 2. Decisions
 
-| Decision              | Choice                                                                                     | Rationale                                                                                            |
-| --------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------- |
-| Shared unit           | `useStreamingHeight` extracted from `use-streaming-height-controller.ts` (deleted)          | One animation model for every "grow to fit content" surface                                          |
-| Bounds                | `minimumHeight?: number` = 0, `maximumHeight?: number` = `Infinity`                         | "No cap needed in the Side Panel" is the default; the popover passes its 280/560 anyway              |
-| Consumer component    | `ProviderSetup` rendered by both surfaces on `PROVIDER_NOT_CONFIGURED`                     | A shared grow-capable React element is the Side Panel's reason to reference the hook                 |
-| Setup fields          | `apiKey` + `baseUrl` + `model` (minimum to unblock a provider run)                          | Full Options-page parity is a non-goal                                                               |
-| Settings plumbing     | Reuse `settings.get` / `settings.save` via each host's adapter                              | `contentSettingsCommand` (popover) and `settingsCommand` (Side Panel) already exist; no new protocol |
-| After save            | Host dismisses the panel; the user presses 重试 to re-run with the new config               | Existing retry path re-drives the provider run                                                       |
-| Popover cap           | Unchanged (`minimumHeight` 280, `maximumHeight` `min(560, innerHeight − 16)`)               | Existing behavior preserved                                                                          |
-| Reduced motion        | Jump straight to the measured height, no rAF glide                                          | Same rule as today                                                                                   |
+| Decision           | Choice                                                                             | Rationale                                                                                            |
+| ------------------ | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Shared unit        | `useStreamingHeight` extracted from `use-streaming-height-controller.ts` (deleted) | One animation model for every "grow to fit content" surface                                          |
+| Bounds             | `minimumHeight?: number` = 0, `maximumHeight?: number` = `Infinity`                | "No cap needed in the Side Panel" is the default; the popover passes its 280/560 anyway              |
+| Consumer component | `ProviderSetup` rendered by both surfaces on `PROVIDER_NOT_CONFIGURED`             | A shared grow-capable React element is the Side Panel's reason to reference the hook                 |
+| Setup fields       | `apiKey` + `baseUrl` + `model` (minimum to unblock a provider run)                 | Full Options-page parity is a non-goal                                                               |
+| Settings plumbing  | Reuse `settings.get` / `settings.save` via each host's adapter                     | `contentSettingsCommand` (popover) and `settingsCommand` (Side Panel) already exist; no new protocol |
+| After save         | Host dismisses the panel; the user presses 重试 to re-run with the new config      | Existing retry path re-drives the provider run                                                       |
+| Popover cap        | Unchanged (`minimumHeight` 280, `maximumHeight` `min(560, innerHeight − 16)`)      | Existing behavior preserved                                                                          |
+| Reduced motion     | Jump straight to the measured height, no rAF glide                                 | Same rule as today                                                                                   |
 
 ## 3. Architecture
 
@@ -149,15 +149,15 @@ height and the existing 280→560 animation fits it smoothly.
 
 ## 4. Behavior matrix
 
-| State                                             | Result                                                                              |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Provider unconfigured, popover                     | `ProviderSetup` replaces the banner; panel glides taller (capped at `maximumHeight`) |
-| Provider unconfigured, Side Panel                 | `ProviderSetup` grows to fit its content, no cap (`Infinity`), via the shared hook   |
-| Save succeeds                                      | Panel dismissed; 重试 visible; retry re-runs with the new config                     |
-| Save rejects                                       | Inline error; panel stays open                                                       |
-| Secondary 打开设置 clicked                          | Full Options provider section opens                                                  |
-| Setup panel content changes (e.g. error line)      | Height re-chases the new natural height with the rate-adaptive glide                 |
-| Reduced motion                                     | Height jumped instantly to the measured target                                       |
+| State                                         | Result                                                                               |
+| --------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Provider unconfigured, popover                | `ProviderSetup` replaces the banner; panel glides taller (capped at `maximumHeight`) |
+| Provider unconfigured, Side Panel             | `ProviderSetup` grows to fit its content, no cap (`Infinity`), via the shared hook   |
+| Save succeeds                                 | Panel dismissed; 重试 visible; retry re-runs with the new config                     |
+| Save rejects                                  | Inline error; panel stays open                                                       |
+| Secondary 打开设置 clicked                    | Full Options provider section opens                                                  |
+| Setup panel content changes (e.g. error line) | Height re-chases the new natural height with the rate-adaptive glide                 |
+| Reduced motion                                | Height jumped instantly to the measured target                                       |
 
 ## 5. Tests
 
@@ -180,19 +180,19 @@ height and the existing 280→560 animation fits it smoothly.
 
 ## 6. Files changed
 
-| Path | Change |
-| --- | --- |
-| `src/dianzhi/ui/use-streaming-height.ts` | **new** shared hook (moved + generalized) |
-| `src/dianzhi/ui/ProviderSetup.tsx` | **new** provider setup form |
-| `src/content/views/use-streaming-height-controller.ts` | **deleted** (superseded) |
-| `src/content/views/App.tsx` | migrate hook; render `ProviderSetup` on `PROVIDER_NOT_CONFIGURED`; wire `onSave`/`onOpenSettings` |
-| `src/sidepanel/App.tsx` | render `ProviderSetup` + `useStreamingHeight` (uncapped); wire `onSave` |
-| `src/content/views/App.css`, `src/sidepanel/App.css` | `.dz-provider-setup` styles beside the existing `.dz-error` rules |
-| `eslint.config.js` | allow-list the two new spec paths |
-| `tests/unit/dianzhi/ui/use-streaming-height.spec.tsx` | **new** |
-| `tests/unit/dianzhi/ui/ProviderSetup.spec.tsx` | **new** |
-| `tests/unit/content/views/App.spec.tsx`, `tests/unit/sidepanel/App.spec.tsx` | extended |
-| `docs/superpowers/specs/2026-08-27-dianzhi-shared-smooth-height-provider-setup-design.md` | this document |
+| Path                                                                                      | Change                                                                                            |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `src/dianzhi/ui/use-streaming-height.ts`                                                  | **new** shared hook (moved + generalized)                                                         |
+| `src/dianzhi/ui/ProviderSetup.tsx`                                                        | **new** provider setup form                                                                       |
+| `src/content/views/use-streaming-height-controller.ts`                                    | **deleted** (superseded)                                                                          |
+| `src/content/views/App.tsx`                                                               | migrate hook; render `ProviderSetup` on `PROVIDER_NOT_CONFIGURED`; wire `onSave`/`onOpenSettings` |
+| `src/sidepanel/App.tsx`                                                                   | render `ProviderSetup` + `useStreamingHeight` (uncapped); wire `onSave`                           |
+| `src/content/views/App.css`, `src/sidepanel/App.css`                                      | `.dz-provider-setup` styles beside the existing `.dz-error` rules                                 |
+| `eslint.config.js`                                                                        | allow-list the two new spec paths                                                                 |
+| `tests/unit/dianzhi/ui/use-streaming-height.spec.tsx`                                     | **new**                                                                                           |
+| `tests/unit/dianzhi/ui/ProviderSetup.spec.tsx`                                            | **new**                                                                                           |
+| `tests/unit/content/views/App.spec.tsx`, `tests/unit/sidepanel/App.spec.tsx`              | extended                                                                                          |
+| `docs/superpowers/specs/2026-08-27-dianzhi-shared-smooth-height-provider-setup-design.md` | this document                                                                                     |
 
 ## 7. Non-goals
 

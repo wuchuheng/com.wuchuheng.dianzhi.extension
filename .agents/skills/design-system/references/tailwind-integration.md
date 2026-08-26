@@ -15,7 +15,7 @@ Map design system tokens to Tailwind CSS configuration.
 @layer base {
   :root {
     /* Primitives */
-    --color-blue-600: 37 99 235;  /* HSL: 217 91% 60% */
+    --color-blue-600: 37 99 235; /* HSL: 217 91% 60% */
 
     /* Semantic */
     --background: 0 0% 100%;
@@ -165,9 +165,15 @@ background-color: hsl(217 91% 60% / 0.5);
   }
 
   /* Sizes */
-  .btn-sm { @apply h-8 px-3 text-xs; }
-  .btn-md { @apply h-10 px-4 text-sm; }
-  .btn-lg { @apply h-12 px-6 text-base; }
+  .btn-sm {
+    @apply h-8 px-3 text-xs;
+  }
+  .btn-md {
+    @apply h-10 px-4 text-sm;
+  }
+  .btn-lg {
+    @apply h-12 px-6 text-base;
+  }
 }
 ```
 

@@ -96,4 +96,12 @@ describe('ToolList removed tools', () => {
     expect(host?.querySelector('.tool-delete-dialog')).toBeNull()
     expect(handlers.onDelete).not.toHaveBeenCalled()
   })
+
+  it('closes the dialog on Escape without deleting', () => {
+    const { host, handlers } = renderToolList()
+    act(() => host?.querySelector<HTMLButtonElement>('.removed-tool-delete')?.click())
+    act(() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })))
+    expect(host?.querySelector('.tool-delete-dialog')).toBeNull()
+    expect(handlers.onDelete).not.toHaveBeenCalled()
+  })
 })

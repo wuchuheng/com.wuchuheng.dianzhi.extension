@@ -15,6 +15,7 @@
 ### Task 1: Store-level permanent delete
 
 **Files:**
+
 - Modify: `src/dianzhi/domain/errors.ts`
 - Modify: `src/offscreen/database/config-store.ts`
 - Test: `tests/unit/offscreen/config-store.spec.ts`
@@ -31,9 +32,9 @@ it('permanently deletes a soft-removed tool', async () => {
   const tool = await config.createTool({ name: '临时工具', prompt: 'p' })
   await config.softRemoveTool(tool.id)
   await config.deleteTool(tool.id)
-  const row = db
-    .prepare('SELECT COUNT(*) AS count FROM tools WHERE id = ?')
-    .get(tool.id) as { count: number }
+  const row = db.prepare('SELECT COUNT(*) AS count FROM tools WHERE id = ?').get(tool.id) as {
+    count: number
+  }
   expect(row.count).toBe(0)
   const list = await config.listTools(true)
   expect(list.some((item) => item.id === tool.id)).toBe(false)
@@ -105,25 +106,22 @@ In `src/offscreen/database/config-store.ts`:
 2. Add the implementation inside `createConfigStore`, directly after the `restoreTool` function (currently ends around line 352):
 
 ```ts
-  async function deleteTool(id: number): Promise<void> {
-    const result = await db.exec(
-      'DELETE FROM tools WHERE id = ? AND deleted_at IS NOT NULL',
+async function deleteTool(id: number): Promise<void> {
+  const result = await db.exec('DELETE FROM tools WHERE id = ? AND deleted_at IS NOT NULL', [id])
+  if (Number(result.changes ?? 0) !== 1) {
+    const rows = await db.query<{ deletedAt: string | null }>(
+      'SELECT deleted_at AS deletedAt FROM tools WHERE id = ?',
       [id]
     )
-    if (Number(result.changes ?? 0) !== 1) {
-      const rows = await db.query<{ deletedAt: string | null }>(
-        'SELECT deleted_at AS deletedAt FROM tools WHERE id = ?',
-        [id]
-      )
-      const row = rows[0]
-      if (!row) throw toolNotFound(id)
-      throw new DianzhiError({
-        code: 'TOOL_NOT_REMOVED',
-        message: 'The tool must be removed before it can be permanently deleted.',
-        context: { id },
-      })
-    }
+    const row = rows[0]
+    if (!row) throw toolNotFound(id)
+    throw new DianzhiError({
+      code: 'TOOL_NOT_REMOVED',
+      message: 'The tool must be removed before it can be permanently deleted.',
+      context: { id },
+    })
   }
+}
 ```
 
 3. Add `deleteTool` to the returned store object (near `restoreTool` in the return statement).
@@ -146,6 +144,7 @@ git commit -m "feat(tools): add permanent deleteTool for soft-removed tools"
 ### Task 2: Protocol + RPC + background `tools.delete`
 
 **Files:**
+
 - Modify: `src/dianzhi/domain/protocol.ts`
 - Modify: `src/offscreen/database/rpc.ts`
 - Modify: `src/background/index.ts`
@@ -218,10 +217,12 @@ In `src/dianzhi/domain/protocol.ts`, change the shared case at lines 392–395:
 In `src/offscreen/database/rpc.ts`, add to `DatabaseOperationMap` (after `restoreTool`, line 79):
 
 ```ts
-  deleteTool: {
-    args: { id: number }
-    result: Awaited<ReturnType<ConfigStore['deleteTool']>>
+deleteTool: {
+  args: {
+    id: number
   }
+  result: Awaited<ReturnType<ConfigStore['deleteTool']>>
+}
 ```
 
 and add `deleteTool` to the `MUTATIONS` set (after `'restoreTool'`, line 115):
@@ -262,6 +263,7 @@ git commit -m "feat(tools): wire tools.delete event through protocol, rpc, and b
 ### Task 3: Options API + workspace wiring
 
 **Files:**
+
 - Modify: `src/options/tools/use-tools-api.ts`
 - Modify: `src/options/tools/ToolsWorkspace.tsx`
 
@@ -291,19 +293,19 @@ and add to the returned object (after the `restore` entry, before the closing `}
 In `src/options/tools/ToolsWorkspace.tsx`, add a handler next to `handleRestore` (after line 140):
 
 ```ts
-  const handleDelete = (id: number) => {
-    void toolsApi
-      .delete(id)
-      .then(apply)
-      .catch((reason: unknown) => setError(message(reason)))
-  }
+const handleDelete = (id: number) => {
+  void toolsApi
+    .delete(id)
+    .then(apply)
+    .catch((reason: unknown) => setError(message(reason)))
+}
 ```
 
 and pass it through – the `ToolList` usage (line 146–156) gains:
 
 ```tsx
-        onRestore={handleRestore}
-        onDelete={handleDelete}
+onRestore = { handleRestore }
+onDelete = { handleDelete }
 ```
 
 (`onDelete` does not exist on `ToolListProps` until Task 4; `tsc` will be red here until Task 4 lands, which is expected — do NOT commit mid-task state without Task 4.)
@@ -317,6 +319,7 @@ Run: `pnpm exec tsc -b` — expected to FAIL until Task 4 adds `onDelete` to `To
 ### Task 4: ToolList button + confirm dialog
 
 **Files:**
+
 - Modify: `src/options/tools/ToolList.tsx`
 - Modify: `src/options/tools/tool-workspace.css`
 - Test: `tests/unit/options/ToolList.spec.tsx` (new)
@@ -411,9 +414,7 @@ describe('ToolList removed tools', () => {
     const { host, handlers } = renderToolList()
     act(() => host?.querySelector<HTMLButtonElement>('.removed-tool-delete')?.click())
     act(() =>
-      host
-        ?.querySelector<HTMLButtonElement>('.tool-delete-dialog-actions .danger')
-        ?.click()
+      host?.querySelector<HTMLButtonElement>('.tool-delete-dialog-actions .danger')?.click()
     )
     expect(handlers.onDelete).toHaveBeenCalledTimes(1)
     expect(handlers.onDelete).toHaveBeenCalledWith(77)
@@ -445,68 +446,79 @@ In `src/options/tools/ToolList.tsx`:
   onDelete(id: number): void
 ```
 
-2. Add dialog state next to the existing `dragOver` state (line 95):
+2. Update the React import to include `useEffect`:
+   `import { useEffect, useState } from 'react'`
+
+3. Add dialog state and an Escape-to-close key listener next to the existing `dragOver`
+   state (line 95):
 
 ```ts
-  const [confirmingDelete, setConfirmingDelete] = useState<ToolRecord | null>(null)
+const [confirmingDelete, setConfirmingDelete] = useState<ToolRecord | null>(null)
+
+useEffect(() => {
+  if (confirmingDelete === null) return
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') setConfirmingDelete(null)
+  }
+  window.addEventListener('keydown', onKeyDown)
+  return () => window.removeEventListener('keydown', onKeyDown)
+}, [confirmingDelete])
 ```
 
-3. In the removed-tool row, add the button after the 恢复 button (after line 258):
+4. In the removed-tool row, add the button after the 恢复 button (after line 258):
 
 ```tsx
-                <button
-                  type="button"
-                  className="removed-tool-delete"
-                  aria-label={`永久删除工具 ${tool.name}`}
-                  onClick={() => setConfirmingDelete(tool)}
-                >
-                  永久删除
-                </button>
+<button
+  type="button"
+  className="removed-tool-delete"
+  aria-label={`永久删除工具 ${tool.name}`}
+  onClick={() => setConfirmingDelete(tool)}
+>
+  永久删除
+</button>
 ```
 
-4. Append the dialog as the last child of the root `<div className="tool-list-pane">` (after the removed-tools `</section>`, before the closing `</div>`), using a `<button>` backdrop to match the repo's existing overlay pattern (a11y-safe):
+5. Append the dialog as the last child of the root `<div className="tool-list-pane">` (after the removed-tools `</section>`, before the closing `</div>`), using a `<button>` backdrop to match the repo's existing overlay pattern (a11y-safe):
 
 ```tsx
-      {confirmingDelete !== null && (
-        <div className="tool-delete-dialog-layer">
+{
+  confirmingDelete !== null && (
+    <div className="tool-delete-dialog-layer">
+      <button
+        type="button"
+        className="tool-delete-dialog-backdrop"
+        aria-label="取消永久删除"
+        onClick={() => setConfirmingDelete(null)}
+      />
+      <section
+        className="tool-delete-dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-label="永久删除工具"
+      >
+        <h3 className="tool-delete-dialog-title">永久删除工具</h3>
+        <p className="tool-delete-dialog-message">
+          此操作将永久删除工具“{confirmingDelete.name}”，且不可恢复。是否继续？
+        </p>
+        <div className="tool-delete-dialog-actions">
+          <button type="button" className="secondary" onClick={() => setConfirmingDelete(null)}>
+            取消
+          </button>
           <button
             type="button"
-            className="tool-delete-dialog-backdrop"
-            aria-label="取消永久删除"
-            onClick={() => setConfirmingDelete(null)}
-          />
-          <section
-            className="tool-delete-dialog"
-            role="alertdialog"
-            aria-modal="true"
-            aria-label="永久删除工具"
+            className="danger"
+            onClick={() => {
+              props.onDelete(confirmingDelete.id)
+              setConfirmingDelete(null)
+            }}
           >
-            <h3 className="tool-delete-dialog-title">永久删除工具</h3>
-            <p className="tool-delete-dialog-message">
-              此操作将永久删除工具“{confirmingDelete.name}”，且不可恢复。是否继续？
-            </p>
-            <div className="tool-delete-dialog-actions">
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => setConfirmingDelete(null)}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                className="danger"
-                onClick={() => {
-                  props.onDelete(confirmingDelete.id)
-                  setConfirmingDelete(null)
-                }}
-              >
-                确认删除
-              </button>
-            </div>
-          </section>
+            确认删除
+          </button>
         </div>
-      )}
+      </section>
+    </div>
+  )
+}
 ```
 
 - [ ] **Step 4: Add the CSS**

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ToolRecord } from '@/offscreen/database/config-store'
 import { orderedIdsOnDrop } from './tool-workspace-state'
 
@@ -95,6 +95,15 @@ export function ToolList(props: ToolListProps) {
   const { tools } = props
   const [dragOver, setDragOver] = useState<DragOverState | null>(null)
   const [confirmingDelete, setConfirmingDelete] = useState<ToolRecord | null>(null)
+
+  useEffect(() => {
+    if (confirmingDelete === null) return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setConfirmingDelete(null)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [confirmingDelete])
 
   const handleDragStart = (event: React.DragEvent, id: number) => {
     event.dataTransfer.setData('text/plain', String(id))

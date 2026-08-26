@@ -6,12 +6,13 @@ import {
 } from '@/dianzhi/conversation/reducer'
 import { DianzhiError, type DianzhiErrorShape } from '@/dianzhi/domain/errors'
 import { DEFAULT_SETTINGS } from '@/dianzhi/domain/settings'
-import type { DianzhiSettings, ShortcutSettings } from '@/dianzhi/domain/types'
+import type { DianzhiSettings, ProviderSettings, ShortcutSettings } from '@/dianzhi/domain/types'
 import type { ConversationCommand, ConversationUpdate } from '@/dianzhi/domain/protocol'
 import { Composer } from '@/dianzhi/ui/Composer'
 import { ConversationStatus } from '@/dianzhi/ui/ConversationStatus'
 import { MessageList } from '@/dianzhi/ui/MessageList'
 import { ToolTabs } from '@/dianzhi/ui/ToolTabs'
+import { ProviderSetup } from '@/dianzhi/ui/ProviderSetup'
 import { useStreamingHeight } from '@/dianzhi/ui/use-streaming-height'
 import { markdownToPlainText } from '@/dianzhi/ui/markdown-text'
 import {
@@ -125,6 +126,8 @@ export interface ContentAppProps {
   onStop(): void
   onRetry(): void
   onOpenSettings(): void
+  providerSettings: ProviderSettings
+  onSaveProvider(provider: ProviderSettings): Promise<void>
   panelRef?: React.RefObject<HTMLDivElement | null>
 }
 
@@ -149,6 +152,8 @@ export function ContentApp({
   onStop,
   onRetry,
   onOpenSettings,
+  providerSettings,
+  onSaveProvider,
   panelRef,
 }: ContentAppProps) {
   if (!state.visible) return null
@@ -161,6 +166,11 @@ export function ContentApp({
   const needsSettings =
     state.error?.code === 'PROVIDER_NOT_CONFIGURED' ||
     latestAssistant?.errorCode === 'PROVIDER_NOT_CONFIGURED'
+  const [setupDismissed, setSetupDismissed] = useState(false)
+  useEffect(() => {
+    if (!needsSettings) setSetupDismissed(false)
+  }, [needsSettings])
+  const showSetup = needsSettings && !setupDismissed
   const arrowTop = placement.direction === 'below' ? placement.y - 6 : placement.y + panelHeight - 6
   const shortcutTip = (shortcut: string) => ` (${formatShortcut(shortcut)})`
   const expandLabel = state.expanded ? '收起宽屏' : '展开宽屏'
@@ -258,16 +268,17 @@ export function ContentApp({
             mode={state.mode}
             reasoningEnabled={reasoningEnabled}
           />
-          {(state.error || latestAssistant?.errorMessage) && (
+          {showSetup ? (
+            <ProviderSetup
+              provider={providerSettings}
+              onSave={(provider) => onSaveProvider(provider).then(() => setSetupDismissed(true))}
+              onOpenSettings={onOpenSettings}
+            />
+          ) : state.error || latestAssistant?.errorMessage ? (
             <div className="dz-error" role="alert">
               <span>{state.error?.message ?? latestAssistant?.errorMessage}</span>
-              {needsSettings && (
-                <button type="button" onClick={onOpenSettings}>
-                  打开设置
-                </button>
-              )}
             </div>
-          )}
+          ) : null}
         </main>
 
         {state.mode === 'chat' && (
@@ -352,6 +363,17 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       )
     },
     [sendCommand, state.snapshot?.conversation.id]
+  )
+  const saveProvider = useCallback(
+    async (provider: ProviderSettings) => {
+      const saved = await contentSettingsCommand.dispatch({
+        type: 'settings.save',
+        requestId: requestId('settings'),
+        settings: { ...settings, provider },
+      })
+      setSettings(saved)
+    },
+    [requestId, settings]
   )
   const togglePanel = useCallback(() => {
     const conversationId = state.snapshot?.conversation.id
@@ -556,6 +578,8 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       panelHeight={panelHeight}
       bodyScrollable={panelHeight >= maximumPanelHeight}
       panelRef={panelRef}
+      providerSettings={settings.provider}
+      onSaveProvider={saveProvider}
       reasoningEnabled={settings.provider.reasoningEnabled}
       composerValue={composer}
       shortcuts={settings.shortcuts}

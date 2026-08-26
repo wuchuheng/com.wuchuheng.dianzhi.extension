@@ -81,6 +81,8 @@ async function render(onOpenSettings = vi.fn(), bodyScrollable = false) {
         onStop={() => undefined}
         onRetry={() => undefined}
         onOpenSettings={onOpenSettings}
+        providerSettings={DEFAULT_SETTINGS.provider}
+        onSaveProvider={async () => undefined}
         bodyScrollable={bodyScrollable}
       />
     )
@@ -138,6 +140,8 @@ describe('ContentApp title actions', () => {
           onStop={() => undefined}
           onRetry={() => undefined}
           onOpenSettings={() => undefined}
+          providerSettings={DEFAULT_SETTINGS.provider}
+          onSaveProvider={async () => undefined}
           bodyScrollable={true}
         />
       )
@@ -180,11 +184,56 @@ describe('ContentApp composer while streaming', () => {
           onStop={() => undefined}
           onRetry={() => undefined}
           onOpenSettings={() => undefined}
+          providerSettings={DEFAULT_SETTINGS.provider}
+          onSaveProvider={async () => undefined}
         />
       )
     })
     const textarea = host?.querySelector<HTMLTextAreaElement>('textarea')
     expect(textarea).not.toBeNull()
     expect(textarea?.disabled).toBe(false)
+  })
+})
+
+describe('ContentApp provider setup', () => {
+  it('renders the inline setup panel instead of the banner when unconfigured', async () => {
+    const unconfigured = visibleState()
+    unconfigured.error = { code: 'PROVIDER_NOT_CONFIGURED', message: 'provider missing' }
+    const onSaveProvider = vi.fn().mockResolvedValue(undefined)
+    host = document.createElement('div')
+    document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => {
+      root.render(
+        <ContentApp
+          state={unconfigured}
+          placement={placement}
+          reasoningEnabled={false}
+          shortcuts={DEFAULT_SETTINGS.shortcuts}
+          onToolSelect={() => undefined}
+          onModeChange={() => undefined}
+          onExpand={() => undefined}
+          onClose={() => undefined}
+          onDock={() => undefined}
+          onSend={() => undefined}
+          onStop={() => undefined}
+          onRetry={() => undefined}
+          onOpenSettings={() => undefined}
+          providerSettings={DEFAULT_SETTINGS.provider}
+          onSaveProvider={onSaveProvider}
+        />
+      )
+    })
+    expect(host?.querySelector('.dz-provider-setup')).not.toBeNull()
+    expect(host?.querySelector('.dz-error')).toBeNull()
+
+    await act(async () => {
+      host
+        ?.querySelector<HTMLFormElement>('.dz-provider-setup')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+    expect(onSaveProvider).toHaveBeenCalledTimes(1)
+    // Dismissed after a successful save.
+    expect(host?.querySelector('.dz-provider-setup')).toBeNull()
   })
 })

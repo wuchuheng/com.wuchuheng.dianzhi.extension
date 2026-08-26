@@ -343,3 +343,93 @@ describe('Side Panel smooth chat scroll', () => {
     expect(history().scrollTop).toBe(1000)
   })
 })
+
+describe('Side Panel provider setup panel', () => {
+  const unconfigured = (content: string) => {
+    const next = snapshot()
+    next.messages = [
+      {
+        id: 1,
+        conversationId: 22,
+        sequence: 1,
+        role: 'assistant',
+        content,
+        reasoningContent: '',
+        status: 'error',
+        errorCode: 'PROVIDER_NOT_CONFIGURED',
+        errorMessage: content,
+        createdAt: '2026-08-22T00:00:00.000Z',
+        updatedAt: '2026-08-22T00:00:00.000Z',
+      },
+    ]
+    return next
+  }
+
+  it('renders the inline setup panel instead of the banner when unconfigured', async () => {
+    await renderApp()
+    await act(async () => {
+      port.emitMessage({ type: 'conversation.sync', snapshot: unconfigured('need setup') })
+      await Promise.resolve()
+    })
+    expect(host?.querySelector('.dz-provider-setup')).not.toBeNull()
+    expect(host?.querySelector('.dz-error')).toBeNull()
+  })
+
+  it('dismisses the panel after a successful save', async () => {
+    await renderApp()
+    await act(async () => {
+      port.emitMessage({ type: 'conversation.sync', snapshot: unconfigured('need setup') })
+      await Promise.resolve()
+    })
+    expect(host?.querySelector('.dz-provider-setup')).not.toBeNull()
+    await act(async () => {
+      host
+        ?.querySelector<HTMLFormElement>('.dz-provider-setup')
+        ?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+    expect(settingsDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'settings.save' })
+    )
+    expect(host?.querySelector('.dz-provider-setup')).toBeNull()
+  })
+
+  it('drives the setup panel height to the content height with no cap', async () => {
+    let frameCallback: ((now: number) => void) | null = null
+    vi.stubGlobal('requestAnimationFrame', (cb: (now: number) => void) => {
+      frameCallback = cb
+      return 1
+    })
+    vi.stubGlobal('cancelAnimationFrame', () => {
+      frameCallback = null
+    })
+
+    await renderApp()
+    await act(async () => {
+      port.emitMessage({ type: 'conversation.sync', snapshot: unconfigured('need setup') })
+      await Promise.resolve()
+    })
+    const panel = host?.querySelector<HTMLDivElement>('.dz-provider-setup-host')
+    expect(panel).not.toBeNull()
+    Object.defineProperty(panel as HTMLDivElement, 'offsetHeight', {
+      value: 900,
+      configurable: true,
+    })
+
+    await act(async () => {
+      port.emitMessage({ type: 'conversation.sync', snapshot: unconfigured('need setup again') })
+      await Promise.resolve()
+    })
+    expect(frameCallback).not.toBeNull()
+
+    act(() => {
+      let now = 1_000
+      for (let i = 0; i < 1_000 && frameCallback !== null; i++) {
+        const cb = frameCallback
+        frameCallback = null
+        cb(now)
+        now += 33
+      }
+    })
+    expect(panel?.style.height).toBe('900px')
+  })
+})

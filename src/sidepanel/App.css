@@ -331,6 +331,57 @@
 .dz-error button {
   padding: 4px 7px;
 }
+.dz-provider-setup-host {
+  overflow: hidden;
+}
+.dz-provider-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+  border: 1px solid var(--d-danger-border);
+  border-radius: var(--d-radius-md);
+  padding: 10px;
+  background: var(--d-surface);
+}
+.dz-provider-setup-title {
+  margin: 0;
+  font-size: 13px;
+}
+.dz-provider-setup-field {
+  display: grid;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--d-text-muted);
+}
+.dz-provider-setup-field input {
+  border: 1px solid var(--d-border-strong);
+  border-radius: var(--d-radius-sm);
+  padding: 4px 6px;
+  color: var(--d-text);
+  background: var(--d-surface);
+}
+.dz-provider-setup-error {
+  margin: 0;
+  color: var(--d-danger);
+  font-size: 12px;
+}
+.dz-provider-setup-actions {
+  display: flex;
+  gap: 8px;
+}
+.dz-provider-setup-actions button[type='submit'] {
+  border: 0;
+  border-radius: var(--d-radius-sm);
+  padding: 5px 10px;
+  color: var(--d-text-on-brand);
+  background: var(--d-brand);
+  cursor: pointer;
+}
+.dz-provider-setup-actions button[type='submit']:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .dz-panel-empty {
   flex: 1 1 auto;
   display: grid;

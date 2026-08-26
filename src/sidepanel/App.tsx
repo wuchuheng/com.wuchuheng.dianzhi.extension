@@ -3,8 +3,10 @@ import { Composer } from '@/dianzhi/ui/Composer'
 import { ConversationStatus } from '@/dianzhi/ui/ConversationStatus'
 import { MessageList } from '@/dianzhi/ui/MessageList'
 import { ToolTabs } from '@/dianzhi/ui/ToolTabs'
+import { ProviderSetup } from '@/dianzhi/ui/ProviderSetup'
+import { useStreamingHeight } from '@/dianzhi/ui/use-streaming-height'
 import { DEFAULT_SETTINGS } from '@/dianzhi/domain/settings'
-import type { DianzhiSettings } from '@/dianzhi/domain/types'
+import type { DianzhiSettings, ProviderSettings } from '@/dianzhi/domain/types'
 import type { ConversationCommand, ConversationUpdate } from '@/dianzhi/domain/protocol'
 import { SIDEPANEL_PORT_NAME } from '@/dianzhi/domain/protocol'
 import { extensionConversationCommand, settingsCommand } from '@/events/config'
@@ -23,8 +25,10 @@ export interface SidePanelViewProps {
   state: PanelState
   reasoningEnabled: boolean
   draft: string
+  providerSettings: ProviderSettings
   onDraftChange(value: string): void
   onToolSelect(toolId: number): void
+  onSaveProvider(provider: ProviderSettings): Promise<void>
   onSend(): void
   onStop(): void
   onRetry(): void
@@ -35,8 +39,10 @@ export function SidePanelView({
   state,
   reasoningEnabled,
   draft,
+  providerSettings,
   onDraftChange,
   onToolSelect,
+  onSaveProvider,
   onSend,
   onStop,
   onRetry,
@@ -69,6 +75,25 @@ export function SidePanelView({
     viewKey,
   })
 
+  const setupRef = useRef<HTMLDivElement | null>(null)
+  const [setupHeight, setSetupHeight] = useState(0)
+  const [setupDismissed, setSetupDismissed] = useState(false)
+  const showSetup = needsSettings && !setupDismissed
+
+  useEffect(() => {
+    if (!needsSettings) setSetupDismissed(false)
+  }, [needsSettings])
+
+  // Grows the provider-setup panel to fit its content with no cap; the popover
+  // caps the same shared logic because its floating panel has a max height.
+  useStreamingHeight({
+    elementRef: setupRef,
+    visible: showSetup,
+    targetVersion: snapshot,
+    reducedMotion,
+    onHeightChange: setSetupHeight,
+  })
+
   return (
     <div className="dz-panel-page">
       {snapshot ? (
@@ -85,7 +110,21 @@ export function SidePanelView({
               reasoningEnabled={reasoningEnabled}
               showMeta
             />
-            {(state.error || latestAssistant?.errorMessage) && (
+            {showSetup ? (
+              <div
+                ref={setupRef}
+                className="dz-provider-setup-host"
+                style={{ height: setupHeight }}
+              >
+                <ProviderSetup
+                  provider={providerSettings}
+                  onSave={(provider) =>
+                    onSaveProvider(provider).then(() => setSetupDismissed(true))
+                  }
+                  onOpenSettings={onOpenSettings}
+                />
+              </div>
+            ) : state.error || latestAssistant?.errorMessage ? (
               <div className="dz-error" role="alert">
                 <span>{state.error?.message ?? latestAssistant?.errorMessage}</span>
                 {needsSettings && (
@@ -94,7 +133,7 @@ export function SidePanelView({
                   </button>
                 )}
               </div>
-            )}
+            ) : null}
           </main>
           <footer className="dz-panel-composer">
             <ConversationStatus message={latestAssistant} />
@@ -229,6 +268,17 @@ export default function App() {
     },
     [command, state.snapshot]
   )
+  const saveProvider = useCallback(
+    async (provider: ProviderSettings) => {
+      const saved = await settingsCommand.dispatch({
+        type: 'settings.save',
+        requestId: requestId('settings'),
+        settings: { ...settings, provider },
+      })
+      setSettings(saved)
+    },
+    [requestId, settings]
+  )
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -286,8 +336,10 @@ export default function App() {
       state={state}
       reasoningEnabled={settings.provider.reasoningEnabled}
       draft={draft}
+      providerSettings={settings.provider}
       onDraftChange={(value) => setDrafts((current) => ({ ...current, [draftKey]: value }))}
       onToolSelect={selectTool}
+      onSaveProvider={saveProvider}
       onSend={() => {
         const content = draft.trim()
         if (!content) return

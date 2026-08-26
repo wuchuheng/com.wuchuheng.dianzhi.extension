@@ -95,6 +95,7 @@ export default tseslint.config(
             'tests/unit/options/ToolList.spec.tsx',
             'tests/unit/options/ToolConfig.spec.tsx',
             'tests/unit/sidepanel/App.spec.tsx',
+            'tests/unit/sidepanel/scroll-follow.spec.ts',
           ],
         },
         tsconfigRootDir: import.meta.dirname,

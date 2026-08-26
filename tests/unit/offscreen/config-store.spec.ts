@@ -110,10 +110,31 @@ describe('ConfigStore permanent deletion', () => {
     })
   })
 
+  it('rejects permanently deleting a preset tool', async () => {
+    const { connection } = createNodeDatabase()
+    const config = createConfigStore(connection, clock)
+    await config.ensurePresets()
+    await expect(config.deleteTool(1)).rejects.toMatchObject({
+      code: 'TOOL_NOT_REMOVED',
+    })
+  })
+
   it('rejects permanently deleting an unknown tool id', async () => {
     const { connection } = createNodeDatabase()
     const config = createConfigStore(connection, clock)
     await expect(config.deleteTool(999_999)).rejects.toMatchObject({
+      code: 'TOOL_NOT_FOUND',
+    })
+  })
+
+  it('rejects a second permanent delete of the same tool', async () => {
+    const { connection } = createNodeDatabase()
+    const config = createConfigStore(connection, clock)
+    await config.ensurePresets()
+    const tool = await config.createTool({ name: '删除两次', prompt: 'p' })
+    await config.softRemoveTool(tool.id)
+    await config.deleteTool(tool.id)
+    await expect(config.deleteTool(tool.id)).rejects.toMatchObject({
       code: 'TOOL_NOT_FOUND',
     })
   })
@@ -131,6 +152,10 @@ describe('ConfigStore permanent deletion', () => {
     ).run(1050, '旧工具', 'p', now, now, now)
     const config = createConfigStore(connection, clock)
     await config.deleteTool(1050)
+    const removed = db.prepare('SELECT COUNT(*) AS count FROM tools WHERE id = 1050').get() as {
+      count: number
+    }
+    expect(removed.count).toBe(0)
     const conv = db
       .prepare('SELECT COUNT(*) AS count FROM conversations WHERE tool_id = 1050')
       .get() as { count: number }

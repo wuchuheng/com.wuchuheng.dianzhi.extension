@@ -58,6 +58,22 @@ function installChrome() {
   }
 }
 
+function stubMatchMedia(matches: boolean) {
+  window.matchMedia = vi.fn(
+    () =>
+      ({
+        matches,
+        media: '',
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn(),
+      }) as unknown as MediaQueryList
+  ) as unknown as typeof window.matchMedia
+}
+
 async function renderApp() {
   host = document.createElement('div')
   document.body.appendChild(host)
@@ -73,6 +89,7 @@ beforeEach(() => {
   installChrome()
   settingsDispatch.mockResolvedValue(DEFAULT_SETTINGS)
   conversationDispatch.mockResolvedValue({ accepted: true, snapshot: null })
+  stubMatchMedia(false)
 })
 
 afterEach(() => {
@@ -157,5 +174,172 @@ describe('Side Panel composer while streaming', () => {
     const textarea = host?.querySelector<HTMLTextAreaElement>('textarea')
     expect(textarea).not.toBeNull()
     expect(textarea?.disabled).toBe(false)
+  })
+})
+
+describe('Side Panel smooth chat scroll', () => {
+  let frameCallback: ((now: number) => void) | null
+  let nextFrameId: number
+
+  const message = (sequence: number, content: string): MessageRecord => ({
+    id: sequence,
+    conversationId: 22,
+    sequence,
+    role: 'assistant',
+    content,
+    reasoningContent: '',
+    status: 'streaming',
+    errorCode: null,
+    errorMessage: null,
+    createdAt: '2026-08-22T00:00:00.000Z',
+    updatedAt: '2026-08-22T00:00:00.000Z',
+  })
+
+  const history = () => {
+    const element = host?.querySelector<HTMLDivElement>('.dz-panel-history')
+    if (!element) throw new Error('.dz-panel-history not found')
+    return element
+  }
+
+  const defineMetrics = () => {
+    const element = history()
+    Object.defineProperty(element, 'clientHeight', { value: 300, configurable: true })
+    Object.defineProperty(element, 'scrollHeight', { value: 1000, configurable: true })
+    Object.defineProperty(element, 'scrollTop', { value: 0, writable: true, configurable: true })
+    return element
+  }
+
+  const grow = (scrollHeight: number) => {
+    const element = history()
+    Object.defineProperty(element, 'scrollHeight', { value: scrollHeight, configurable: true })
+    return element
+  }
+
+  const userScroll = (scrollTop: number) => {
+    const element = history()
+    element.scrollTop = scrollTop
+    element.dispatchEvent(new Event('scroll'))
+  }
+
+  const syncMessages = async (messages: MessageRecord[]) => {
+    const next = snapshot()
+    next.messages = messages
+    await act(async () => {
+      port.emitMessage({ type: 'conversation.sync', snapshot: next })
+      await Promise.resolve()
+    })
+  }
+
+  const driveFrames = (count = 300) => {
+    let now = 1_000
+    for (let i = 0; i < count && frameCallback !== null; i++) {
+      const cb = frameCallback
+      frameCallback = null
+      cb(now)
+      now += 33
+    }
+  }
+
+  const openEmptyHistory = async () => {
+    await renderApp()
+    await act(async () => {
+      port.emitMessage({ type: 'conversation.sync', snapshot: snapshot() })
+      await Promise.resolve()
+    })
+  }
+
+  beforeEach(() => {
+    frameCallback = null
+    nextFrameId = 0
+    vi.stubGlobal('requestAnimationFrame', (cb: (now: number) => void) => {
+      frameCallback = cb
+      return ++nextFrameId
+    })
+    vi.stubGlobal('cancelAnimationFrame', () => {
+      frameCallback = null
+    })
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('glides to the newest bottom while pinned as a reply streams', async () => {
+    await openEmptyHistory()
+    defineMetrics()
+
+    await syncMessages([message(1, 'first line')])
+    expect(frameCallback).not.toBeNull()
+    driveFrames()
+    expect(history().scrollTop).toBe(700)
+
+    grow(1300)
+    await syncMessages([message(1, 'first line\nsecond line'), message(2, 'third line')])
+    expect(frameCallback).not.toBeNull()
+    driveFrames()
+    expect(history().scrollTop).toBe(1000)
+  })
+
+  it('keeps following when the user is within 150px of the bottom', async () => {
+    await openEmptyHistory()
+    defineMetrics()
+    await syncMessages([message(1, 'first line')])
+
+    // 120px from the bottom: inside the new 150px guard, outside the old 80px.
+    userScroll(700 - 120)
+    grow(1200)
+    await syncMessages([message(1, 'first line'), message(2, 'grown')])
+    expect(frameCallback).not.toBeNull()
+    driveFrames()
+    expect(history().scrollTop).toBe(900)
+  })
+
+  it('pauses following beyond the guard and resumes within it', async () => {
+    await openEmptyHistory()
+    defineMetrics()
+    await syncMessages([message(1, 'first line')])
+
+    // 600px above the bottom: far outside the guard, following pauses.
+    userScroll(1000 - 300 - 600)
+    grow(1200)
+    await syncMessages([message(1, 'first line'), message(2, 'grown')])
+    expect(frameCallback).toBeNull()
+    expect(history().scrollTop).toBe(1000 - 300 - 600)
+
+    // Back inside the guard: following resumes on the next update.
+    userScroll(1200 - 300 - 50)
+    grow(1400)
+    await syncMessages([message(1, 'first line'), message(2, 'grown again')])
+    expect(frameCallback).not.toBeNull()
+    driveFrames()
+    expect(history().scrollTop).toBe(1100)
+  })
+
+  it('jumps straight to the bottom under reduced motion', async () => {
+    stubMatchMedia(true)
+    await openEmptyHistory()
+    defineMetrics()
+
+    await syncMessages([message(1, 'first line')])
+    expect(frameCallback).toBeNull()
+    expect(history().scrollTop).toBe(700)
+  })
+
+  it('anchors instantly when the conversation switches', async () => {
+    await openEmptyHistory()
+    defineMetrics()
+    history().scrollTop = 123
+    await syncMessages([message(1, 'first line')])
+    driveFrames()
+    expect(history().scrollTop).toBe(700)
+
+    const other = snapshot()
+    other.conversation.id = 23
+    other.messages = [message(1, 'other context')]
+    await act(async () => {
+      port.emitMessage({ type: 'conversation.sync', snapshot: other })
+      await Promise.resolve()
+    })
+    expect(history().scrollTop).toBe(1000)
   })
 })

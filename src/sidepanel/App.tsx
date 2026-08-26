@@ -16,7 +16,7 @@ import {
   reducePanelState,
   type PanelState,
 } from './panel-state'
-import { isNearBottom } from './scroll-pin'
+import { useScrollFollow } from './scroll-follow'
 import './App.css'
 
 export interface SidePanelViewProps {
@@ -53,17 +53,7 @@ export function SidePanelView({
   const historyRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
   const hasSnapshot = snapshot !== null
-  const pinnedRef = useRef(true)
   const viewKey = `${snapshot?.conversation.id ?? ''}:${snapshot?.activeToolId ?? ''}`
-  const previousViewKey = useRef(viewKey)
-
-  useEffect(() => {
-    // Opening the panel or switching tools starts pinned to the latest message.
-    if (previousViewKey.current !== viewKey) {
-      previousViewKey.current = viewKey
-      pinnedRef.current = true
-    }
-  }, [viewKey])
 
   useEffect(() => {
     // Focus the chat input once a conversation is attached; `streaming` flips
@@ -72,19 +62,12 @@ export function SidePanelView({
     composerRef.current?.focus()
   }, [viewKey, streaming, hasSnapshot])
 
-  const messages = snapshot?.messages
-  useEffect(() => {
-    // Follow the bottom while pinned so new streamed messages stay visible.
-    const container = historyRef.current
-    if (container && messages && messages.length > 0 && pinnedRef.current) {
-      container.scrollTop = container.scrollHeight
-    }
-  }, [messages])
-
-  const onHistoryScroll = useCallback(() => {
-    const container = historyRef.current
-    if (container) pinnedRef.current = isNearBottom(container)
-  }, [])
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const onHistoryScroll = useScrollFollow(historyRef, {
+    reducedMotion,
+    messages: snapshot?.messages,
+    viewKey,
+  })
 
   return (
     <div className="dz-panel-page">

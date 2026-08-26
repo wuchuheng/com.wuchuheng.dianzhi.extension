@@ -17,6 +17,7 @@
 ### Task 1: Register the `english`（英英释义）preset
 
 **Files:**
+
 - Create: `src/dianzhi/domain/presetPrompts/translation-in-english.md`
 - Modify: `src/dianzhi/domain/types.ts`
 - Modify: `src/dianzhi/domain/presets.ts`
@@ -174,8 +175,8 @@ context (e.g. `**adj.** able to be changed or modified`).
 ##### In this context:
 
 One short paragraph in English: what the word means here, why this sense is
-chosen, and any domain-specific nuance or contrast (for example *mutable* vs
-*immutable* in Rust).
+chosen, and any domain-specific nuance or contrast (for example _mutable_ vs
+_immutable_ in Rust).
 
 ##### Grammar:
 
@@ -250,13 +251,13 @@ EN /ˈmjuːtəbl/ · US /ˈmjuːtəbl/
 
 ##### In this context:
 
-*Mutable* is the opposite of *immutable*; in Rust it describes a reference
+_Mutable_ is the opposite of _immutable_; in Rust it describes a reference
 whose borrowed value may be modified.
 
 ##### Grammar:
 
-*Mutable* is an adjective modifying *reference*, forming the Rust term
-*mutable reference*.
+_Mutable_ is an adjective modifying _reference_, forming the Rust term
+_mutable reference_.
 
 # 13. Example — Mode B
 
@@ -280,14 +281,14 @@ let us fix the code in Listing 4-6 and modify a borrowed value.**
 ##### In this context:
 
 The author explains how to adjust the earlier example: switching from an
-ordinary reference to a *mutable reference* so the code may modify the
+ordinary reference to a _mutable reference_ so the code may modify the
 borrowed value.
 
 ##### Grammar:
 
 The backbone is “We can fix the code”; the infinitive “to allow us to modify a
 borrowed value” states the purpose, and “that use, instead, a mutable reference”
-qualifies *tweaks*.
+qualifies _tweaks_.
 
 # 14. Final Validation
 
@@ -300,7 +301,7 @@ Before answering, check internally (do not output this process):
 5. Mode B: is there a full English paraphrase, a Translation line, a contextual note (plus an optional grammar note)? Was no word extracted, and no per-word split or IPA emitted?
 6. Was the context actually used for sense disambiguation and term judgment?
 7. Is anything obviously repeated or useless?
-If any scope, mode, or format rule fails, fix it before answering.
+   If any scope, mode, or format rule fails, fix it before answering.
 
 # Input
 
@@ -380,6 +381,7 @@ git commit -m "feat(preset-tool): add 英英释义 (english) preset with pure-En
 ### Task 2: Verify composed settings with the 5th preset
 
 **Files:**
+
 - Test: `tests/unit/dianzhi/settings.spec.ts`
 
 No production change expected: `settings.ts` derives `DEFAULT_TOOLS`, `validateSettings`, and `effectivePrompt` from the preset maps updated in Task 1.
@@ -397,7 +399,6 @@ import {
   validateSettings,
 } from '@/dianzhi/domain/settings'
 import { BUILTIN_PROMPTS } from '@/dianzhi/domain/presets'
-import type { ToolDefinition } from '@/dianzhi/domain/types'
 
 describe('composed settings with the english preset', () => {
   it('builds a 5-tool default list including the english preset', () => {
@@ -424,7 +425,7 @@ describe('composed settings with the english preset', () => {
       isDefault: false,
       promptMode: 'preset',
       customPrompt: '',
-    } satisfies ToolDefinition
+    }
     expect(effectivePrompt(tool)).toBe(BUILTIN_PROMPTS.english)
   })
 })
@@ -447,6 +448,7 @@ git commit -m "test(settings): cover the fifth preset in composition and validat
 ### Task 3: Explicit customer-tool ID allocation
 
 **Files:**
+
 - Modify: `src/offscreen/database/config-store.ts` (`createTool`, remove `integerId`, `migrateLegacy` floor)
 - Test: `tests/unit/offscreen/sqlite-helper.ts` (new)
 - Test: `tests/unit/offscreen/config-store.spec.ts` (new)
@@ -637,25 +639,25 @@ function integerId(value: number | bigint | undefined, operation: string): numbe
 3. Replace `createTool` (currently lines 205–219) with:
 
 ```ts
-  async function createTool(input: { name: string; prompt: string }): Promise<ToolRecord> {
-    const now = clock()
-    const id = await db.transaction(async (tx) => {
-      const rows = await tx.query<{ maxId: number }>(
-        'SELECT COALESCE(MAX(id), 0) AS maxId FROM tools'
-      )
-      const id = Math.max(CUSTOM_TOOL_ID_START, (rows[0]?.maxId ?? 0) + 1)
-      await tx.exec(
-        `INSERT INTO tools (id, name, prompt, is_preset, is_default, enabled, sort_order, deleted_at, created_at, updated_at)
+async function createTool(input: { name: string; prompt: string }): Promise<ToolRecord> {
+  const now = clock()
+  const id = await db.transaction(async (tx) => {
+    const rows = await tx.query<{ maxId: number }>(
+      'SELECT COALESCE(MAX(id), 0) AS maxId FROM tools'
+    )
+    const id = Math.max(CUSTOM_TOOL_ID_START, (rows[0]?.maxId ?? 0) + 1)
+    await tx.exec(
+      `INSERT INTO tools (id, name, prompt, is_preset, is_default, enabled, sort_order, deleted_at, created_at, updated_at)
          VALUES (?, ?, ?, 0, 0, 1, (SELECT COALESCE(MAX(sort_order),0)+1 FROM tools WHERE deleted_at IS NULL), NULL, ?, ?)`,
-        [id, input.name, input.prompt, now, now]
-      )
-      return id
-    })
-    const rows = await db.query<ToolRecord>(`SELECT ${TOOL_COLUMNS} FROM tools WHERE id = ?`, [id])
-    const row = rows[0]
-    if (!row) throw toolNotFound(id)
-    return Object.freeze(normalizeToolRow(row))
-  }
+      [id, input.name, input.prompt, now, now]
+    )
+    return id
+  })
+  const rows = await db.query<ToolRecord>(`SELECT ${TOOL_COLUMNS} FROM tools WHERE id = ?`, [id])
+  const row = rows[0]
+  if (!row) throw toolNotFound(id)
+  return Object.freeze(normalizeToolRow(row))
+}
 ```
 
 4. In `migrateLegacy`, change `let nextId = 4` (line ~389) to `let nextId = CUSTOM_TOOL_ID_START`.
@@ -683,6 +685,7 @@ git commit -m "feat(tools): allocate customer tool ids from 1025 in createTool a
 ### Task 4: Reservation migration release 2.1.0
 
 **Files:**
+
 - Modify: `src/offscreen/database/schema.ts` (add `TOOL_ID_RELEASE`)
 - Modify: `src/offscreen/main.ts` (register the release)
 - Modify: `src/offscreen/database/config-store.ts` (`PRESET_INSERT_SQL` sort_order)
@@ -735,9 +738,9 @@ describe('TOOL_ID_RELEASE 2.1.0', () => {
 
     db.exec(TOOL_ID_RELEASE.migrationSQL)
 
-    const moved = db
-      .prepare('SELECT id FROM tools WHERE is_preset = 0 AND id >= 1025')
-      .get() as { id: number }
+    const moved = db.prepare('SELECT id FROM tools WHERE is_preset = 0 AND id >= 1025').get() as {
+      id: number
+    }
     expect(moved.id).toBe(1029)
     const conv = db.prepare('SELECT tool_id AS toolId FROM conversations').get() as {
       toolId: number
@@ -806,10 +809,10 @@ import { CONFIG_RELEASE, SCHEMA_RELEASE, TOOL_ID_RELEASE } from './database/sche
 ```
 
 ```ts
-  const db = (await openDB('dianzhi.sqlite3', {
-    debug: false,
-    releases: [SCHEMA_RELEASE, CONFIG_RELEASE, TOOL_ID_RELEASE],
-  })) as DatabaseConnection
+const db = (await openDB('dianzhi.sqlite3', {
+  debug: false,
+  releases: [SCHEMA_RELEASE, CONFIG_RELEASE, TOOL_ID_RELEASE],
+})) as DatabaseConnection
 ```
 
 - [ ] **Step 5: Prevent preset sort_order collisions when seeding `english` on an existing install**
@@ -825,13 +828,13 @@ const PRESET_INSERT_SQL = `INSERT INTO tools (
 and update its call site in `ensurePresetsInner` (currently lines 169–176) to drop the positional `id` argument that was previously passed as `sort_order`:
 
 ```ts
-    await tx.exec(PRESET_INSERT_SQL, [
-      id,
-      BUILTIN_TOOL_NAMES[builtinId],
-      BUILTIN_PROMPTS[builtinId],
-      now,
-      now,
-    ])
+await tx.exec(PRESET_INSERT_SQL, [
+  id,
+  BUILTIN_TOOL_NAMES[builtinId],
+  BUILTIN_PROMPTS[builtinId],
+  now,
+  now,
+])
 ```
 
 - [ ] **Step 6: Run test to verify it passes**

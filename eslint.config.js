@@ -81,6 +81,7 @@ export default tseslint.config(
             'tests/unit/dianzhi/provider/client.spec.ts',
             'tests/unit/dianzhi/provider/request.spec.ts',
             'tests/unit/dianzhi/settings.spec.ts',
+            'tests/unit/dianzhi/ui/Composer.spec.tsx',
             'tests/unit/dianzhi/ui/message-time.spec.ts',
             'tests/unit/dianzhi/ui/markdown-text.spec.ts',
             'tests/unit/dianzhi/ui/MessageList.spec.tsx',

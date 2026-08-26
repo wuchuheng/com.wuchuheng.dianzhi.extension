@@ -20,14 +20,14 @@ conversations was considered and rejected to avoid silent history loss.
 
 ## 2. Decisions
 
-| Decision                | Choice                                                                                            | Rationale                                                                                     |
-| ----------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Delete scope            | `DELETE FROM tools` only; conversations untouched                                                 | Conversations already snapshot tool identity; avoid irreversible history loss                  |
-| Guard                   | Only rows with `deleted_at IS NOT NULL` can be hard-deleted; active/preset rows rejected          | Prevents bypassing the soft-remove + confirm flow; presets can never reach deleted state       |
-| Error codes             | `TOOL_NOT_FOUND` (missing) and new `TOOL_NOT_REMOVED` (row not in deleted state)                  | Stable, testable, UI-safe messages mirror `TOOL_PRESET_INVALID` style                          |
-| Confirmation UI         | Centered overlay dialog (backdrop + title + message + 取消 / 确认删除), state local to `ToolList`  | Matches Element `MessageBox.confirm`; reuses the repo's existing modal-overlay pattern         |
-| Operation name          | `tools.delete` event → RPC `deleteTool`                                                           | Follows `tools.restore`/`softRemoveTool` naming convention layer-for-layer                     |
-| Runtime boundaries      | Options renders dialog + dispatches typed event; background brokers; offscreen owns SQL           | Unchanged from `CLAUDE.md` "Options is the durable settings surface"                          |
+| Decision           | Choice                                                                                            | Rationale                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Delete scope       | `DELETE FROM tools` only; conversations untouched                                                 | Conversations already snapshot tool identity; avoid irreversible history loss            |
+| Guard              | Only rows with `deleted_at IS NOT NULL` can be hard-deleted; active/preset rows rejected          | Prevents bypassing the soft-remove + confirm flow; presets can never reach deleted state |
+| Error codes        | `TOOL_NOT_FOUND` (missing) and new `TOOL_NOT_REMOVED` (row not in deleted state)                  | Stable, testable, UI-safe messages mirror `TOOL_PRESET_INVALID` style                    |
+| Confirmation UI    | Centered overlay dialog (backdrop + title + message + 取消 / 确认删除), state local to `ToolList` | Matches Element `MessageBox.confirm`; reuses the repo's existing modal-overlay pattern   |
+| Operation name     | `tools.delete` event → RPC `deleteTool`                                                           | Follows `tools.restore`/`softRemoveTool` naming convention layer-for-layer               |
+| Runtime boundaries | Options renders dialog + dispatches typed event; background brokers; offscreen owns SQL           | Unchanged from `CLAUDE.md` "Options is the durable settings surface"                     |
 
 ## 3. Architecture
 
@@ -51,10 +51,7 @@ Add to `ConfigStore` interface and `createConfigStore`:
 
 ```ts
 async function deleteTool(id: number): Promise<void> {
-  const result = await db.exec(
-    'DELETE FROM tools WHERE id = ? AND deleted_at IS NOT NULL',
-    [id]
-  )
+  const result = await db.exec('DELETE FROM tools WHERE id = ? AND deleted_at IS NOT NULL', [id])
   if (Number(result.changes ?? 0) !== 1) {
     const rows = await db.query<{ deletedAt: string | null }>(
       'SELECT deleted_at AS deletedAt FROM tools WHERE id = ?',
@@ -81,12 +78,16 @@ Add `'TOOL_NOT_REMOVED'` to the `DianzhiErrorCode` union.
 ### 3.3 RPC (`src/offscreen/database/rpc.ts`)
 
 Add to `DatabaseOperationMap`:
+
 ```ts
 deleteTool: {
-  args: { id: number }
+  args: {
+    id: number
+  }
   result: Awaited<ReturnType<ConfigStore['deleteTool']>>
 }
 ```
+
 and add `deleteTool` to the `MUTATIONS` set.
 
 ### 3.4 Protocol (`src/dianzhi/domain/protocol.ts`)
@@ -107,6 +108,7 @@ and add `deleteTool` to the `MUTATIONS` set.
 ### 3.5 Background (`src/background/index.ts`)
 
 Add a sibling case to `tools.restore`:
+
 ```ts
 case 'tools.delete':
   return db
@@ -151,21 +153,21 @@ case 'tools.delete':
 
 ## 5. Files changed
 
-| Path                                          | Change                                              |
-| --------------------------------------------- | --------------------------------------------------- |
-| `src/offscreen/database/config-store.ts`       | `deleteTool` call + store method                    |
-| `src/dianzhi/domain/errors.ts`                 | `TOOL_NOT_REMOVED` code                             |
-| `src/offscreen/database/rpc.ts`               | operation map + MUTATIONS entry                     |
-| `src/dianzhi/domain/protocol.ts`              | `tools.delete` type + parse                         |
-| `src/background/index.ts`                     | `tools.delete` handler                              |
-| `src/options/tools/use-tools-api.ts`          | `ToolsApi.delete`                                   |
-| `src/options/tools/ToolsWorkspace.tsx`        | `handleDelete` + `onDelete` prop                    |
-| `src/options/tools/ToolList.tsx`              | button + confirm dialog + `onDelete` prop           |
-| `src/options/tools/tool-workspace.css`        | button + dialog styles                              |
-| `tests/unit/offscreen/config-store.spec.ts`   | permanent-delete cases                              |
-| `tests/unit/dianzhi/protocol.spec.ts`         | `tools.delete` parse cases                          |
-| `tests/unit/options/ToolList.spec.tsx`        | **new** dialog/button cases                         |
-| `docs/superpowers/specs/2026-08-26-dianzhi-tool-permanent-delete-design.md` | this document |
+| Path                                                                        | Change                                    |
+| --------------------------------------------------------------------------- | ----------------------------------------- |
+| `src/offscreen/database/config-store.ts`                                    | `deleteTool` call + store method          |
+| `src/dianzhi/domain/errors.ts`                                              | `TOOL_NOT_REMOVED` code                   |
+| `src/offscreen/database/rpc.ts`                                             | operation map + MUTATIONS entry           |
+| `src/dianzhi/domain/protocol.ts`                                            | `tools.delete` type + parse               |
+| `src/background/index.ts`                                                   | `tools.delete` handler                    |
+| `src/options/tools/use-tools-api.ts`                                        | `ToolsApi.delete`                         |
+| `src/options/tools/ToolsWorkspace.tsx`                                      | `handleDelete` + `onDelete` prop          |
+| `src/options/tools/ToolList.tsx`                                            | button + confirm dialog + `onDelete` prop |
+| `src/options/tools/tool-workspace.css`                                      | button + dialog styles                    |
+| `tests/unit/offscreen/config-store.spec.ts`                                 | permanent-delete cases                    |
+| `tests/unit/dianzhi/protocol.spec.ts`                                       | `tools.delete` parse cases                |
+| `tests/unit/options/ToolList.spec.tsx`                                      | **new** dialog/button cases               |
+| `docs/superpowers/specs/2026-08-26-dianzhi-tool-permanent-delete-design.md` | this document                             |
 
 ## 6. Non-goals
 

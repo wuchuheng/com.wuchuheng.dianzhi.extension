@@ -2,9 +2,11 @@ import type { KeyboardEvent, RefObject } from 'react'
 
 export interface ComposerProps {
   value: string
+  /** Hard-disables typing and sending for the whole composer. Independent of `streaming`. */
   disabled?: boolean
-  /** True while a provider run is streaming. Switches the single send button
-   *  into a stop control so the user can interrupt mid-stream. */
+  /** True while a provider run is streaming. The textarea stays editable for a
+   *  next draft, the single send button becomes a stop control, and sending is
+   *  suppressed (Enter and click) until the run ends. */
   streaming?: boolean
   inputRef?: RefObject<HTMLTextAreaElement | null>
   onChange(value: string): void

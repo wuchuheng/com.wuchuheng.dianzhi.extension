@@ -25,7 +25,6 @@ vi.mock('@/events/config', () => ({
 }))
 
 import App from '@/sidepanel/App'
-
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 let root: Root | undefined
@@ -129,5 +128,34 @@ describe('Side Panel dock shortcut', () => {
     })
 
     expect(port.postMessage).toHaveBeenCalledWith({ type: 'close' })
+  })
+})
+
+describe('Side Panel composer while streaming', () => {
+  it('keeps the chat input editable while a reply is streaming', async () => {
+    await renderApp()
+    const streaming = snapshot()
+    streaming.messages = [
+      {
+        id: 1,
+        conversationId: 22,
+        sequence: 1,
+        role: 'assistant',
+        content: 'working…',
+        reasoningContent: '',
+        status: 'streaming',
+        errorCode: null,
+        errorMessage: null,
+        createdAt: '2026-08-22T00:00:00.000Z',
+        updatedAt: '2026-08-22T00:00:00.000Z',
+      },
+    ]
+    await act(async () => {
+      port.emitMessage({ type: 'conversation.sync', snapshot: streaming })
+      await Promise.resolve()
+    })
+    const textarea = host?.querySelector<HTMLTextAreaElement>('textarea')
+    expect(textarea).not.toBeNull()
+    expect(textarea?.disabled).toBe(false)
   })
 })

@@ -282,7 +282,6 @@ export function ContentApp({
             )}
             <Composer
               value={composerValue}
-              disabled={streaming}
               streaming={streaming}
               onChange={onComposerChange}
               onSend={onSend}
@@ -357,7 +356,10 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
   const togglePanel = useCallback(() => {
     const conversationId = state.snapshot?.conversation.id
     if (!conversationId) {
-      logError(Scope.CONTENT_SCRIPT, 'Side Panel toggle ignored because the page has no conversation.')
+      logError(
+        Scope.CONTENT_SCRIPT,
+        'Side Panel toggle ignored because the page has no conversation.'
+      )
       return
     }
     log(Scope.CONTENT_SCRIPT, 'Page requested Side Panel toggle.', { conversationId })
@@ -372,9 +374,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
           returnedSnapshot: result.snapshot !== null,
         })
       )
-      .catch((error: unknown) =>
-        logError(Scope.CONTENT_SCRIPT, 'Side Panel toggle failed.', error)
-      )
+      .catch((error: unknown) => logError(Scope.CONTENT_SCRIPT, 'Side Panel toggle failed.', error))
   }, [requestId, sendCommand, state.snapshot?.conversation.id])
 
   useEffect(() => {
@@ -448,14 +448,13 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
     dispatch({ type: 'view.closed' })
   }, [extensionHost])
 
-  // Defer focusing until the stream ends; `streaming` flips to false so this
-  // effect re-runs once the reply completes. Scrolling is handled by
-  // `useScrollGuard`: pinned views follow new content (instantly while
-  // streaming, smoothly on discrete updates), scrolled-away views keep their
-  // position with no auto-scroll.
+  // Re-focus the textarea on `streaming` flips so that after send the input is
+  // focused again and the user can type the next draft while the reply streams.
+  // Scrolling is handled by `useScrollGuard`: pinned views follow new content
+  // (instantly while streaming, smoothly on discrete updates), scrolled-away
+  // views keep their position with no auto-scroll.
   useLayoutEffect(() => {
     if (!state.visible || state.mode !== 'chat') return
-    if (streaming) return
     composerRef.current?.focus()
   }, [state.visible, state.mode, streaming])
 

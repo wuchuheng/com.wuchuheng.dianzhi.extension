@@ -66,9 +66,9 @@ export function SidePanelView({
   }, [viewKey])
 
   useEffect(() => {
-    // Focus the chat input once a conversation is attached and nothing is
-    // streaming (the stream ending flips `streaming` and re-runs this).
-    if (!hasSnapshot || streaming) return
+    // Focus the chat input once a conversation is attached; `streaming` flips
+    // stay in the deps so focus returns to the input right after a send.
+    if (!hasSnapshot) return
     composerRef.current?.focus()
   }, [viewKey, streaming, hasSnapshot])
 
@@ -122,7 +122,6 @@ export function SidePanelView({
             )}
             <Composer
               value={draft}
-              disabled={streaming}
               streaming={streaming}
               onChange={onDraftChange}
               onSend={onSend}
@@ -266,7 +265,10 @@ export default function App() {
           portConnected: port !== null,
         })
         if (!port) {
-          logError(Scope.EXTENSION_PAGE, 'Side Panel close shortcut ignored because its port is disconnected.')
+          logError(
+            Scope.EXTENSION_PAGE,
+            'Side Panel close shortcut ignored because its port is disconnected.'
+          )
           return
         }
         try {

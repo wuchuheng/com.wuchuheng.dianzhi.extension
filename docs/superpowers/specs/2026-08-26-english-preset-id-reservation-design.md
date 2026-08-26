@@ -20,14 +20,14 @@ Two coupled changes to the preset tool system:
 
 ## 2. Decisions
 
-| Decision              | Choice                                                                                                       | Rationale                                                                                                  |
-| --------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| New preset identity   | key `english`, display name `英英释义`, preset id **5**                                                       | Next free slot in the reserved preset range; “英英释义” is the standard term for explaining English in English |
-| Prompt language       | Prompt file written in **English**; model prose output English; Chinese only in the Translation section      | Matches the tool's immersion purpose (user-confirmed)                                                       |
-| Preset id range       | Presets own `1..1024`; custom tools start at `1025`                                                          | Headroom for future presets; unambiguous allocator                                                          |
-| Custom id allocation  | `createTool` computes `id = MAX(1025, MAX(id)+1)` inside a transaction and inserts explicitly                | Removes reliance on `sqlite_sequence`; deterministic and collision-safe                                     |
-| Existing-install setup | New schema release `2.1.0` renumbers custom tools with `id < 1025` up `+1024`, rewrites `conversations.tool_id`, bumps `sqlite_sequence` to `≥1024` | One-time, idempotent, pure-SQL; keeps the reserved floor empty for future presets |
-| Prompt source of truth | Stays `src/dianzhi/domain/presets.ts` via `tools.ensurePresets`; **no `seedSQL` literals**                    | Unchanged from the config-in-sqlite §2 decision                                                             |
+| Decision               | Choice                                                                                                                                              | Rationale                                                                                                      |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| New preset identity    | key `english`, display name `英英释义`, preset id **5**                                                                                             | Next free slot in the reserved preset range; “英英释义” is the standard term for explaining English in English |
+| Prompt language        | Prompt file written in **English**; model prose output English; Chinese only in the Translation section                                             | Matches the tool's immersion purpose (user-confirmed)                                                          |
+| Preset id range        | Presets own `1..1024`; custom tools start at `1025`                                                                                                 | Headroom for future presets; unambiguous allocator                                                             |
+| Custom id allocation   | `createTool` computes `id = MAX(1025, MAX(id)+1)` inside a transaction and inserts explicitly                                                       | Removes reliance on `sqlite_sequence`; deterministic and collision-safe                                        |
+| Existing-install setup | New schema release `2.1.0` renumbers custom tools with `id < 1025` up `+1024`, rewrites `conversations.tool_id`, bumps `sqlite_sequence` to `≥1024` | One-time, idempotent, pure-SQL; keeps the reserved floor empty for future presets                              |
+| Prompt source of truth | Stays `src/dianzhi/domain/presets.ts` via `tools.ensurePresets`; **no `seedSQL` literals**                                                          | Unchanged from the config-in-sqlite §2 decision                                                                |
 
 ## 3. New preset: `english`（英英释义）
 
@@ -61,30 +61,31 @@ otherwise). No other Chinese anywhere.
 **Complete feature port.** Every section of `translate-preset-prompt.md`
 (§1–§15) is carried over with its behavior unchanged, output language English:
 
-| Original section | English-output version |
-|---|---|
-| Role | “Context-aware reader's dictionary and English-language analyst”; explains the selection in English; one CN Translation line allowed |
-| Input Structure | Same `<context>` / `<selected>` contract, written in English |
-| §1 Selected Text Boundary | Identical: never shrink/expand/ignore `<selected>` or add outside text |
-| §2 Determine the Mode | Mode A (exactly one English word) vs Mode B (everything else); never downgrade B → A |
-| §3 Context-Aware Interpretation | Sense priority: context > domain > dictionary > literal; answers “what does it mean *here*” |
-| §4 Phrase and Term Recognition | Idioms, collocations, phrasal verbs, terms, fixed patterns treated as one unit |
-| §5 Reference Resolution | Pronouns (`it/this/that/these/those/they/he/she/which/such`) resolved from context; referent stated naturally in the English note |
-| §6 Translation Principles | Applied to the single Chinese Translation line: full coverage, natural Chinese, contextual, no additions/omissions |
-| §7 Mode A Output | `[split·word]` → `EN /…/ · US /…/` → `**[POS.] [English definition]**` → `> Translation: 中文释义` → `##### In this context:` (EN) → `##### Grammar:` (EN, optional) |
-| §8 Word Splitting Rule | `·` display splitting for single words only; never in Mode B |
-| §9 IPA Rule | EN + US IPA for single words only; identical-format when same |
-| §10 Mode B Output | `[English paraphrase of the whole selection]` → `> Translation: 中文翻译` → `##### In this context:` (EN) → `##### Grammar:` (EN, optional) |
-| §11 Conciseness | Compact, direct, no padding, no unrelated senses, no full-article summary |
-| §12/13 Examples | Mode A and Mode B worked examples with English output |
-| §14 Final Validation | Internal checklist incl. “is the only Chinese the Translation line?” |
+| Original section                | English-output version                                                                                                                                               |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Role                            | “Context-aware reader's dictionary and English-language analyst”; explains the selection in English; one CN Translation line allowed                                 |
+| Input Structure                 | Same `<context>` / `<selected>` contract, written in English                                                                                                         |
+| §1 Selected Text Boundary       | Identical: never shrink/expand/ignore `<selected>` or add outside text                                                                                               |
+| §2 Determine the Mode           | Mode A (exactly one English word) vs Mode B (everything else); never downgrade B → A                                                                                 |
+| §3 Context-Aware Interpretation | Sense priority: context > domain > dictionary > literal; answers “what does it mean _here_”                                                                          |
+| §4 Phrase and Term Recognition  | Idioms, collocations, phrasal verbs, terms, fixed patterns treated as one unit                                                                                       |
+| §5 Reference Resolution         | Pronouns (`it/this/that/these/those/they/he/she/which/such`) resolved from context; referent stated naturally in the English note                                    |
+| §6 Translation Principles       | Applied to the single Chinese Translation line: full coverage, natural Chinese, contextual, no additions/omissions                                                   |
+| §7 Mode A Output                | `[split·word]` → `EN /…/ · US /…/` → `**[POS.] [English definition]**` → `> Translation: 中文释义` → `##### In this context:` (EN) → `##### Grammar:` (EN, optional) |
+| §8 Word Splitting Rule          | `·` display splitting for single words only; never in Mode B                                                                                                         |
+| §9 IPA Rule                     | EN + US IPA for single words only; identical-format when same                                                                                                        |
+| §10 Mode B Output               | `[English paraphrase of the whole selection]` → `> Translation: 中文翻译` → `##### In this context:` (EN) → `##### Grammar:` (EN, optional)                          |
+| §11 Conciseness                 | Compact, direct, no padding, no unrelated senses, no full-article summary                                                                                            |
+| §12/13 Examples                 | Mode A and Mode B worked examples with English output                                                                                                                |
+| §14 Final Validation            | Internal checklist incl. “is the only Chinese the Translation line?”                                                                                                 |
 
 **Deliberate deviation from the original:** IPA labels use `EN`/`US` instead of
 英/美 so every label stays English.
 
 **Worked examples (design-approved 2026-08-26):**
 
-*Mode A — `<selected>mutable</selected>` in a Rust passage:*
+_Mode A — `<selected>mutable</selected>` in a Rust passage:_
+
 ```
 **mu·ta·ble**
 EN /ˈmjuːtəbl/ · US /ˈmjuːtəbl/
@@ -98,7 +99,8 @@ whose borrowed value may be modified.
 *mutable reference*.
 ```
 
-*Mode B — a full-sentence selection:*
+_Mode B — a full-sentence selection:_
+
 ```
 **A few small tweaks that replace the plain reference with a mutable reference
 let us fix the code in Listing 4-6 and modify a borrowed value.**
@@ -219,8 +221,8 @@ context (e.g. `**adj.** able to be changed or modified`).
 ##### In this context:
 
 One short paragraph in English: what the word means here, why this sense is
-chosen, and any domain-specific nuance or contrast (for example *mutable* vs
-*immutable* in Rust).
+chosen, and any domain-specific nuance or contrast (for example _mutable_ vs
+_immutable_ in Rust).
 
 ##### Grammar:
 
@@ -295,13 +297,13 @@ EN /ˈmjuːtəbl/ · US /ˈmjuːtəbl/
 
 ##### In this context:
 
-*Mutable* is the opposite of *immutable*; in Rust it describes a reference
+_Mutable_ is the opposite of _immutable_; in Rust it describes a reference
 whose borrowed value may be modified.
 
 ##### Grammar:
 
-*Mutable* is an adjective modifying *reference*, forming the Rust term
-*mutable reference*.
+_Mutable_ is an adjective modifying _reference_, forming the Rust term
+_mutable reference_.
 
 # 13. Example — Mode B
 
@@ -325,14 +327,14 @@ let us fix the code in Listing 4-6 and modify a borrowed value.**
 ##### In this context:
 
 The author explains how to adjust the earlier example: switching from an
-ordinary reference to a *mutable reference* so the code may modify the
+ordinary reference to a _mutable reference_ so the code may modify the
 borrowed value.
 
 ##### Grammar:
 
 The backbone is “We can fix the code”; the infinitive “to allow us to modify a
 borrowed value” states the purpose, and “that use, instead, a mutable reference”
-qualifies *tweaks*.
+qualifies _tweaks_.
 
 # 14. Final Validation
 
@@ -345,7 +347,7 @@ Before answering, check internally (do not output this process):
 5. Mode B: is there a full English paraphrase, a Translation line, a contextual note (plus an optional grammar note)? Was no word extracted, and no per-word split or IPA emitted?
 6. Was the context actually used for sense disambiguation and term judgment?
 7. Is anything obviously repeated or useless?
-If any scope, mode, or format rule fails, fix it before answering.
+   If any scope, mode, or format rule fails, fix it before answering.
 
 # Input
 
@@ -358,7 +360,7 @@ If any scope, mode, or format rule fails, fix it before answering.
 
 ```ts
 export const PRESET_ID_RESERVED_MAX = 1024 // presets own ids 1..1024
-export const CUSTOM_TOOL_ID_START = 1025   // first id a custom tool may use
+export const CUSTOM_TOOL_ID_START = 1025 // first id a custom tool may use
 ```
 
 ### 4.2 `createTool` (`src/offscreen/database/config-store.ts`)
@@ -366,9 +368,7 @@ export const CUSTOM_TOOL_ID_START = 1025   // first id a custom tool may use
 Replace reliance on `lastInsertRowid`. Inside the existing transaction:
 
 ```ts
-const rows = await tx.query<{ maxId: number }>(
-  'SELECT COALESCE(MAX(id), 0) AS maxId FROM tools'
-)
+const rows = await tx.query<{ maxId: number }>('SELECT COALESCE(MAX(id), 0) AS maxId FROM tools')
 const id = Math.max(CUSTOM_TOOL_ID_START, (rows[0]?.maxId ?? 0) + 1)
 ```
 
@@ -437,15 +437,15 @@ Gates after implementation: `pnpm run format:check`, `pnpm run lint`,
 
 ## 8. Files changed
 
-| Path                                                        | Change                                                             |
-| ----------------------------------------------------------- | ------------------------------------------------------------------ |
-| `src/dianzhi/domain/types.ts`                               | add `'english'` to `BuiltinToolId`                                  |
-| `src/dianzhi/domain/presets.ts`                             | new import, 3 maps, 2 id constants                                 |
-| `src/dianzhi/domain/presetPrompts/translation-in-english.md`| **new** prompt file                                                |
-| `src/offscreen/database/schema.ts`                          | new `CONFIG_RELEASE` `2.1.0`                                       |
-| `src/offscreen/database/config-store.ts`                    | `createTool` explicit id; `migrateLegacy` floor                    |
-| `tests/unit/**`                                             | new specs per §7                                                    |
-| `docs/superpowers/specs/2026-08-26-english-preset-id-reservation-design.md` | this document             |
+| Path                                                                        | Change                                          |
+| --------------------------------------------------------------------------- | ----------------------------------------------- |
+| `src/dianzhi/domain/types.ts`                                               | add `'english'` to `BuiltinToolId`              |
+| `src/dianzhi/domain/presets.ts`                                             | new import, 3 maps, 2 id constants              |
+| `src/dianzhi/domain/presetPrompts/translation-in-english.md`                | **new** prompt file                             |
+| `src/offscreen/database/schema.ts`                                          | new `CONFIG_RELEASE` `2.1.0`                    |
+| `src/offscreen/database/config-store.ts`                                    | `createTool` explicit id; `migrateLegacy` floor |
+| `tests/unit/**`                                                             | new specs per §7                                |
+| `docs/superpowers/specs/2026-08-26-english-preset-id-reservation-design.md` | this document                                   |
 
 ## 9. Non-goals
 

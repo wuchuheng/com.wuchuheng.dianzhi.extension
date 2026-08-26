@@ -26,13 +26,13 @@ still in the box and sends normally.
 
 ## 2. Decisions
 
-| Decision        | Choice                                                                                       | Rationale                                                                             |
-| --------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `disabled` prop | Means hard-lock of the whole composer (typing **and** send), independent of `streaming`      | Keeps a real lock for future callers; no caller currently needs it                     |
-| `streaming`     | Only flips the button to Stop and suppresses send; textarea stays editable                  | Removes the conflation that caused the bug (callers were passing `disabled={streaming}`) |
-| Enter           | No-op while `streaming`; `Shift+Enter` still inserts a newline                              | Preserves the documented Enter=send keyboard contract                                 |
-| Focus           | Popover and Side Panel return focus to the textarea on send, including immediately after    | Supports "keep typing while generating"; only modifies the existing `if (streaming) return` guard |
-| Scope           | Shared `Composer` primitive only; Options `ToolTestPane` is untouched                         | Its textareas are not disabled while running; only the run button is                  |
+| Decision        | Choice                                                                                   | Rationale                                                                                         |
+| --------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `disabled` prop | Means hard-lock of the whole composer (typing **and** send), independent of `streaming`  | Keeps a real lock for future callers; no caller currently needs it                                |
+| `streaming`     | Only flips the button to Stop and suppresses send; textarea stays editable               | Removes the conflation that caused the bug (callers were passing `disabled={streaming}`)          |
+| Enter           | No-op while `streaming`; `Shift+Enter` still inserts a newline                           | Preserves the documented Enter=send keyboard contract                                             |
+| Focus           | Popover and Side Panel return focus to the textarea on send, including immediately after | Supports "keep typing while generating"; only modifies the existing `if (streaming) return` guard |
+| Scope           | Shared `Composer` primitive only; Options `ToolTestPane` is untouched                    | Its textareas are not disabled while running; only the run button is                              |
 
 ## 3. Architecture
 
@@ -84,12 +84,12 @@ stopped), focus behavior is unchanged.
 
 ## 4. Behavior matrix
 
-| State                 | Textarea | Button    | Enter      | Send dispatches? |
-| --------------------- | -------- | --------- | ---------- | ---------------- |
-| Idle, empty           | editable | disabled  | no-op      | no               |
-| Idle, has draft       | editable | Send      | sends      | yes              |
-| `disabled` (hard-lock)| locked   | disabled  | no-op      | no               |
-| `streaming`, draft    | editable | Stop      | no-op      | **no**           |
+| State                  | Textarea | Button   | Enter | Send dispatches? |
+| ---------------------- | -------- | -------- | ----- | ---------------- |
+| Idle, empty            | editable | disabled | no-op | no               |
+| Idle, has draft        | editable | Send     | sends | yes              |
+| `disabled` (hard-lock) | locked   | disabled | no-op | no               |
+| `streaming`, draft     | editable | Stop     | no-op | **no**           |
 
 ## 5. Tests
 
@@ -107,15 +107,15 @@ stopped), focus behavior is unchanged.
 
 ## 6. Files changed
 
-| Path                                             | Change                                              |
-| ------------------------------------------------ | --------------------------------------------------- |
-| `src/dianzhi/ui/Composer.tsx`                     | TSDoc for `disabled` / `streaming` contracts        |
-| `src/content/views/App.tsx`                       | drop `disabled={streaming}`; drop `if (streaming) return` in focus effect |
-| `src/sidepanel/App.tsx`                           | drop `disabled={streaming}`; drop `if (streaming) return` in focus effect |
-| `tests/unit/dianzhi/ui/Composer.spec.tsx`         | **new** props-contract tests                        |
-| `tests/unit/content/views/App.spec.tsx`           | editable-textarea-while-streaming case              |
-| `tests/unit/sidepanel/App.spec.tsx`               | editable-textarea-while-streaming case              |
-| `docs/superpowers/specs/2026-08-26-dianzhi-composer-typing-during-generation-design.md` | this document |
+| Path                                                                                    | Change                                                                    |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `src/dianzhi/ui/Composer.tsx`                                                           | TSDoc for `disabled` / `streaming` contracts                              |
+| `src/content/views/App.tsx`                                                             | drop `disabled={streaming}`; drop `if (streaming) return` in focus effect |
+| `src/sidepanel/App.tsx`                                                                 | drop `disabled={streaming}`; drop `if (streaming) return` in focus effect |
+| `tests/unit/dianzhi/ui/Composer.spec.tsx`                                               | **new** props-contract tests                                              |
+| `tests/unit/content/views/App.spec.tsx`                                                 | editable-textarea-while-streaming case                                    |
+| `tests/unit/sidepanel/App.spec.tsx`                                                     | editable-textarea-while-streaming case                                    |
+| `docs/superpowers/specs/2026-08-26-dianzhi-composer-typing-during-generation-design.md` | this document                                                             |
 
 ## 7. Non-goals
 

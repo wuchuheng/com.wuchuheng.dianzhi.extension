@@ -145,3 +145,46 @@ describe('ContentApp title actions', () => {
     expect(host?.querySelector('.dz-body')?.classList.contains('is-scrollable')).toBe(true)
   })
 })
+
+describe('ContentApp composer while streaming', () => {
+  it('keeps the chat input editable while a reply is streaming', async () => {
+    const streamingState: ConversationViewState = {
+      ...visibleState(),
+      mode: 'chat',
+      snapshot: {
+        ...visibleState().snapshot!,
+        messages: [
+          {
+            ...visibleState().snapshot!.messages[0],
+            status: 'streaming',
+          },
+        ],
+      },
+    }
+    host = document.createElement('div')
+    document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => {
+      root?.render(
+        <ContentApp
+          state={streamingState}
+          placement={placement}
+          reasoningEnabled={false}
+          shortcuts={DEFAULT_SETTINGS.shortcuts}
+          onToolSelect={() => undefined}
+          onModeChange={() => undefined}
+          onExpand={() => undefined}
+          onClose={() => undefined}
+          onDock={() => undefined}
+          onSend={() => undefined}
+          onStop={() => undefined}
+          onRetry={() => undefined}
+          onOpenSettings={() => undefined}
+        />
+      )
+    })
+    const textarea = host?.querySelector<HTMLTextAreaElement>('textarea')
+    expect(textarea).not.toBeNull()
+    expect(textarea?.disabled).toBe(false)
+  })
+})

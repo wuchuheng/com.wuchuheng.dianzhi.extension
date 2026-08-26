@@ -266,7 +266,8 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     if (!tabStates.get(tabId)?.panelOpen) return
     cancelPendingPanelClose(tabId)
     const resolvedWindowId = windowId ?? tabStates.get(tabId)?.windowId
-    if (resolvedWindowId) await dependencies.sidePanel.close(resolvedWindowId).catch(() => undefined)
+    if (resolvedWindowId)
+      await dependencies.sidePanel.close(resolvedWindowId).catch(() => undefined)
     await markPanelClosed(tabId, conversationId)
   }
 
@@ -755,7 +756,10 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       if (input.type === 'close') {
         const binding = panelTabs.get(port)
         if (!binding) {
-          logError(Scope.BACKGROUND, 'Side Panel close request ignored because the port has no tab binding.')
+          logError(
+            Scope.BACKGROUND,
+            'Side Panel close request ignored because the port has no tab binding.'
+          )
           return
         }
         const { tabId, windowId } = binding

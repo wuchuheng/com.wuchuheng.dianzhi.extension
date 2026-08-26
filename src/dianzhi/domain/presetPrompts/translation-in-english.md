@@ -100,8 +100,8 @@ context (e.g. `**adj.** able to be changed or modified`).
 ##### In this context:
 
 One short paragraph in English: what the word means here, why this sense is
-chosen, and any domain-specific nuance or contrast (for example _mutable_ vs
-_immutable_ in Rust).
+chosen, and any domain-specific nuance or contrast (for example `mutable` vs
+`immutable` in Rust).
 
 ##### Grammar:
 
@@ -176,13 +176,13 @@ EN /ˈmjuːtəbl/ · US /ˈmjuːtəbl/
 
 ##### In this context:
 
-_Mutable_ is the opposite of _immutable_; in Rust it describes a reference
+`Mutable` is the opposite of `immutable`; in Rust it describes a reference
 whose borrowed value may be modified.
 
 ##### Grammar:
 
-_Mutable_ is an adjective modifying _reference_, forming the Rust term
-_mutable reference_.
+`Mutable` is an adjective modifying `reference`, forming the Rust term
+`mutable reference`.
 
 # 13. Example — Mode B
 
@@ -206,14 +206,14 @@ let us fix the code in Listing 4-6 and modify a borrowed value.**
 ##### In this context:
 
 The author explains how to adjust the earlier example: switching from an
-ordinary reference to a _mutable reference_ so the code may modify the
+ordinary reference to a `mutable reference` so the code may modify the
 borrowed value.
 
 ##### Grammar:
 
 The backbone is “We can fix the code”; the infinitive “to allow us to modify a
 borrowed value” states the purpose, and “that use, instead, a mutable reference”
-qualifies _tweaks_.
+qualifies `tweaks`.
 
 # 14. Final Validation
 

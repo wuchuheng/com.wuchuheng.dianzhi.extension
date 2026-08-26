@@ -155,6 +155,7 @@ export type ToolsCommand =
   | { type: 'tools.reorder'; requestId: string; payload: { orderedIds: number[] } }
   | { type: 'tools.softRemove'; requestId: string; payload: { id: number } }
   | { type: 'tools.restore'; requestId: string; payload: { id: number } }
+  | { type: 'tools.delete'; requestId: string; payload: { id: number } }
 
 export type ToolTestCommand =
   | {
@@ -391,6 +392,7 @@ export function parseToolsCommand(value: unknown): ParseResult<ToolsCommand> {
       }
     case 'tools.softRemove':
     case 'tools.restore':
+    case 'tools.delete':
       if (!isPositiveInteger(payload.id)) return invalid('Tools id payload is invalid.')
       return { ok: true, value: { type: value.type, requestId, payload: { id: payload.id } } }
     default:

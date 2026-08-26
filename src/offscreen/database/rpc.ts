@@ -80,6 +80,10 @@ export interface DatabaseOperationMap {
     args: { id: number }
     result: Awaited<ReturnType<ConfigStore['restoreTool']>>
   }
+  deleteTool: {
+    args: { id: number }
+    result: Awaited<ReturnType<ConfigStore['deleteTool']>>
+  }
   migrateLegacy: {
     args: { legacySettings: LegacySettingsDocument }
     result: Awaited<ReturnType<ConfigStore['migrateLegacy']>>
@@ -113,6 +117,7 @@ const MUTATIONS = new Set<DatabaseOperation>([
   'reorderTools',
   'softRemoveTool',
   'restoreTool',
+  'deleteTool',
   'migrateLegacy',
 ])
 
@@ -249,6 +254,7 @@ function assertDatabaseRequest(value: unknown): asserts value is DatabaseRequest
       break
     case 'softRemoveTool':
     case 'restoreTool':
+    case 'deleteTool':
       valid = isPositiveInteger(args.id)
       break
     case 'migrateLegacy':
@@ -322,6 +328,8 @@ async function dispatch(
       return handlers.config.softRemoveTool(request.args.id)
     case 'restoreTool':
       return handlers.config.restoreTool(request.args.id)
+    case 'deleteTool':
+      return handlers.config.deleteTool(request.args.id)
     case 'migrateLegacy':
       return handlers.config.migrateLegacy(request.args)
   }

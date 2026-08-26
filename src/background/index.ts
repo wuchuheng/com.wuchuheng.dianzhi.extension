@@ -212,6 +212,10 @@ function dispatchToolsCommand(command: ToolsCommand, db: OffscreenClient): Promi
       return db
         .request('restoreTool', { id: command.payload.id })
         .then(() => db.request('listTools', { includeRemoved: true }))
+    case 'tools.delete':
+      return db
+        .request('deleteTool', { id: command.payload.id })
+        .then(() => db.request('listTools', { includeRemoved: true }))
   }
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseConversationCommand } from '@/dianzhi/domain/protocol'
+import { parseConversationCommand, parseToolsCommand } from '@/dianzhi/domain/protocol'
 
 function createCommand(selectedText: unknown, contextText = 'ctx <selected>x</selected>') {
   return { requestId: 'r-1', type: 'conversation.create', payload: { selectedText, contextText } }
@@ -38,5 +38,35 @@ describe('parseConversationCommand: conversation.create', () => {
   it('rejects empty or whitespace-only contextText', () => {
     expect(parseConversationCommand(createCommand('world', '')).ok).toBe(false)
     expect(parseConversationCommand(createCommand('world', '  ')).ok).toBe(false)
+  })
+})
+
+describe('parseToolsCommand: tools.delete', () => {
+  const requestId = 'r-tools-delete'
+
+  it('accepts a positive integer id', () => {
+    const result = parseToolsCommand({
+      type: 'tools.delete',
+      requestId,
+      payload: { id: 5 },
+    })
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.value).toMatchObject({ type: 'tools.delete', payload: { id: 5 } })
+    }
+  })
+
+  it('rejects a non-positive id', () => {
+    const result = parseToolsCommand({
+      type: 'tools.delete',
+      requestId,
+      payload: { id: 0 },
+    })
+    expect(result.ok).toBe(false)
+  })
+
+  it('rejects a missing id', () => {
+    const result = parseToolsCommand({ type: 'tools.delete', requestId, payload: {} })
+    expect(result.ok).toBe(false)
   })
 })

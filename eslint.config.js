@@ -88,6 +88,7 @@ export default tseslint.config(
             'tests/unit/dianzhi/ui/MarkdownStyles.spec.tsx',
             'tests/unit/dianzhi/ui/ToolTabs.spec.tsx',
             'tests/unit/dianzhi/ui/streaming-value-controller.spec.ts',
+            'tests/unit/dianzhi/ui/use-streaming-height.spec.tsx',
             'tests/unit/offscreen/config-store.spec.ts',
             'tests/unit/offscreen/migration-2-1-0.spec.ts',
             'tests/unit/offscreen/sqlite-helper.ts',

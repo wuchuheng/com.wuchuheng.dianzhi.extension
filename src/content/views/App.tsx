@@ -12,6 +12,7 @@ import { Composer } from '@/dianzhi/ui/Composer'
 import { ConversationStatus } from '@/dianzhi/ui/ConversationStatus'
 import { MessageList } from '@/dianzhi/ui/MessageList'
 import { ToolTabs } from '@/dianzhi/ui/ToolTabs'
+import { useStreamingHeight } from '@/dianzhi/ui/use-streaming-height'
 import { markdownToPlainText } from '@/dianzhi/ui/markdown-text'
 import {
   contentConversationCommand,
@@ -24,7 +25,6 @@ import { formatShortcut, matchesShortcut, toolShortcutNumber } from './shortcuts
 import { log, logError, Scope } from '@/events/logger'
 import { openOptionsPageFromContent } from './open-options-page'
 import { useScrollGuard } from './scroll-guard'
-import { useStreamingHeightController } from './use-streaming-height-controller'
 
 /* Header action glyphs — inline SVG (no emoji/text-as-icon), one stroke
  * family matching Phosphor's 24-box outline style. */
@@ -466,12 +466,10 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
   })
   const maximumPanelHeight = Math.min(560, Math.max(0, window.innerHeight - 16))
 
-  useStreamingHeightController({
-    panelRef,
+  useStreamingHeight({
+    elementRef: panelRef,
     visible: state.visible,
-    targetVersion: state.snapshot,
-    expanded: state.expanded,
-    mode: state.mode,
+    targetVersion: [state.snapshot, state.expanded, state.mode],
     minimumHeight: 280,
     maximumHeight: maximumPanelHeight,
     reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,

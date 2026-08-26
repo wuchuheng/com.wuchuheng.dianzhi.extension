@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react'
-import { createStreamingHeightController } from './streaming-height-controller'
+import { createStreamingValueController } from '@/dianzhi/ui/streaming-value-controller'
 
 interface UseStreamingHeightControllerOptions {
   panelRef: RefObject<HTMLDivElement | null>
@@ -25,9 +25,9 @@ export function useStreamingHeightController({
   onHeightChange,
 }: UseStreamingHeightControllerOptions) {
   const controllerRef = useRef(
-    createStreamingHeightController(minimumHeight, {
-      minHeight: minimumHeight,
-      maxHeight: maximumHeight,
+    createStreamingValueController(minimumHeight, {
+      min: minimumHeight,
+      max: maximumHeight,
     })
   )
   const animationFrameRef = useRef<number | null>(null)
@@ -48,15 +48,15 @@ export function useStreamingHeightController({
     }
 
     const now = performance.now()
-    const previousHeight = controllerRef.current.getHeight()
+    const previousHeight = controllerRef.current.getValue()
     panel.style.height = 'auto'
     const targetHeight = Math.min(Math.max(panel.offsetHeight, minimumHeight), maximumHeight)
     panel.style.height = `${previousHeight}px`
 
     if (!previouslyVisibleRef.current) {
-      controllerRef.current = createStreamingHeightController(targetHeight, {
-        minHeight: minimumHeight,
-        maxHeight: maximumHeight,
+      controllerRef.current = createStreamingValueController(targetHeight, {
+        min: minimumHeight,
+        max: maximumHeight,
       })
       onHeightChange(targetHeight)
       previouslyVisibleRef.current = true

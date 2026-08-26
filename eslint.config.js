@@ -86,6 +86,7 @@ export default tseslint.config(
             'tests/unit/offscreen/migration-2-1-0.spec.ts',
             'tests/unit/offscreen/sqlite-helper.ts',
             'tests/unit/options/App.spec.tsx',
+            'tests/unit/options/ToolList.spec.tsx',
             'tests/unit/options/ToolConfig.spec.tsx',
           ],
         },

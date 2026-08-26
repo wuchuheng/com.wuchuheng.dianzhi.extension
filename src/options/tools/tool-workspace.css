@@ -160,7 +160,8 @@
 .tool-row-name:focus-visible,
 .tool-row-default-toggle:focus-visible,
 .tool-add-button:focus-visible,
-.removed-tool-restore:focus-visible {
+.removed-tool-restore:focus-visible,
+.removed-tool-delete:focus-visible {
   outline: 2px solid var(--d-focus);
   outline-offset: 1px;
 }
@@ -267,6 +268,20 @@
 .removed-tool-restore:hover {
   border-color: var(--d-brand);
   color: var(--d-brand-strong);
+}
+.removed-tool-delete {
+  border: 1px solid var(--d-danger-border);
+  border-radius: var(--d-radius-xs);
+  padding: 3px 10px;
+  color: var(--d-danger);
+  background: var(--d-surface);
+  font-size: var(--d-text-hint);
+  font-weight: 600;
+  cursor: pointer;
+}
+.removed-tool-delete:hover {
+  border-color: var(--d-danger);
+  color: var(--d-danger);
 }
 
 /* Configuration pane */
@@ -503,6 +518,47 @@
   padding-left: 9px;
 }
 
+/* Permanent-delete confirm dialog (Element-style message box) */
+.tool-delete-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+}
+.tool-delete-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(31, 26, 22, 0.34);
+  cursor: default;
+}
+.tool-delete-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(360px, calc(100vw - 32px));
+  border: 1px solid var(--d-border);
+  border-radius: var(--d-radius-md);
+  padding: 18px;
+  background: var(--d-surface);
+  box-shadow: 0 20px 50px rgba(55, 42, 28, 0.24);
+}
+.tool-delete-dialog-title {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+.tool-delete-dialog-message {
+  margin: 0 0 16px;
+  color: var(--d-text-secondary);
+  font-size: var(--d-text-label);
+  line-height: 1.6;
+}
+.tool-delete-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 /* Live test pane */
 .tool-test-pane {
   display: grid;
@@ -664,7 +720,8 @@
   .tool-row-actions button,
   .tool-row-default-toggle,
   .tool-add-button,
-  .removed-tool-restore {
+  .removed-tool-restore,
+  .removed-tool-delete {
     transition: none;
   }
 }

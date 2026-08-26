@@ -12,6 +12,7 @@ export interface ToolListProps {
   onReorder(orderedIds: number[]): void
   onAdd(): void
   onRestore(id: number): void
+  onDelete(id: number): void
 }
 
 interface DragOverState {
@@ -93,6 +94,7 @@ function PlusIcon() {
 export function ToolList(props: ToolListProps) {
   const { tools } = props
   const [dragOver, setDragOver] = useState<DragOverState | null>(null)
+  const [confirmingDelete, setConfirmingDelete] = useState<ToolRecord | null>(null)
 
   const handleDragStart = (event: React.DragEvent, id: number) => {
     event.dataTransfer.setData('text/plain', String(id))
@@ -256,10 +258,54 @@ export function ToolList(props: ToolListProps) {
                 >
                   恢复
                 </button>
+                <button
+                  type="button"
+                  className="removed-tool-delete"
+                  aria-label={`永久删除工具 ${tool.name}`}
+                  onClick={() => setConfirmingDelete(tool)}
+                >
+                  永久删除
+                </button>
               </li>
             ))}
           </ul>
         </section>
+      )}
+      {confirmingDelete !== null && (
+        <div className="tool-delete-dialog-layer">
+          <button
+            type="button"
+            className="tool-delete-dialog-backdrop"
+            aria-label="取消永久删除"
+            onClick={() => setConfirmingDelete(null)}
+          />
+          <section
+            className="tool-delete-dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-label="永久删除工具"
+          >
+            <h3 className="tool-delete-dialog-title">永久删除工具</h3>
+            <p className="tool-delete-dialog-message">
+              此操作将永久删除工具“{confirmingDelete.name}”，且不可恢复。是否继续？
+            </p>
+            <div className="tool-delete-dialog-actions">
+              <button type="button" className="secondary" onClick={() => setConfirmingDelete(null)}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="danger"
+                onClick={() => {
+                  props.onDelete(confirmingDelete.id)
+                  setConfirmingDelete(null)
+                }}
+              >
+                确认删除
+              </button>
+            </div>
+          </section>
+        </div>
       )}
     </div>
   )

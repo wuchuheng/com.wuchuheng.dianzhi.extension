@@ -139,6 +139,13 @@ function ToolsWorkspaceView(
       .catch((reason: unknown) => setError(message(reason)))
   }
 
+  const handleDelete = (id: number) => {
+    void toolsApi
+      .delete(id)
+      .then(apply)
+      .catch((reason: unknown) => setError(message(reason)))
+  }
+
   const handleSetDefault = (id: number) => updateTool(id, { isDefault: true })
 
   return (
@@ -153,6 +160,7 @@ function ToolsWorkspaceView(
         onReorder={handleReorder}
         onAdd={handleAdd}
         onRestore={handleRestore}
+        onDelete={handleDelete}
       />
       <div className="detail-tabs" role="tablist" aria-label="工具详情">
         <button

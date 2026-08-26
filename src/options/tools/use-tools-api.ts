@@ -10,6 +10,7 @@ export interface ToolsApi {
   reorder(orderedIds: number[]): Promise<ToolRecord[]>
   softRemove(id: number): Promise<ToolRecord[]>
   restore(id: number): Promise<ToolRecord[]>
+  delete(id: number): Promise<ToolRecord[]>
 }
 
 function freshRequestId(): string {
@@ -58,6 +59,12 @@ export function useToolsApi(): ToolsApi {
       restore: (id) =>
         toolsCommand.dispatch({
           type: 'tools.restore',
+          requestId: freshRequestId(),
+          payload: { id },
+        }) as Promise<ToolRecord[]>,
+      delete: (id) =>
+        toolsCommand.dispatch({
+          type: 'tools.delete',
           requestId: freshRequestId(),
           payload: { id },
         }) as Promise<ToolRecord[]>,

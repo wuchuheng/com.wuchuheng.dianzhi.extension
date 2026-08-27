@@ -60,6 +60,7 @@ export interface UiSessionCoordinator {
     sender: chrome.runtime.MessageSender
   ): Promise<SelectionRouteResult>
   togglePanel(request: PanelToggleRequest, source: UiEventSource): Promise<PanelToggleResult>
+  openPanelForGesture(tabId: number, windowId: number): void
   selectTool(request: SelectToolShortcutRequest, source: UiEventSource): Promise<ToolShortcutResult>
   cycleTool(request: CycleToolShortcutRequest, source: UiEventSource): Promise<ToolShortcutResult>
   publish(tabId: number, update: ConversationUpdate): Promise<boolean>
@@ -266,8 +267,12 @@ async function runContentRequest<P extends { requestId: string }, R>(input: {
   parse: (value: unknown) => ParseResult<P>
   execute: (request: P, source: UiEventSource) => Promise<R>
   commit?: (request: P, result: R) => LogContext
+  /** Synchronously invoked after source resolution, before the first await that
+   * yields to the coordinator. Used for gesture-gated work such as starting
+   * `sidePanel.open()` inside the user-gesture window. */
+  onSource?: (source: UiEventSource) => void
 }): Promise<R> {
-  const { stage, value, sender, parse, execute, commit } = input
+  const { stage, value, sender, parse, execute, commit, onSource } = input
   trace('ui content request received', {
     requestId: extractRequestId(value) ?? null,
     stage,
@@ -284,6 +289,7 @@ async function runContentRequest<P extends { requestId: string }, R>(input: {
     request = parseUiRequest<P>(value, parse)
     requestId = request.requestId
     source = resolveContentSource(sender, request.requestId)
+    onSource?.(source)
     trace('ui content request validated', {
       requestId: request.requestId,
       stage,
@@ -474,6 +480,10 @@ export function createUiSessionEventHandlers(deps: {
         value,
         sender,
         parse: parsePanelToggle,
+        // Start the panel open inside the user-gesture window (synchronously
+        // after source resolution, before the coordinator's async pipeline);
+        // `deliverPanel` then skips its own `sidePanel.open` for this tab.
+        onSource: (source) => coordinator.openPanelForGesture(source.tabId, source.windowId),
         execute: (request, source) => coordinator.togglePanel(request, source),
         commit: (_request, result) => ({
           currentUI: result.currentUI,

@@ -187,6 +187,7 @@ function mockCoordinator(): UiSessionCoordinator {
       action: 'none',
       snapshot: null,
     })),
+    openPanelForGesture: vi.fn(),
     selectTool: vi.fn(
       async () => ({ handled: false, reason: 'NO_APPEARED_UI' }) as ToolShortcutResult
     ),
@@ -485,6 +486,20 @@ describe('ui-session-runtime: typed request handlers', () => {
       )
     ).rejects.toMatchObject({ code: 'INVALID_EVENT' })
     expect(coordinator.routeSelection).not.toHaveBeenCalled()
+  })
+
+  it('starts the panel open inside the gesture frame before routed toggle executes', async () => {
+    const { chrome } = fakeChromeRuntime()
+    const coordinator = mockCoordinator()
+    const handlers = createUiSessionEventHandlers({ chromeApi: chrome, coordinator })
+
+    await handlers.onContentPanelToggle(
+      { requestId: 'toggle-g', type: 'shortcut.panelToggle', payload: {} },
+      sender()
+    )
+
+    expect(coordinator.openPanelForGesture).toHaveBeenCalledBefore(coordinator.togglePanel)
+    expect(coordinator.openPanelForGesture).toHaveBeenCalledWith(9, 19)
   })
 })
 

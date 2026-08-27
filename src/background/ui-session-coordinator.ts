@@ -121,6 +121,11 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   const panelWindows = new Set<number>()
   const queues = new Map<number, Promise<unknown>>()
   const closedTabs = new Set<number>()
+  // Tabs whose panel open was already started inside the user-gesture window
+  // (synchronously at the message boundary). `deliverPanel` must not call
+  // `sidePanel.open()` again for these, since the second call is no longer
+  // gesture-bound and Chrome rejects it.
+  const gestureOpenedTabs = new Set<number>()
   let saveChain = Promise.resolve()
   // Externally-observable page identity compared against request sources; it can
   // diverge from state.pageUrl, which only advances inside serialized operations.
@@ -339,7 +344,9 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     input: { requestId?: string; stage: string; open?: boolean; expectedUrl: string }
   ): Promise<void> {
     assertPage(state.tabId, input.expectedUrl)
-    if (input.open) await dependencies.sidePanel.open(state.tabId)
+    if (input.open && !gestureOpenedTabs.delete(state.tabId)) {
+      await dependencies.sidePanel.open(state.tabId)
+    }
     assertPage(state.tabId, input.expectedUrl)
     await destroyContentInWindow(state.windowId)
     assertPage(state.tabId, input.expectedUrl)
@@ -732,6 +739,34 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     return runToolShortcut(request, source)
   }
 
+  /**
+   * Starts opening the global Side Panel for `tabId` inside the caller's user
+   * gesture frame. Called synchronously at the message boundary before any await,
+   * so Chrome accepts `sidePanel.open()`. The subsequent `deliverPanel` skips its
+   * own open (see `gestureOpenedTabs`). Safe to call when the panel is already
+   * open or the tab is unknown.
+   */
+  function openPanelForGesture(tabId: number, windowId: number): void {
+    if (!isPositiveInteger(tabId) || !isPositiveInteger(windowId)) return
+    const state = tabStates.get(tabId)
+    if (!state || windowHasPanel(state.windowId)) return
+    gestureOpenedTabs.add(tabId)
+    void dependencies.sidePanel
+      .open(tabId)
+      .catch(() => {
+        // A rejected open must not leave a stale skip mark that would make a
+        // later `deliverPanel` skip its own open attempt.
+        gestureOpenedTabs.delete(tabId)
+      })
+      .catch((error: unknown) =>
+        traceError('side panel gesture open failed', error, {
+          tabId,
+          windowId,
+          outcome: 'failed',
+        })
+      )
+  }
+
   async function publish(tabId: number, update: ConversationUpdate): Promise<boolean> {
     const state = tabStates.get(tabId)
     if (!state) return false
@@ -807,6 +842,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
 
   async function onTabRemoved(tabId: number, _windowId: number): Promise<void> {
     closedTabs.add(tabId)
+    gestureOpenedTabs.delete(tabId)
     currentPages.delete(tabId)
     for (const [windowId, activeTabId] of panelActiveTab) {
       if (activeTabId === tabId) panelActiveTab.delete(windowId)
@@ -846,6 +882,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     selectTool,
     cycleTool,
     publish,
+    openPanelForGesture,
     onTabActivated,
     onTabUpdated,
     onTabRemoved,

@@ -293,6 +293,33 @@ describe('UiSessionCoordinator panel toggle', () => {
     expect(sidePanel.close).toHaveBeenCalledWith(19)
     expect(sidePanel.command).not.toHaveBeenCalledWith(19, { type: 'close' })
   })
+
+  it('opens the panel once when the user gesture already started the open', async () => {
+    const { coordinator, sidePanel } = coordinatorWith(contentState())
+    await coordinator.initialize()
+
+    // The runtime boundary starts the open inside the user-gesture window.
+    coordinator.openPanelForGesture(9, 19)
+    await coordinator.togglePanel(toggleRequest(), contentSource())
+
+    expect(sidePanel.open).toHaveBeenCalledTimes(1)
+    expect(sidePanel.open).toHaveBeenCalledWith(9)
+    expect(sidePanel.command).toHaveBeenCalledWith(19, {
+      type: 'render',
+      snapshot: expect.anything(),
+    })
+  })
+
+  it('does not open when the panel is already open and the toggle closes it', async () => {
+    const { coordinator, sidePanel } = coordinatorWith(panelState())
+    await coordinator.initialize()
+
+    coordinator.openPanelForGesture(9, 19)
+    await coordinator.togglePanel(toggleRequest(), contentSource())
+
+    expect(sidePanel.open).not.toHaveBeenCalled()
+    expect(sidePanel.close).toHaveBeenCalledWith(19)
+  })
 })
 
 describe('UiSessionCoordinator routing and ownership', () => {

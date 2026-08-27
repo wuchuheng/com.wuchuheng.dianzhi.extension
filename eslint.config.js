@@ -70,6 +70,7 @@ export default tseslint.config(
             '*.config.ts',
             'tests/unit/background/conversation-manager.spec.ts',
             'tests/unit/background/ui-session-coordinator.spec.ts',
+            'tests/unit/background/ui-session-runtime.spec.ts',
             'tests/unit/background/provider-runner.spec.ts',
             'tests/unit/events/side-panel-event.spec.ts',
             'tests/unit/domain/shortcuts.spec.ts',

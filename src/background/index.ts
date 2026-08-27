@@ -22,17 +22,37 @@ import { streamChat } from '@/dianzhi/provider/client'
 import type { ToolRecord } from '@/offscreen/database/config-store'
 import {
   contentConversationCommand,
+  contentCycleToolShortcut,
+  contentPanelToggle,
+  contentSelectToolShortcut,
   contentSettingsCommand,
+  contentSurfaceStatus,
+  contentUiCommand,
   conversationUpdateToContent,
   extensionConversationCommand,
+  panelCycleToolShortcut,
+  panelPanelToggle,
+  panelSelectToolShortcut,
+  panelSurfaceStatus,
+  selectionRoute,
   settingsCommand,
+  sidePanelCommand,
+  sidePanelConversationUpdate,
   toolsCommand,
 } from '@/events/config'
 import { relayService } from '@/events/background/background'
 import { log, logError, Scope } from '@/events/logger'
+import { createUiSessionCoordinator, type TabSessionState } from './ui-session-coordinator'
+import {
+  createUiSessionEventHandlers,
+  reconcileUiSessionState,
+  registerUiSessionRuntime,
+  type UiSessionCoordinator,
+} from './ui-session-runtime'
 
 const SETTINGS_KEY = 'dianzhi.settings'
 const SESSION_KEY = 'dianzhi.tab-conversations'
+const UI_SESSION_KEY = 'dianzhi.ui-tab-sessions'
 const nativeSidePanel = chrome.sidePanel as typeof chrome.sidePanel & {
   close(options: { windowId: number }): Promise<void>
 }
@@ -83,6 +103,7 @@ const loadSettings = createSettingsLoader({
   listTools: (includeRemoved) => database.request('listTools', { includeRemoved }),
 })
 const managerRef: { current?: ConversationManager } = {}
+const coordinatorRef: { current?: UiSessionCoordinator } = {}
 const providerRunner = createProviderRunner({
   checkpoint: (messageId, content, reasoningContent) =>
     database.request('checkpointAssistant', { messageId, content, reasoningContent }),
@@ -93,12 +114,29 @@ const providerRunner = createProviderRunner({
   },
 })
 
+function normalizeTabForCoordinator(tab: chrome.tabs.Tab): {
+  id: number
+  windowId: number
+  url?: string
+} {
+  return { id: tab.id ?? -1, windowId: tab.windowId ?? -1, url: tab.url }
+}
+
 const manager = createConversationManager({
   database,
   loadSettings,
   providerRunner,
   publishToOwner: async (tabId, update) => {
-    await conversationUpdateToContent.dispatch([update, tabId])
+    const coordinator = coordinatorRef.current
+    if (!coordinator) {
+      logError(
+        Scope.BACKGROUND,
+        'UI session coordinator is not ready for conversation owner delivery.',
+        { tabId, stage: 'publishToOwner', outcome: 'failed' }
+      )
+      return
+    }
+    await coordinator.publish(tabId, update)
   },
   session: {
     load: async () => {
@@ -116,6 +154,64 @@ const manager = createConversationManager({
   },
 })
 managerRef.current = manager
+
+const uiSessionStore = {
+  load: async (): Promise<Record<string, TabSessionState>> => {
+    const stored = await chrome.storage.session.get(UI_SESSION_KEY)
+    const value = stored[UI_SESSION_KEY]
+    return typeof value === 'object' && value !== null
+      ? (value as Record<string, TabSessionState>)
+      : {}
+  },
+  save: async (state: Record<string, TabSessionState>): Promise<void> => {
+    await chrome.storage.session.set({ [UI_SESSION_KEY]: state })
+  },
+}
+
+const coordinator = createUiSessionCoordinator({
+  conversations: manager,
+  loadSettings,
+  sessionStore: uiSessionStore,
+  tabs: {
+    get: async (tabId) => normalizeTabForCoordinator(await chrome.tabs.get(tabId)),
+    query: async (windowId) =>
+      (await chrome.tabs.query({ windowId })).map(normalizeTabForCoordinator),
+  },
+  content: {
+    destroy: async (tabId) => {
+      await contentUiCommand.dispatch([{ type: 'destroy' }, tabId])
+    },
+    publish: async (tabId, update) => {
+      await conversationUpdateToContent.dispatch([update, tabId])
+    },
+  },
+  sidePanel: {
+    open: async (tabId) => chrome.sidePanel.open({ tabId }),
+    close: async (windowId) => nativeSidePanel.close({ windowId }),
+    command: async (windowId, command) => sidePanelCommand.dispatch(command, windowId),
+    publish: async (windowId, update) => {
+      await sidePanelConversationUpdate.dispatch(update, windowId)
+    },
+  },
+})
+coordinatorRef.current = coordinator
+
+registerUiSessionRuntime({
+  chromeApi: chrome,
+  coordinator,
+  sidePanelCommand,
+  sidePanelConversationUpdate,
+})
+const uiSessionHandlers = createUiSessionEventHandlers({ chromeApi: chrome, coordinator })
+contentSurfaceStatus.handleWithSender(uiSessionHandlers.onContentSurfaceStatus)
+selectionRoute.handleWithSender(uiSessionHandlers.onSelectionRoute)
+contentPanelToggle.handleWithSender(uiSessionHandlers.onContentPanelToggle)
+contentSelectToolShortcut.handleWithSender(uiSessionHandlers.onContentSelectToolShortcut)
+contentCycleToolShortcut.handleWithSender(uiSessionHandlers.onContentCycleToolShortcut)
+panelSurfaceStatus.handleWithSender(uiSessionHandlers.onPanelSurfaceStatus)
+panelPanelToggle.handleWithSender(uiSessionHandlers.onPanelPanelToggle)
+panelSelectToolShortcut.handleWithSender(uiSessionHandlers.onPanelSelectToolShortcut)
+panelCycleToolShortcut.handleWithSender(uiSessionHandlers.onPanelCycleToolShortcut)
 const optionsTestRunner = createOptionsToolTestRunner()
 
 function handleConversationCommand(
@@ -239,7 +335,20 @@ contentSettingsCommand.handle(async (value) => {
 chrome.runtime.onConnect.addListener((port) => manager.connect(port))
 chrome.runtime.onConnect.addListener((port) => optionsTestRunner.connect(port))
 relayService()
-void manager.initialize().then(
-  () => log(Scope.BACKGROUND, 'Dianzhi conversation manager is ready'),
-  (error: unknown) => logError(Scope.BACKGROUND, 'Failed to restore Dianzhi session state', error)
-)
+void (async () => {
+  try {
+    await reconcileUiSessionState({
+      sessionStore: uiSessionStore,
+      getTab: async (tabId) => normalizeTabForCoordinator(await chrome.tabs.get(tabId)),
+      deleteOrphanSelectionSessions: (retainedIds) =>
+        database.request('deleteOrphanSelectionSessions', { retainedIds }),
+    })
+  } catch (error) {
+    logError(Scope.BACKGROUND, 'Failed to reconcile Dianzhi UI tab sessions', error)
+  }
+  await coordinator.initialize()
+  await manager.initialize()
+  log(Scope.BACKGROUND, 'Dianzhi UI session runtime is ready')
+})().catch((error: unknown) => {
+  logError(Scope.BACKGROUND, 'Failed to restore Dianzhi session state', error)
+})

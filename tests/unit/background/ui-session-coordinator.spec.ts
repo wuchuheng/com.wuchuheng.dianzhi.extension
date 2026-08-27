@@ -478,10 +478,35 @@ describe('UiSessionCoordinator routing and ownership', () => {
     await coordinator.reportPanelStatus(statusRequest('appeared', 10), { tabId: 9, windowId: 19 })
     const update: ConversationUpdate = { type: 'conversation.sync', snapshot: snapshot(10, 22) }
 
-    await coordinator.publish(9, update)
+    const delivered = await coordinator.publish(9, update)
 
+    expect(delivered).toBe(true)
     expect(sidePanel.publish).toHaveBeenCalledWith(19, update)
     expect(content.publish).not.toHaveBeenCalled()
+  })
+
+  it('publishes to content and reports delivery when content owns the tab', async () => {
+    const { coordinator, content, sidePanel } = coordinatorWith(contentState())
+    await coordinator.initialize()
+    const update: ConversationUpdate = { type: 'conversation.sync', snapshot: snapshot(10, 22) }
+
+    const delivered = await coordinator.publish(9, update)
+
+    expect(delivered).toBe(true)
+    expect(content.publish).toHaveBeenCalledWith(9, update)
+    expect(sidePanel.publish).not.toHaveBeenCalled()
+  })
+
+  it('reports no delivery when no surface owns the tab', async () => {
+    const { coordinator, content, sidePanel } = coordinatorWith(noneState('contentScript'))
+    await coordinator.initialize()
+    const update: ConversationUpdate = { type: 'conversation.sync', snapshot: snapshot(10, 22) }
+
+    const delivered = await coordinator.publish(9, update)
+
+    expect(delivered).toBe(false)
+    expect(content.publish).not.toHaveBeenCalled()
+    expect(sidePanel.publish).not.toHaveBeenCalled()
   })
 })
 

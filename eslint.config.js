@@ -92,6 +92,8 @@ export default tseslint.config(
             'tests/unit/dianzhi/ui/use-streaming-height.spec.tsx',
             'tests/unit/offscreen/config-store.spec.ts',
             'tests/unit/offscreen/migration-2-1-0.spec.ts',
+            'tests/unit/offscreen/migration-2-2-0.spec.ts',
+            'tests/unit/offscreen/conversation-store.spec.ts',
             'tests/unit/offscreen/sqlite-helper.ts',
             'tests/unit/options/App.spec.tsx',
             'tests/unit/options/ToolList.spec.tsx',

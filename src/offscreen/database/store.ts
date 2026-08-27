@@ -42,6 +42,7 @@ export interface FinalizeAssistantInput {
   status: Extract<MessageStatus, 'completed' | 'error' | 'stopped'>
   content: string
   reasoningContent: string
+  estimatedThroughputTps: number | null
   errorCode?: string | null
   errorMessage?: string | null
 }
@@ -66,6 +67,7 @@ const MESSAGE_COLUMNS = `
   role,
   content,
   reasoning_content AS reasoningContent,
+  estimated_throughput_tps AS estimatedThroughputTps,
   status,
   error_code AS errorCode,
   error_message AS errorMessage,
@@ -118,6 +120,7 @@ function messageRecord(
     role,
     content,
     reasoningContent: '',
+    estimatedThroughputTps: null,
     status,
     errorCode: null,
     errorMessage: null,
@@ -439,7 +442,7 @@ export function createConversationStore(db: DatabaseConnection, clock: () => str
     const result = await db.exec(
       `UPDATE messages
        SET content = ?, reasoning_content = ?, status = ?, error_code = ?,
-           error_message = ?, updated_at = ?
+           error_message = ?, estimated_throughput_tps = ?, updated_at = ?
        WHERE id = ? AND role = 'assistant' AND status = 'streaming'`,
       [
         input.content,
@@ -447,6 +450,7 @@ export function createConversationStore(db: DatabaseConnection, clock: () => str
         input.status,
         input.errorCode ?? null,
         input.errorMessage ?? null,
+        input.estimatedThroughputTps,
         now,
         messageId,
       ]

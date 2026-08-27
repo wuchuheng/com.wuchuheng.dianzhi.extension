@@ -340,6 +340,7 @@ export function createConversationManager(dependencies: ConversationManagerDepen
                 status: 'stopped',
                 content: message.content,
                 reasoningContent: message.reasoningContent,
+                estimatedThroughputTps: null,
                 errorCode: null,
                 errorMessage: 'The background service restarted during generation.',
               },

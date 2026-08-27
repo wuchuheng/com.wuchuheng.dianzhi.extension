@@ -29,6 +29,7 @@ export interface MessageRecord {
   role: MessageRole
   content: string
   reasoningContent: string
+  estimatedThroughputTps: number | null
   status: MessageStatus
   errorCode: string | null
   errorMessage: string | null

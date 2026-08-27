@@ -126,6 +126,7 @@ export function createProviderRunner(dependencies: ProviderRunnerDependencies) {
           status: 'completed',
           content,
           reasoningContent,
+          estimatedThroughputTps: null,
         })
         if (isCurrent()) {
           await dependencies.publish({
@@ -143,6 +144,7 @@ export function createProviderRunner(dependencies: ProviderRunnerDependencies) {
             status: 'stopped',
             content,
             reasoningContent,
+            estimatedThroughputTps: null,
           })
           if (isCurrent()) {
             await dependencies.publish({
@@ -159,6 +161,7 @@ export function createProviderRunner(dependencies: ProviderRunnerDependencies) {
           status: 'error',
           content,
           reasoningContent,
+          estimatedThroughputTps: null,
           errorCode: shape.code,
           errorMessage: shape.message,
         })

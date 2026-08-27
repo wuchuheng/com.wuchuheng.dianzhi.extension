@@ -217,6 +217,10 @@ function assertDatabaseRequest(value: unknown): asserts value is DatabaseRequest
         ['completed', 'error', 'stopped'].includes(String(args.input.status)) &&
         typeof args.input.content === 'string' &&
         typeof args.input.reasoningContent === 'string' &&
+        (args.input.estimatedThroughputTps === null ||
+          (typeof args.input.estimatedThroughputTps === 'number' &&
+            Number.isSafeInteger(args.input.estimatedThroughputTps) &&
+            args.input.estimatedThroughputTps >= 0)) &&
         (args.input.errorCode === undefined ||
           args.input.errorCode === null ||
           typeof args.input.errorCode === 'string') &&

@@ -1,5 +1,10 @@
 import { DatabaseSync } from 'node:sqlite'
-import { CONFIG_RELEASE, SCHEMA_RELEASE } from '@/offscreen/database/schema'
+import {
+  CONFIG_RELEASE,
+  MESSAGE_THROUGHPUT_RELEASE,
+  SCHEMA_RELEASE,
+  TOOL_ID_RELEASE,
+} from '@/offscreen/database/schema'
 import type { DatabaseConnection, SqlParams, SqlValue } from '@/offscreen/database/store'
 
 export interface NodeDb {
@@ -33,6 +38,8 @@ export function createNodeDatabase(): NodeDb {
   const db = new DatabaseSync(':memory:')
   db.exec(SCHEMA_RELEASE.migrationSQL)
   db.exec(CONFIG_RELEASE.migrationSQL)
+  db.exec(TOOL_ID_RELEASE.migrationSQL)
+  db.exec(MESSAGE_THROUGHPUT_RELEASE.migrationSQL)
 
   const connection: DatabaseConnection = {
     async exec(sql, params) {

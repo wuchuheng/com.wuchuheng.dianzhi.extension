@@ -169,3 +169,13 @@ UPDATE sqlite_sequence SET seq = MAX(seq, 1024) WHERE name = 'tools';
 DROP TABLE IF EXISTS tool_floor_map;
 `,
 } as const
+
+/** Schema release 2.2.0: stores the final UI-estimated output throughput. */
+export const MESSAGE_THROUGHPUT_RELEASE = {
+  version: '2.2.0',
+  migrationSQL: `
+ALTER TABLE messages
+  ADD COLUMN estimated_throughput_tps INTEGER
+  CHECK (estimated_throughput_tps IS NULL OR estimated_throughput_tps >= 0);
+`,
+} as const

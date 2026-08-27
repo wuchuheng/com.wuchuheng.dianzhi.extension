@@ -131,7 +131,7 @@ deleteOrphanSelectionSessions(retainedIds: number[]): Promise<void>
 
 - Consumers in later tasks use `selectionSession.id` as the sole tab-state conversation pointer.
 
-- [ ] **Step 1: Write the migration failure tests**
+- [x] **Step 1: Write the migration failure tests**
 
 Create two conversations sharing `selection_key = 10`, attach messages, apply the proposed release, and assert preservation plus the new relationships:
 
@@ -169,7 +169,7 @@ describe('SELECTION_SESSION_RELEASE 2.3.0', () => {
 })
 ```
 
-- [ ] **Step 2: Run the migration test and confirm RED**
+- [x] **Step 2: Run the migration test and confirm RED**
 
 Run:
 
@@ -179,7 +179,7 @@ pnpm exec vitest run tests/unit/offscreen/migration-2-3-0.spec.ts
 
 Expected: failure because `SELECTION_SESSION_RELEASE` and `selection_sessions` do not exist.
 
-- [ ] **Step 3: Add release 2.3.0**
+- [x] **Step 3: Add release 2.3.0**
 
 Add `SELECTION_SESSION_RELEASE` to `schema.ts`. Use staged root IDs, rebuild conversations/messages transactionally, and end with these effective definitions:
 
@@ -211,7 +211,7 @@ CREATE TABLE conversations_new (
 
 The migration must create the replacement message table with `ON DELETE CASCADE`, copy IDs unchanged, drop the old child table before the old parent, rename replacements, populate active root pointers, and recreate both indexes.
 
-- [ ] **Step 4: Register and test the release sequence**
+- [x] **Step 4: Register and test the release sequence**
 
 Append `SELECTION_SESSION_RELEASE` after `MESSAGE_THROUGHPUT_RELEASE` in `src/offscreen/main.ts` and `tests/unit/offscreen/sqlite-helper.ts`:
 
@@ -227,7 +227,7 @@ releases: [
 
 Run the migration test again. Expected: PASS.
 
-- [ ] **Step 5: Write failing store tests**
+- [x] **Step 5: Write failing store tests**
 
 Add tests proving create/load/activate/delete behavior:
 
@@ -255,7 +255,7 @@ it('rejects an active conversation from another session', async () => {
 })
 ```
 
-- [ ] **Step 6: Run store tests and confirm RED**
+- [x] **Step 6: Run store tests and confirm RED**
 
 Run:
 
@@ -265,7 +265,7 @@ pnpm exec vitest run tests/unit/offscreen/conversation-store.spec.ts
 
 Expected: type/runtime failures for the missing session-oriented methods.
 
-- [ ] **Step 7: Implement session-oriented records and store methods**
+- [x] **Step 7: Implement session-oriented records and store methods**
 
 Make `selectionSessionId` authoritative in domain/store records. To keep intermediate commits type-safe while the Content, Side Panel, and legacy manager are migrated in later tasks, expose `selectionKey` as a deprecated computed alias with the same numeric value; it is never stored in the new schema and Task 8 removes it. `getSelectionSession()` must load the session row, active conversation, active messages, and all session conversations. `setActiveConversation()` must use a membership-checked update:
 
@@ -281,7 +281,7 @@ WHERE id = ?
 
 `ensureToolConversation()` must query by `(selection_session_id, tool_id)` and update the active pointer before returning. `deleteOrphanSelectionSessions([])` deletes all rows; a nonempty list deletes rows not in the validated retained set using positional bindings.
 
-- [ ] **Step 8: Replace database RPC operations**
+- [x] **Step 8: Replace database RPC operations**
 
 Update `DatabaseOperationMap`, `MUTATIONS`, validation, and dispatch:
 
@@ -299,7 +299,7 @@ deleteOrphanSelectionSessions: { args: { retainedIds: number[] }; result: void }
 
 Remove `createSelection` and `deleteSelection` only after all call sites in this task compile against the replacements. Retain `getConversation`, but make it return the owning session-aware snapshot so `conversation.sync`, follow-up, retry, and stop can still begin from a conversation ID. Keep message mutation RPC unchanged.
 
-- [ ] **Step 9: Update fixtures and run persistence/type gates**
+- [x] **Step 9: Update fixtures and run persistence/type gates**
 
 Run:
 
@@ -310,7 +310,7 @@ pnpm run typecheck
 
 Expected: all listed tests and TypeScript pass.
 
-- [ ] **Step 10: Commit the persistence aggregate**
+- [x] **Step 10: Commit the persistence aggregate**
 
 ```bash
 git add src/offscreen src/dianzhi/domain/protocol.ts tests/unit/offscreen tests/unit/dianzhi/protocol.spec.ts
@@ -365,7 +365,7 @@ interface TargetedSidePanelEvent<Args, Return> {
 function bg2sp<Args, Return>(name: string): TargetedSidePanelEvent<Args, Return>
 ```
 
-- [ ] **Step 1: Write protocol parser tests**
+- [x] **Step 1: Write protocol parser tests**
 
 Add acceptance and trust-boundary cases:
 
@@ -381,7 +381,7 @@ expect(parseToolShortcut(toolIndexRequest(2)).ok).toBe(true)
 expect(parseToolShortcut(toolIndexRequest(0)).ok).toBe(false)
 ```
 
-- [ ] **Step 2: Write targeted Side Panel transport tests**
+- [x] **Step 2: Write targeted Side Panel transport tests**
 
 Use fake ports for windows 19 and 20:
 
@@ -406,7 +406,7 @@ it('rejects pending delivery when the target port disconnects', async () => {
 })
 ```
 
-- [ ] **Step 3: Run the protocol/transport tests and confirm RED**
+- [x] **Step 3: Run the protocol/transport tests and confirm RED**
 
 Run:
 
@@ -416,7 +416,7 @@ pnpm exec vitest run tests/unit/dianzhi/protocol.spec.ts tests/unit/events/side-
 
 Expected: missing protocol and `bg2sp` exports.
 
-- [ ] **Step 4: Implement the action-oriented protocol**
+- [x] **Step 4: Implement the action-oriented protocol**
 
 Use discriminated unions rather than one generic coordinator request. Each request has `requestId`, a fixed `type`, and a payload that rejects caller-supplied `tabId`, `windowId`, and URL fields. Define explicit results, including:
 
@@ -431,11 +431,11 @@ type PanelToggleResult = {
 
 Add stable errors `UI_SESSION_STALE` and `SIDE_PANEL_DELIVERY_FAILED` to `DianzhiErrorCode` and the event error-code reconstruction set.
 
-- [ ] **Step 5: Implement `bg2sp`**
+- [x] **Step 5: Implement `bg2sp`**
 
 Add `'bg2sp'` to `EventChannel` and derive the port name with `buildEventName('bg2sp', name)`. The Side Panel `handle()` method opens the port, posts its binding, processes `{ messageId, args }`, and replies with `{ messageId, data | error }`. Background `accept()` stores one binding per port/window; `dispatch()` targets one window and resolves only after the matching acknowledgement. Remove bindings and reject pending requests on disconnect. Use the existing standardized error serializer.
 
-- [ ] **Step 6: Declare named events**
+- [x] **Step 6: Declare named events**
 
 In `src/events/config.ts`, add:
 
@@ -475,7 +475,7 @@ export const sidePanelConversationUpdate = events.bg2sp<ConversationUpdate, true
 )
 ```
 
-- [ ] **Step 7: Run event tests and commit**
+- [x] **Step 7: Run event tests and commit**
 
 Run:
 
@@ -527,7 +527,7 @@ interface UiConversationGateway {
 publishToOwner(tabId: number, update: ConversationUpdate): Promise<void>
 ```
 
-- [ ] **Step 1: Replace panel-centric manager tests with gateway tests**
+- [x] **Step 1: Replace panel-centric manager tests with gateway tests**
 
 Add tests that prove session behavior independently of Chrome Side Panel APIs:
 
@@ -557,7 +557,7 @@ it('activates the unique conversation for a tool and persists the pointer', asyn
 })
 ```
 
-- [ ] **Step 2: Run manager tests and confirm RED**
+- [x] **Step 2: Run manager tests and confirm RED**
 
 Run:
 
@@ -567,7 +567,7 @@ pnpm exec vitest run tests/unit/background/conversation-manager.spec.ts
 
 Expected: missing gateway methods and obsolete panel expectations.
 
-- [ ] **Step 3: Refactor snapshot construction**
+- [x] **Step 3: Refactor snapshot construction**
 
 Build `ConversationSnapshot` from `stored.selectionSession.activeConversationId`. Tool refs come from all stored conversations:
 
@@ -580,19 +580,19 @@ if (!active) throw invalid('The selection session has no valid active conversati
 
 If the pointer is invalid, select the first/root conversation, call `setActiveConversation`, and log a bounded recovery.
 
-- [ ] **Step 4: Implement gateway methods**
+- [x] **Step 4: Implement gateway methods**
 
 Move selection/tool logic out of `handle()` into the exact `UiConversationGateway` methods. `stopSelectionSession()` filters `liveSnapshots` by `conversation.selectionSessionId`, stops every matching handle, and awaits their settled `done` promises. `deleteSelectionSession()` stops first, clears matching live maps/subscribers, then calls the database deletion operation.
 
-- [ ] **Step 5: Route streaming through one injected owner publisher**
+- [x] **Step 5: Route streaming through one injected owner publisher**
 
 Replace unconditional Content Script plus subscriber broadcasting with `publishToOwner(tabId, update)`. Keep `applyUpdate()` and live snapshot maintenance inside the manager. The coordinator will provide the owner publisher in Task 5.
 
-- [ ] **Step 6: Preserve follow-up/retry/stop commands**
+- [x] **Step 6: Preserve follow-up/retry/stop commands**
 
 Keep `conversation.sync`, `conversation.followup`, `conversation.retry`, and `stream.stop` as conversation commands. Replace `conversation.ensureTool`, `conversation.create`, and all `panel.*` handling only after the new callers land; until Task 8, parse them as compatibility routes that delegate to the new gateway.
 
-- [ ] **Step 7: Run manager/type gates and commit**
+- [x] **Step 7: Run manager/type gates and commit**
 
 ```bash
 pnpm exec vitest run tests/unit/background/conversation-manager.spec.ts tests/unit/background/provider-runner.spec.ts
@@ -659,7 +659,7 @@ onPanelClosed(windowId: number): Promise<void>
 
 A valid fresh tab record defaults `latestUI` to `contentScript`. This gives a deterministic restore target before the tab has ever opened the Side Panel; subsequent successful deliveries update the field.
 
-- [ ] **Step 1: Write the four panel-toggle tests**
+- [x] **Step 1: Write the four panel-toggle tests**
 
 Represent each approved state explicitly:
 
@@ -678,7 +678,7 @@ it.each([
 
 Add a specific assertion that panel close calls `close(19)` and never `command(..., { type: 'close' })`.
 
-- [ ] **Step 2: Write routing, URL, and ownership tests**
+- [x] **Step 2: Write routing, URL, and ownership tests**
 
 Cover:
 
@@ -701,7 +701,7 @@ expect(conversations.createSelection).toHaveBeenCalledTimes(1)
 expect(result).toEqual({ target: 'contentScript', display: true, snapshot })
 ```
 
-- [ ] **Step 3: Run coordinator tests and confirm RED**
+- [x] **Step 3: Run coordinator tests and confirm RED**
 
 ```bash
 pnpm exec vitest run tests/unit/background/ui-session-coordinator.spec.ts
@@ -709,7 +709,7 @@ pnpm exec vitest run tests/unit/background/ui-session-coordinator.spec.ts
 
 Expected: module not found.
 
-- [ ] **Step 4: Implement URL normalization and trusted source resolution**
+- [x] **Step 4: Implement URL normalization and trusted source resolution**
 
 ```ts
 export function normalizePageUrl(input: string): string {
@@ -720,15 +720,15 @@ export function normalizePageUrl(input: string): string {
 
 Content sources require `sender.tab.id`, `sender.tab.windowId`, and `sender.url` or `sender.tab.url`. Panel sources use the event-port binding and a fresh `tabs.get()` result.
 
-- [ ] **Step 5: Implement per-tab serialization**
+- [x] **Step 5: Implement per-tab serialization**
 
 Maintain `Map<number, Promise<unknown>>` plus a closed-tab set. `runForTab(tabId, operation)` chains after the previous promise, removes the tail only if it is still current, and rejects with `UI_SESSION_STALE` after removal. Revalidate normalized identity immediately before every committed state save or UI delivery.
 
-- [ ] **Step 6: Implement status, selection, and tool methods**
+- [x] **Step 6: Implement status, selection, and tool methods**
 
 Follow the exact result contracts. A `destroyed` status clears only the surface-presence flag; a null request pointer must not erase an already-recorded `selectionSessionId` when page identity still matches. Selection must stop/delete the previous session before creation, then send to only one target. Tool index uses the enabled `snapshot.tools[index - 1]`; cycle uses the current active tool index and wraps in the requested direction. Commit `latestUI` only after successful target delivery.
 
-- [ ] **Step 7: Implement toggle and window-wide ownership**
+- [x] **Step 7: Implement toggle and window-wide ownership**
 
 When opening a global panel:
 
@@ -745,11 +745,11 @@ await sidePanel.command(windowId, snapshot ? { type: 'render', snapshot } : { ty
 
 When closing, call only `sidePanel.close(windowId)` and wait for success before marking the window destroyed.
 
-- [ ] **Step 8: Implement tab/panel lifecycle and owner publication**
+- [x] **Step 8: Implement tab/panel lifecycle and owner publication**
 
 On active-tab change with an appeared panel, load and render/clear the target tab and destroy its Content UI. `publish()` sends streaming updates only to Content when it owns the tab, or only to the appeared panel for the tab's window. Tab removal stops/deletes the session and erases stored state.
 
-- [ ] **Step 9: Run tests and commit**
+- [x] **Step 9: Run tests and commit**
 
 ```bash
 pnpm exec vitest run tests/unit/background/ui-session-coordinator.spec.ts
@@ -784,7 +784,7 @@ function registerUiSessionRuntime(input: {
 }): () => void
 ```
 
-- [ ] **Step 1: Write runtime adapter tests**
+- [x] **Step 1: Write runtime adapter tests**
 
 Use fake Chrome event registries:
 
@@ -806,7 +806,7 @@ it('uses native Side Panel open/closed events as lifecycle evidence', async () =
 })
 ```
 
-- [ ] **Step 2: Run runtime tests and confirm RED**
+- [x] **Step 2: Run runtime tests and confirm RED**
 
 ```bash
 pnpm exec vitest run tests/unit/background/ui-session-runtime.spec.ts
@@ -814,11 +814,11 @@ pnpm exec vitest run tests/unit/background/ui-session-runtime.spec.ts
 
 Expected: runtime module not found.
 
-- [ ] **Step 3: Implement listener registration and cleanup**
+- [x] **Step 3: Implement listener registration and cleanup**
 
 Register `tabs.onActivated`, `tabs.onUpdated`, `tabs.onRemoved`, `sidePanel.onOpened`, `sidePanel.onClosed`, and `runtime.onConnect`. Ignore subframe/noncommitted updates and other extension Side Panel paths. Return a cleanup function used by tests.
 
-- [ ] **Step 4: Register request/response event handlers**
+- [x] **Step 4: Register request/response event handlers**
 
 In `background/index.ts`, parse every untrusted request before calling the coordinator. Use `handleWithSender` for Content events and privileged extension-sender validation plus current panel binding for Side Panel events. Compose manager publication through a coordinator ref:
 
@@ -832,15 +832,15 @@ const coordinator = createUiSessionCoordinator({ conversations: manager, ...uiDe
 coordinatorRef.current = coordinator
 ```
 
-- [ ] **Step 5: Persist and reconcile session state**
+- [x] **Step 5: Persist and reconcile session state**
 
 Use a new key such as `dianzhi.ui-tab-sessions`. On initialization, load records, validate their primitive fields, compare them to current `tabs.get()` URL/window data, retain only exact normalized matches, and call `deleteOrphanSelectionSessions(retainedSessionIds)`.
 
-- [ ] **Step 6: Add safe lifecycle logs**
+- [x] **Step 6: Add safe lifecycle logs**
 
 For every operation log request ID, event, tab/window, normalized URL, source/target UI, session/conversation IDs, and `received|validated|committed|delivered|failed`. Pass no selected/context/message/provider content to the logger. Add test assertions that a sentinel selected string and API-key string never appear in serialized log arguments.
 
-- [ ] **Step 7: Run Background gates and commit**
+- [x] **Step 7: Run Background gates and commit**
 
 ```bash
 pnpm exec vitest run tests/unit/background/ui-session-runtime.spec.ts tests/unit/background/ui-session-coordinator.spec.ts tests/unit/background/conversation-manager.spec.ts
@@ -886,7 +886,7 @@ contentUiCommand
 }
 ```
 
-- [ ] **Step 1: Write Content routing tests**
+- [x] **Step 1: Write Content routing tests**
 
 Mock the new events and assert:
 
@@ -923,7 +923,7 @@ it('restores a same-page session with a fallback placement after reload', async 
 
 Also test `contentUi.destroy`, close reporting, and shortcut results targeted to Side Panel.
 
-- [ ] **Step 2: Run Content routing tests and confirm RED**
+- [x] **Step 2: Run Content routing tests and confirm RED**
 
 ```bash
 pnpm exec vitest run tests/unit/content/views/content-session-routing.spec.tsx
@@ -931,15 +931,15 @@ pnpm exec vitest run tests/unit/content/views/content-session-routing.spec.tsx
 
 Expected: mocks/events are not consumed and Content still calls `conversation.create`/`panel.toggle` directly.
 
-- [ ] **Step 3: Remove local panel ownership**
+- [x] **Step 3: Remove local panel ownership**
 
 Delete `panelOpen` from `ConversationViewState`. `conversation.sync` updates data without deciding visibility. Only `selection.route`/toggle responses and `contentUi.destroy` dispatch `view.restored` or `view.destroyed`.
 
-- [ ] **Step 4: Route selection before rendering**
+- [x] **Step 4: Route selection before rendering**
 
 Keep the captured anchor locally, dispatch `selectionRoute`, render only the Content result, and report appeared after the snapshot is committed. Do not dispatch `selection.started` before routing. On failure, show the existing structured error UI only if Background did not successfully route elsewhere.
 
-- [ ] **Step 5: Implement lifecycle reporting and fallback placement**
+- [x] **Step 5: Implement lifecycle reporting and fallback placement**
 
 On bootstrap dispatch destroyed with `selectionSessionId: null`. On user close and Background destroy command, dispatch `view.destroyed` and report destroyed. For restore without an anchor, synthesize an anchor centered horizontally at 96px from the viewport top:
 
@@ -952,11 +952,11 @@ const fallbackAnchor: AnchorRect = {
 }
 ```
 
-- [ ] **Step 6: Route shortcuts through their named events**
+- [x] **Step 6: Route shortcuts through their named events**
 
 Capture-phase handling remains. `Ctrl + [` works without a local snapshot. Direct/cycle tool shortcuts always dispatch, then apply a returned Content snapshot only when `handled && target === 'contentScript'`; no-UI ignored results make no UI change. Follow-up/retry/stop remain conversation commands.
 
-- [ ] **Step 7: Preserve existing Content behavior and commit**
+- [x] **Step 7: Preserve existing Content behavior and commit**
 
 ```bash
 pnpm exec vitest run tests/unit/content/views/content-session-routing.spec.tsx tests/unit/content/views/App.spec.tsx tests/unit/content/views/scroll-guard.spec.ts tests/unit/content/views/useScrollGuard.spec.tsx
@@ -992,7 +992,7 @@ sidePanelConversationUpdate
 
 - Produces `sidePanelCommand` acknowledgement `true` only after `render`, `clear`, or `selectTool` has been reduced into panel state, and acknowledges `sidePanelConversationUpdate` only after the streaming update has been reduced.
 
-- [ ] **Step 1: Rewrite Side Panel lifecycle and shortcut tests**
+- [x] **Step 1: Rewrite Side Panel lifecycle and shortcut tests**
 
 Replace raw `port.postMessage({ type: 'close' })` expectations:
 
@@ -1017,7 +1017,7 @@ it('clears to the empty component when the active tab has no session', async () 
 })
 ```
 
-- [ ] **Step 2: Run Side Panel tests and confirm RED**
+- [x] **Step 2: Run Side Panel tests and confirm RED**
 
 ```bash
 pnpm exec vitest run tests/unit/sidepanel/App.spec.tsx
@@ -1025,11 +1025,11 @@ pnpm exec vitest run tests/unit/sidepanel/App.spec.tsx
 
 Expected: Side Panel still owns a raw port and posts `close`.
 
-- [ ] **Step 3: Bind typed Side Panel events**
+- [x] **Step 3: Bind typed Side Panel events**
 
 Query the active tab/window once for event binding, call both `sidePanelCommand.handle(binding, callback)` and `sidePanelConversationUpdate.handle(binding, callback)`, and report panel appeared. On cleanup report destroyed when possible; Background port disconnect/native `onClosed` remains the authoritative fallback.
 
-- [ ] **Step 4: Apply render/clear/selectTool commands**
+- [x] **Step 4: Apply render/clear/selectTool commands**
 
 Extend `panel-state.ts` with:
 
@@ -1044,11 +1044,11 @@ type PanelStateEvent =
 
 `panel.clear` sets `snapshot` and `error` to null while preserving connection state. `render`/`selectTool` replace the snapshot and reset the per-session handoff/draft key.
 
-- [ ] **Step 5: Route shortcuts by response**
+- [x] **Step 5: Route shortcuts by response**
 
 `Ctrl + [` dispatches `panelPanelToggle`; Background closes the Chrome panel directly. Direct/cycle tool shortcuts dispatch their named events and reduce returned Side Panel snapshots. No raw `close` post exists. Follow-up/retry/stop remain conversation commands using the active conversation ID.
 
-- [ ] **Step 6: Preserve streaming UI and commit**
+- [x] **Step 6: Preserve streaming UI and commit**
 
 Keep `MessageList` smooth growth, `useScrollFollow`, pending dots, toolbar hover/focus behavior, provider setup, drafts, and composer focus unchanged.
 
@@ -1094,7 +1094,7 @@ type ConversationCommand =
 
 - Final code has no `panel.open`, `panel.toggle`, `panel.rendered`, `panel.close`, `panel.handoffReady`, `panel.closed`, `selectionKey`, or raw Side Panel `postMessage({ type: 'close' })` application paths.
 
-- [ ] **Step 1: Add absence/regression assertions**
+- [x] **Step 1: Add absence/regression assertions**
 
 Update protocol tests to reject legacy panel and selection-key commands:
 
@@ -1115,7 +1115,7 @@ expect(
 ).toBe(false)
 ```
 
-- [ ] **Step 2: Remove compatibility branches and stale state**
+- [x] **Step 2: Remove compatibility branches and stale state**
 
 Delete old panel command/update variants, manager handoff maps/subscriber bindings that have been replaced by owner publication, legacy port-close handling, and `selectionKey` aliases. Confirm with:
 
@@ -1125,7 +1125,7 @@ rg -n "panel\.open|panel\.toggle|panel\.rendered|panel\.close|panel\.handoffRead
 
 Expected: no application hits; migration tests may contain `selection_key` as historical schema input.
 
-- [ ] **Step 3: Run focused cross-context tests**
+- [x] **Step 3: Run focused cross-context tests**
 
 ```bash
 pnpm exec vitest run \
@@ -1143,7 +1143,7 @@ pnpm exec vitest run \
 
 Expected: PASS.
 
-- [ ] **Step 4: Run all quality gates**
+- [x] **Step 4: Run all quality gates**
 
 ```bash
 pnpm run format:check
@@ -1155,7 +1155,7 @@ git diff --check
 
 Expected: every command exits 0. Preserve the existing Vite/Tailwind sourcemap warning as a non-failing upstream warning unless this change introduces a new warning.
 
-- [ ] **Step 5: Prepare the real-Chrome handoff and safe-log checklist**
+- [x] **Step 5: Prepare the real-Chrome handoff and safe-log checklist**
 
 Do not launch or drive Chrome in this implementation session. Build the unpacked extension, then hand this matrix to the user for manual testing:
 
@@ -1178,13 +1178,13 @@ Tab close → session/conversations/messages deleted
 
 Document which Background, Content, and Side Panel consoles to capture. The automated safe-log tests must confirm logs show request/stage/IDs/outcome and contain none of the selected text, context, prompt, messages, reasoning, or provider credentials used during the run. Ask the user to provide those console logs if a manual scenario fails.
 
-- [ ] **Step 6: Commit final cleanup and verification fixes**
+- [x] **Step 6: Commit final cleanup and verification fixes**
 
 ```bash
 git add src tests manifest.config.ts docs/superpowers/plans/2026-08-27-tab-ui-session-coordinator.md
 git commit -m "refactor(ui): remove legacy panel ownership protocol"
 ```
 
-- [ ] **Step 7: Perform final drift check**
+- [x] **Step 7: Perform final drift check**
 
 Compare the final diff to `docs/superpowers/specs/2026-08-27-dianzhi-tab-ui-session-coordinator-design.md`. Confirm every touched file belongs to schema/session persistence, typed events, Background coordination, Content/Side Panel routing, tests, or plan tracking; generated `dist/` output remains uncommitted unless repository policy explicitly requires it.

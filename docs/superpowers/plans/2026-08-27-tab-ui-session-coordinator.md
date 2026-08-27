@@ -470,7 +470,7 @@ export const panelCycleToolShortcut = events.ep2bg<CycleToolShortcutRequest, Too
 export const contentUiCommand = events.bg2cs<ContentUiCommand, void>('dianzhi:content-ui-command')
 export const sidePanelCommand = events.bg2sp<SidePanelCommand, true>('dianzhi:side-panel-command')
 export const sidePanelConversationUpdate = events.bg2sp<ConversationUpdate, true>(
-  'dianzhi:side-panel-conversation-update'
+  'dianzhi:conversation-update'
 )
 ```
 

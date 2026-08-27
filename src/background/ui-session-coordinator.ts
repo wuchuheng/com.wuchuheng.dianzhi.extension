@@ -122,6 +122,8 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   const queues = new Map<number, Promise<unknown>>()
   const closedTabs = new Set<number>()
   let saveChain = Promise.resolve()
+  const currentPages = new Map<number, string>()
+  const panelActiveTab = new Map<number, number>()
 
   function stateRecord(): StoredStates {
     return Object.fromEntries(
@@ -153,6 +155,21 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
 
   function checkOpen(tabId: number): void {
     if (closedTabs.has(tabId)) throw stale(tabId)
+  }
+
+  function assertPage(tabId: number, expectedUrl: string): void {
+    checkOpen(tabId)
+    const current = currentPages.get(tabId)
+    if (current !== undefined && current !== expectedUrl) throw stale(tabId)
+  }
+
+  function assertSourceFresh(source: UiEventSource): void {
+    assertPage(source.tabId, normalizePageUrl(source.pageUrl))
+  }
+
+  async function commitPage(source: UiEventSource): Promise<void> {
+    assertSourceFresh(source)
+    await persist()
   }
 
   function runForTab<T>(tabId: number, operation: () => Promise<T>): Promise<T> {
@@ -203,6 +220,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     state.selectionSessionId = null
     state.contentUIAppeared = false
     state.sidePanelAppeared = panelWindows.has(state.windowId)
+    state.latestUI = 'contentScript'
   }
 
   async function getOrCreateState(source: UiEventSource): Promise<TabSessionState> {
@@ -212,6 +230,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     state.windowId = source.windowId
     await resetForNavigation(state, pageUrl)
     tabStates.set(source.tabId, state)
+    currentPages.set(source.tabId, pageUrl)
     return state
   }
 
@@ -255,6 +274,10 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     )
   }
 
+  function panelOwnsTab(state: TabSessionState): boolean {
+    return windowHasPanel(state.windowId) && panelActiveTab.get(state.windowId) === state.tabId
+  }
+
   async function loadSnapshot(state: TabSessionState): Promise<ConversationSnapshot | null> {
     if (state.selectionSessionId === null) return null
     return dependencies.conversations.loadSelectionSession(state.selectionSessionId)
@@ -264,10 +287,11 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     state: TabSessionState,
     snapshot: ConversationSnapshot | null,
     requestId: string | undefined,
-    stage: string
+    stage: string,
+    expectedUrl: string
   ): Promise<void> {
     if (!snapshot) return
-    checkOpen(state.tabId)
+    assertPage(state.tabId, expectedUrl)
     trace('delivering content update', {
       requestId: requestId ?? null,
       stage,
@@ -309,13 +333,13 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   async function deliverPanel(
     state: TabSessionState,
     command: SidePanelCommand,
-    input: { requestId?: string; stage: string; open?: boolean }
+    input: { requestId?: string; stage: string; open?: boolean; expectedUrl: string }
   ): Promise<void> {
-    checkOpen(state.tabId)
+    assertPage(state.tabId, input.expectedUrl)
     if (input.open) await dependencies.sidePanel.open(state.tabId)
-    checkOpen(state.tabId)
+    assertPage(state.tabId, input.expectedUrl)
     await destroyContentInWindow(state.windowId)
-    checkOpen(state.tabId)
+    assertPage(state.tabId, input.expectedUrl)
     const snapshot = 'snapshot' in command ? command.snapshot : null
     trace('delivering side panel command', {
       requestId: input.requestId ?? null,
@@ -333,9 +357,12 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
 
   async function markPanelOwner(
     state: TabSessionState,
-    snapshot: ConversationSnapshot | null
+    snapshot: ConversationSnapshot | null,
+    expectedUrl: string
   ): Promise<void> {
+    assertPage(state.tabId, expectedUrl)
     panelWindows.add(state.windowId)
+    panelActiveTab.set(state.windowId, state.tabId)
     state.sidePanelAppeared = true
     state.contentUIAppeared = false
     state.latestUI = 'sidePanel'
@@ -345,8 +372,10 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
 
   async function markContentOwner(
     state: TabSessionState,
-    snapshot: ConversationSnapshot | null
+    snapshot: ConversationSnapshot | null,
+    expectedUrl: string
   ): Promise<void> {
+    assertPage(state.tabId, expectedUrl)
     state.contentUIAppeared = true
     state.sidePanelAppeared = false
     state.latestUI = 'contentScript'
@@ -358,24 +387,27 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     state: TabSessionState,
     snapshot: ConversationSnapshot | null,
     requestId: string | undefined,
-    stage: string
+    stage: string,
+    expectedUrl: string
   ): Promise<void> {
     await deliverPanel(state, snapshot ? { type: 'render', snapshot } : { type: 'clear' }, {
       requestId,
       stage,
       open: true,
+      expectedUrl,
     })
-    await markPanelOwner(state, snapshot)
+    await markPanelOwner(state, snapshot, expectedUrl)
   }
 
   async function commandAppearedPanel(
     state: TabSessionState,
     snapshot: ConversationSnapshot,
     requestId: string | undefined,
-    stage: string
+    stage: string,
+    expectedUrl: string
   ): Promise<void> {
-    await deliverPanel(state, { type: 'render', snapshot }, { requestId, stage })
-    await markPanelOwner(state, snapshot)
+    await deliverPanel(state, { type: 'render', snapshot }, { requestId, stage, expectedUrl })
+    await markPanelOwner(state, snapshot, expectedUrl)
   }
 
   async function chooseToolSnapshot(
@@ -401,20 +433,22 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     return dependencies.conversations.activateTool(state.selectionSessionId, next.tool.id)
   }
 
-  async function deliverToolSnapshot(
+  async function deliverToolTo(
     state: TabSessionState,
+    target: UiSurface,
     snapshot: ConversationSnapshot,
     requestId: string,
-    stage: string
+    stage: string,
+    expectedUrl: string
   ): Promise<ToolShortcutResult> {
-    if (windowHasPanel(state.windowId)) {
-      await deliverPanel(state, { type: 'selectTool', snapshot }, { requestId, stage })
-      await markPanelOwner(state, snapshot)
+    if (target === 'sidePanel') {
+      await deliverPanel(state, { type: 'selectTool', snapshot }, { requestId, stage, expectedUrl })
+      await markPanelOwner(state, snapshot, expectedUrl)
       return { handled: true, target: 'sidePanel', snapshot: cloneSnapshot(snapshot) }
     }
 
-    await deliverContent(state, snapshot, requestId, stage)
-    await markContentOwner(state, snapshot)
+    await deliverContent(state, snapshot, requestId, stage, expectedUrl)
+    await markContentOwner(state, snapshot, expectedUrl)
     return { handled: true, target: 'contentScript', snapshot: cloneSnapshot(snapshot) }
   }
 
@@ -423,8 +457,14 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     source: UiEventSource
   ): Promise<ToolShortcutResult> {
     return runForTab(source.tabId, async () => {
+      assertSourceFresh(source)
       const state = await getOrCreateState(source)
-      if (!state.contentUIAppeared && !windowHasPanel(state.windowId)) {
+      const target: UiSurface | null = panelOwnsTab(state)
+        ? 'sidePanel'
+        : state.contentUIAppeared
+          ? 'contentScript'
+          : null
+      if (target === null) {
         trace('tool shortcut ignored because no UI appears', {
           requestId: request.requestId,
           stage: request.type,
@@ -439,9 +479,16 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
       }
 
       const snapshot = await chooseToolSnapshot(state, request)
-      checkOpen(state.tabId)
+      assertSourceFresh(source)
       if (!snapshot) return { handled: false, reason: 'TOOL_UNAVAILABLE' }
-      return deliverToolSnapshot(state, snapshot, request.requestId, request.type)
+      return deliverToolTo(
+        state,
+        target,
+        snapshot,
+        request.requestId,
+        request.type,
+        normalizePageUrl(source.pageUrl)
+      )
     })
   }
 
@@ -455,6 +502,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
       if (!isValidStoredState(value)) continue
       const normalized = { ...value, pageUrl: normalizePageUrl(value.pageUrl) }
       tabStates.set(numericTabId, normalized)
+      currentPages.set(numericTabId, normalized.pageUrl)
       if (normalized.sidePanelAppeared) panelWindows.add(normalized.windowId)
     }
     trace('initialized UI session coordinator', {
@@ -473,6 +521,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   ): Promise<SurfaceStatusResponse> {
     const source = resolveContentSource(sender, request.requestId)
     return runForTab(source.tabId, async () => {
+      assertSourceFresh(source)
       const state = await getOrCreateState(source)
       if (request.payload.status === 'appeared') {
         state.contentUIAppeared = true
@@ -482,7 +531,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
       } else {
         state.contentUIAppeared = false
       }
-      await persist()
+      await commitPage(source)
       return {
         currentUI: state.sidePanelAppeared
           ? 'sidePanel'
@@ -501,9 +550,11 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   ): Promise<SurfaceStatusResponse> {
     const source = await sourceFromPanel(panelBinding, request.requestId)
     return runForTab(source.tabId, async () => {
+      assertSourceFresh(source)
       const state = await getOrCreateState(source)
       if (request.payload.status === 'appeared') {
         panelWindows.add(state.windowId)
+        panelActiveTab.set(state.windowId, state.tabId)
         state.sidePanelAppeared = true
         if (request.payload.selectionSessionId !== null) {
           state.selectionSessionId = request.payload.selectionSessionId
@@ -516,9 +567,10 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
           )
         ) {
           panelWindows.delete(state.windowId)
+          panelActiveTab.delete(state.windowId)
         }
       }
-      await persist()
+      await commitPage(source)
       return {
         currentUI: state.sidePanelAppeared
           ? 'sidePanel'
@@ -537,8 +589,10 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   ): Promise<SelectionRouteResult> {
     const source = resolveContentSource(sender, request.requestId)
     return runForTab(source.tabId, async () => {
+      assertSourceFresh(source)
       const state = await getOrCreateState(source)
-      const target: UiSurface = windowHasPanel(state.windowId) ? 'sidePanel' : 'contentScript'
+      const target: UiSurface = panelOwnsTab(state) ? 'sidePanel' : 'contentScript'
+      const expectedUrl = normalizePageUrl(source.pageUrl)
       trace('selection routing started', {
         requestId: request.requestId,
         stage: 'selection.route',
@@ -550,18 +604,25 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
         selectionSessionId: state.selectionSessionId,
         outcome: 'start',
       })
+      assertSourceFresh(source)
       const snapshot = await dependencies.conversations.createSelection({
         tabId: state.tabId,
         replaceSelectionSessionId: state.selectionSessionId,
         selectedText: request.payload.selectedText,
         contextText: request.payload.contextText,
       })
-      checkOpen(state.tabId)
+      assertSourceFresh(source)
       state.selectionSessionId = snapshot.selectionSession.id
 
       if (target === 'sidePanel') {
         try {
-          await commandAppearedPanel(state, snapshot, request.requestId, 'selection.route')
+          await commandAppearedPanel(
+            state,
+            snapshot,
+            request.requestId,
+            'selection.route',
+            expectedUrl
+          )
           return { target: 'sidePanel', display: false, snapshot: null }
         } catch (error) {
           traceError('selection side panel delivery failed; falling back to content', error, {
@@ -576,13 +637,16 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
             conversationId: snapshot.conversation.id,
             outcome: 'fallback-content',
           })
-          checkOpen(state.tabId)
-          await markContentOwner(state, snapshot)
+          state.sidePanelAppeared = false
+          panelWindows.delete(state.windowId)
+          panelActiveTab.delete(state.windowId)
+          assertSourceFresh(source)
+          await markContentOwner(state, snapshot, expectedUrl)
           return { target: 'contentScript', display: true, snapshot: cloneSnapshot(snapshot) }
         }
       }
 
-      await markContentOwner(state, snapshot)
+      await markContentOwner(state, snapshot, expectedUrl)
       return { target: 'contentScript', display: true, snapshot: cloneSnapshot(snapshot) }
     })
   }
@@ -592,15 +656,19 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     source: UiEventSource
   ): Promise<PanelToggleResult> {
     return runForTab(source.tabId, async () => {
+      assertSourceFresh(source)
       const state = await getOrCreateState(source)
+      const expectedUrl = normalizePageUrl(source.pageUrl)
       const snapshot = await loadSnapshot(state)
       if (windowHasPanel(state.windowId)) {
         await dependencies.sidePanel.close(state.windowId)
+        assertSourceFresh(source)
         for (const item of tabStates.values()) {
           if (item.windowId === state.windowId) item.sidePanelAppeared = false
         }
         panelWindows.delete(state.windowId)
-        await persist()
+        panelActiveTab.delete(state.windowId)
+        await commitPage(source)
         return {
           currentUI: 'none',
           latestUI: state.latestUI,
@@ -610,7 +678,13 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
       }
 
       if (state.contentUIAppeared || state.latestUI === 'sidePanel') {
-        await openPanelWithSnapshot(state, snapshot, request.requestId, 'shortcut.panelToggle')
+        await openPanelWithSnapshot(
+          state,
+          snapshot,
+          request.requestId,
+          'shortcut.panelToggle',
+          expectedUrl
+        )
         return {
           currentUI: 'sidePanel',
           latestUI: state.latestUI,
@@ -619,8 +693,8 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
         }
       }
 
-      await deliverContent(state, snapshot, request.requestId, 'shortcut.panelToggle')
-      await markContentOwner(state, snapshot)
+      await deliverContent(state, snapshot, request.requestId, 'shortcut.panelToggle', expectedUrl)
+      await markContentOwner(state, snapshot, expectedUrl)
       return {
         currentUI: 'contentScript',
         latestUI: state.latestUI,
@@ -647,7 +721,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   async function publish(tabId: number, update: ConversationUpdate): Promise<void> {
     const state = tabStates.get(tabId)
     if (!state) return
-    if (windowHasPanel(state.windowId)) {
+    if (panelOwnsTab(state)) {
       await dependencies.sidePanel.publish(state.windowId, update)
       return
     }
@@ -657,12 +731,16 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   }
 
   async function onTabActivated(tabId: number, windowId: number): Promise<void> {
+    panelActiveTab.set(windowId, tabId)
     const tab = await dependencies.tabs.get(tabId)
     const pageUrl = tab.url ? normalizePageUrl(tab.url) : ''
     const state = tabStates.get(tabId) ?? (pageUrl ? freshState(tabId, windowId, pageUrl) : null)
     if (!state) return
     state.windowId = windowId
-    if (pageUrl) await resetForNavigation(state, pageUrl)
+    if (pageUrl) {
+      currentPages.set(tabId, pageUrl)
+      await resetForNavigation(state, pageUrl)
+    }
     tabStates.set(tabId, state)
     if (!windowHasPanel(windowId)) {
       await persist()
@@ -683,8 +761,11 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
       )
       state.contentUIAppeared = false
     }
+    const expectedUrl = pageUrl || state.pageUrl
+    if (snapshot) state.latestUI = 'sidePanel'
     await deliverPanel(state, snapshot ? { type: 'render', snapshot } : { type: 'clear' }, {
       stage: 'tab-activated',
+      expectedUrl,
     })
     state.sidePanelAppeared = true
     await persist()
@@ -693,16 +774,22 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   async function onTabUpdated(tabId: number, windowId: number, url: string): Promise<void> {
     await runForTab(tabId, async () => {
       const pageUrl = normalizePageUrl(url)
+      currentPages.set(tabId, pageUrl)
       const state = tabStates.get(tabId) ?? freshState(tabId, windowId, pageUrl)
       state.windowId = windowId
       await resetForNavigation(state, pageUrl)
       tabStates.set(tabId, state)
+      checkOpen(tabId)
       await persist()
     })
   }
 
   async function onTabRemoved(tabId: number, _windowId: number): Promise<void> {
     closedTabs.add(tabId)
+    currentPages.delete(tabId)
+    for (const [windowId, activeTabId] of panelActiveTab) {
+      if (activeTabId === tabId) panelActiveTab.delete(windowId)
+    }
     const state = tabStates.get(tabId)
     tabStates.delete(tabId)
     await persist()
@@ -722,6 +809,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
 
   async function onPanelClosed(windowId: number): Promise<void> {
     panelWindows.delete(windowId)
+    panelActiveTab.delete(windowId)
     for (const state of tabStates.values()) {
       if (state.windowId === windowId) state.sidePanelAppeared = false
     }

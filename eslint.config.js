@@ -79,6 +79,7 @@ export default tseslint.config(
             'tests/unit/content/views/scroll-guard.spec.ts',
             'tests/unit/content/views/useScrollGuard.spec.tsx',
             'tests/unit/content/views/App.spec.tsx',
+            'tests/unit/content/views/content-session-routing.spec.tsx',
             'tests/unit/dianzhi/presets.spec.ts',
             'tests/unit/dianzhi/protocol.spec.ts',
             'tests/unit/dianzhi/provider/client.spec.ts',

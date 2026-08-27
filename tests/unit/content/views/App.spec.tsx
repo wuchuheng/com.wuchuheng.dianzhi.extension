@@ -22,7 +22,6 @@ function visibleState(): ConversationViewState {
   const at = new Date(2026, 2, 5, 14, 7).toISOString()
   return {
     visible: true,
-    panelOpen: false,
     mode: 'card',
     expanded: false,
     error: null,

@@ -17,9 +17,21 @@ import { useStreamingHeight } from '@/dianzhi/ui/use-streaming-height'
 import { markdownToPlainText } from '@/dianzhi/ui/markdown-text'
 import {
   contentConversationCommand,
+  contentCycleToolShortcut,
+  contentPanelToggle,
+  contentSelectToolShortcut,
   contentSettingsCommand,
+  contentSurfaceStatus,
+  contentUiCommand,
   conversationUpdateToContent,
+  selectionRoute,
 } from '@/events/config'
+import type {
+  CycleToolShortcutRequest,
+  SelectToolShortcutRequest,
+  ToolShortcutResult,
+} from '@/dianzhi/domain/ui-session-protocol'
+
 import { createSelectionController } from '../selection/controller'
 import { computePlacement, type AnchorRect, type Placement } from '../popover/placement'
 import { formatShortcut, matchesShortcut, toolShortcutNumber } from './shortcuts'
@@ -316,6 +328,17 @@ function errorShape(error: unknown): DianzhiErrorShape {
   }
 }
 
+/** Deterministic viewport-centered anchor used when a restored session has no
+ * surviving DOM anchor after a same-page reload; geometry is never persisted. */
+function fallbackAnchor(): AnchorRect {
+  return {
+    left: window.innerWidth / 2,
+    right: window.innerWidth / 2,
+    top: 96,
+    bottom: 96,
+  }
+}
+
 export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
   const [state, dispatch] = useReducer(reduceConversationView, INITIAL_CONVERSATION_VIEW)
   const [settings, setSettings] = useState<DianzhiSettings>(DEFAULT_SETTINGS)
@@ -344,18 +367,51 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
     if (result.snapshot) dispatch({ type: 'conversation.sync', snapshot: result.snapshot })
     return result
   }, [])
-  const selectTool = useCallback(
-    async (toolId: number) => {
-      const snapshot = state.snapshot
-      if (!snapshot || toolId === snapshot.activeToolId) return
-      await sendCommand({
-        type: 'conversation.ensureTool',
-        requestId: requestId('tool'),
-        payload: { selectionKey: snapshot.conversation.selectionKey, toolId },
-      }).catch((error: unknown) => dispatch({ type: 'view.error', error: errorShape(error) }))
+
+  /** Applies a tool-shortcut response only when Background routed it to Content. */
+  const applyToolResult = useCallback((result: ToolShortcutResult) => {
+    if (result.handled && result.target === 'contentScript' && result.snapshot) {
+      dispatch({ type: 'conversation.toolChanged', snapshot: result.snapshot })
+    }
+  }, [])
+
+  const dispatchToolShortcut = useCallback(
+    async (request: SelectToolShortcutRequest | CycleToolShortcutRequest) => {
+      try {
+        const result =
+          request.type === 'shortcut.selectTool'
+            ? await contentSelectToolShortcut.dispatch(request)
+            : await contentCycleToolShortcut.dispatch(request)
+        applyToolResult(result)
+      } catch (error: unknown) {
+        dispatch({ type: 'view.error', error: errorShape(error) })
+      }
     },
-    [requestId, sendCommand, state.snapshot]
+    [applyToolResult]
   )
+
+  const selectTool = useCallback(
+    (index: number) => {
+      void dispatchToolShortcut({
+        type: 'shortcut.selectTool',
+        requestId: requestId('tool'),
+        payload: { index },
+      })
+    },
+    [dispatchToolShortcut, requestId]
+  )
+
+  const cycleTool = useCallback(
+    (direction: 'left' | 'right') => {
+      void dispatchToolShortcut({
+        type: 'shortcut.cycleTool',
+        requestId: requestId('cycle'),
+        payload: { direction },
+      })
+    },
+    [dispatchToolShortcut, requestId]
+  )
+
   const withConversation = useCallback(
     (build: (conversationId: number) => ConversationCommand) => {
       const conversationId = state.snapshot?.conversation.id
@@ -378,28 +434,53 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
     [requestId, settings]
   )
   const togglePanel = useCallback(() => {
-    const conversationId = state.snapshot?.conversation.id
-    if (!conversationId) {
-      logError(
-        Scope.CONTENT_SCRIPT,
-        'Side Panel toggle ignored because the page has no conversation.'
-      )
-      return
-    }
-    log(Scope.CONTENT_SCRIPT, 'Page requested Side Panel toggle.', { conversationId })
-    void sendCommand({
-      type: 'panel.toggle',
-      requestId: requestId('panel'),
-      payload: { conversationId },
-    })
-      .then((result) =>
+    log(Scope.CONTENT_SCRIPT, 'Page requested Side Panel toggle.')
+    void contentPanelToggle
+      .dispatch({
+        type: 'shortcut.panelToggle',
+        requestId: requestId('panel'),
+        payload: {},
+      })
+      .then((result) => {
+        if (
+          result.action === 'restore' &&
+          result.currentUI === 'contentScript' &&
+          result.snapshot
+        ) {
+          setAnchor(fallbackAnchor())
+          dispatch({ type: 'view.restored', snapshot: result.snapshot })
+          void contentSurfaceStatus.dispatch({
+            type: 'ui.surfaceStatus',
+            requestId: requestId('surface'),
+            payload: {
+              status: 'appeared',
+              selectionSessionId: result.snapshot.selectionSession.id,
+            },
+          })
+        }
         log(Scope.CONTENT_SCRIPT, 'Side Panel toggle completed.', {
-          conversationId,
-          returnedSnapshot: result.snapshot !== null,
+          currentUI: result.currentUI,
+          action: result.action,
         })
-      )
+      })
       .catch((error: unknown) => logError(Scope.CONTENT_SCRIPT, 'Side Panel toggle failed.', error))
-  }, [requestId, sendCommand, state.snapshot?.conversation.id])
+  }, [requestId])
+
+  /** Reports surface appearance/destruction to the Background coordinator. */
+  const reportSurface = useCallback(
+    (status: 'appeared' | 'destroyed', selectionSessionId: number | null) => {
+      void contentSurfaceStatus
+        .dispatch({
+          type: 'ui.surfaceStatus',
+          requestId: requestId('surface'),
+          payload: { status, selectionSessionId },
+        })
+        .catch((error: unknown) =>
+          logError(Scope.CONTENT_SCRIPT, 'Surface status report failed.', error)
+        )
+    },
+    [requestId]
+  )
 
   useEffect(() => {
     void contentSettingsCommand
@@ -408,12 +489,33 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       .catch((error: unknown) => dispatch({ type: 'view.error', error: errorShape(error) }))
   }, [requestId])
 
+  useEffect(() => {
+    dispatch({ type: 'view.destroyed' })
+    reportSurface('destroyed', null)
+  }, [reportSurface])
+
   useEffect(
     () =>
       conversationUpdateToContent.handle(async (update: ConversationUpdate) => {
         dispatch(update)
       }),
     []
+  )
+
+  useEffect(
+    () =>
+      contentUiCommand.handle(async (command) => {
+        if (command.type !== 'destroy') return
+        if (
+          document.activeElement instanceof HTMLElement &&
+          extensionHost.contains(document.activeElement)
+        ) {
+          document.activeElement.blur()
+        }
+        dispatch({ type: 'view.destroyed' })
+        reportSurface('destroyed', null)
+      }),
+    [extensionHost, reportSurface]
   )
 
   useEffect(() => {
@@ -428,15 +530,22 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       },
       onSelection: ({ context, rect }) => {
         setAnchor(rect)
-        dispatch({ type: 'selection.started' })
-        void sendCommand({
-          type: 'conversation.create',
-          requestId: requestId('selection'),
-          payload: { selectedText: context.selectedText, contextText: context.contextText },
-        }).catch((error: unknown) => {
-          console.error('[dianzhi] conversation.create failed:', error)
-          dispatch({ type: 'view.error', error: errorShape(error) })
-        })
+        void selectionRoute
+          .dispatch({
+            type: 'selection.route',
+            requestId: requestId('selection'),
+            payload: { selectedText: context.selectedText, contextText: context.contextText },
+          })
+          .then((result) => {
+            if (result.target === 'contentScript' && result.display && result.snapshot) {
+              dispatch({ type: 'view.restored', snapshot: result.snapshot })
+              reportSurface('appeared', result.snapshot.selectionSession.id)
+            }
+          })
+          .catch((error: unknown) => {
+            console.error('[dianzhi] selection.route failed:', error)
+            dispatch({ type: 'view.error', error: errorShape(error) })
+          })
       },
       onAnchorChange: setAnchor,
     })
@@ -446,7 +555,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       selectionControllerRef.current = null
       controller.stop()
     }
-  }, [extensionHost, requestId, sendCommand, settings])
+  }, [extensionHost, requestId, reportSurface, settings])
 
   useEffect(() => {
     // While the popover is open, keep the captured word highlighted on the
@@ -526,6 +635,28 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
         closePopover()
         return
       }
+      if (matchesShortcut(event, settings.shortcuts.dock)) {
+        event.preventDefault()
+        log(Scope.CONTENT_SCRIPT, 'Page received Side Panel toggle shortcut.')
+        togglePanel()
+        return
+      }
+      // Tool shortcuts always dispatch; the coordinator decides the target and
+      // a no-apparent-UI result changes nothing locally.
+      if (
+        matchesShortcut(event, settings.shortcuts.tabLeft) ||
+        matchesShortcut(event, settings.shortcuts.tabRight)
+      ) {
+        event.preventDefault()
+        cycleTool(matchesShortcut(event, settings.shortcuts.tabLeft) ? 'left' : 'right')
+        return
+      }
+      const toolNumber = toolShortcutNumber(event)
+      if (toolNumber !== null) {
+        event.preventDefault()
+        selectTool(toolNumber)
+        return
+      }
       if (!state.snapshot) return
       if (matchesShortcut(event, settings.shortcuts.expand)) {
         event.preventDefault()
@@ -535,34 +666,6 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       if (matchesShortcut(event, settings.shortcuts.toggleChat)) {
         event.preventDefault()
         dispatch({ type: 'view.mode', mode: state.mode === 'card' ? 'chat' : 'card' })
-        return
-      }
-      if (matchesShortcut(event, settings.shortcuts.dock)) {
-        event.preventDefault()
-        log(Scope.CONTENT_SCRIPT, 'Page received Side Panel toggle shortcut.', {
-          hasConversation: state.snapshot !== null,
-          panelOpen: state.panelOpen,
-        })
-        togglePanel()
-        return
-      }
-      if (
-        matchesShortcut(event, settings.shortcuts.tabLeft) ||
-        matchesShortcut(event, settings.shortcuts.tabRight)
-      ) {
-        event.preventDefault()
-        const tools = state.snapshot.tools
-        const current = tools.findIndex(({ tool }) => tool.id === state.snapshot?.activeToolId)
-        const direction = matchesShortcut(event, settings.shortcuts.tabLeft) ? -1 : 1
-        const next = tools[(current + direction + tools.length) % tools.length]
-        if (next) void selectTool(next.tool.id)
-        return
-      }
-      const toolNumber = toolShortcutNumber(event)
-      if (toolNumber !== null) {
-        event.preventDefault()
-        const tool = state.snapshot.tools[toolNumber - 1]
-        if (tool) void selectTool(tool.tool.id)
       }
     }
     document.addEventListener('pointerdown', onPointerDown)
@@ -571,7 +674,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       document.removeEventListener('pointerdown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown, true)
     }
-  }, [closePopover, extensionHost, requestId, selectTool, settings.shortcuts, state, togglePanel])
+  }, [closePopover, cycleTool, extensionHost, selectTool, settings.shortcuts, state, togglePanel])
 
   return (
     <ContentApp
@@ -589,7 +692,10 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       bodyRef={bodyRef}
       onBodyScroll={onBodyScroll}
       onComposerChange={setComposer}
-      onToolSelect={(toolId) => void selectTool(toolId)}
+      onToolSelect={(toolId) => {
+        const index = state.snapshot?.tools.findIndex(({ tool }) => tool.id === toolId) ?? -1
+        if (index >= 0) selectTool(index + 1)
+      }}
       onModeChange={(mode) => dispatch({ type: 'view.mode', mode })}
       onExpand={() => dispatch({ type: 'view.expanded', expanded: !state.expanded })}
       onClose={closePopover}

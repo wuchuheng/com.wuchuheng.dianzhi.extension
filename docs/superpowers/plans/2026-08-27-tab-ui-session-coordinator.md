@@ -23,6 +23,7 @@
 - Selected text, page context, prompts, messages, reasoning, API keys, and authorization headers must never appear in coordination logs.
 - Preserve the existing smooth message-growth animation and strict `< 150px` scroll-follow guard.
 - When Content UI restoration has no surviving DOM anchor after reload, place it at a deterministic viewport-centered fallback; do not persist anchor geometry.
+- Do not run the real-browser verification matrix in this implementation session. Add safe, detailed lifecycle/routing logs and provide the matrix to the user for their manual browser test and log collection.
 
 ---
 
@@ -1154,9 +1155,9 @@ git diff --check
 
 Expected: every command exits 0. Preserve the existing Vite/Tailwind sourcemap warning as a non-failing upstream warning unless this change introduces a new warning.
 
-- [ ] **Step 5: Verify in real Chrome with safe logs**
+- [ ] **Step 5: Prepare the real-Chrome handoff and safe-log checklist**
 
-Build and reload the unpacked extension, then execute this matrix:
+Do not launch or drive Chrome in this implementation session. Build the unpacked extension, then hand this matrix to the user for manual testing:
 
 ```text
 Content selection → Content UI
@@ -1175,7 +1176,7 @@ Two browser windows → isolated panel routing
 Tab close → session/conversations/messages deleted
 ```
 
-Inspect Background, Content, and Side Panel consoles. Confirm logs show request/stage/IDs/outcome and contain none of the selected text, context, prompt, messages, reasoning, or provider credentials used during the run.
+Document which Background, Content, and Side Panel consoles to capture. The automated safe-log tests must confirm logs show request/stage/IDs/outcome and contain none of the selected text, context, prompt, messages, reasoning, or provider credentials used during the run. Ask the user to provide those console logs if a manual scenario fails.
 
 - [ ] **Step 6: Commit final cleanup and verification fixes**
 

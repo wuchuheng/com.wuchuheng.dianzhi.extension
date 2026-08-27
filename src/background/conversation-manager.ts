@@ -61,8 +61,7 @@ export interface ConversationManagerDependencies {
     start(input: ProviderRunInput): ProviderRunHandle
     stop?(conversationId: number): boolean
   }
-  publishToOwner?(tabId: number, update: ConversationUpdate): Promise<void>
-  sendToContent?(tabId: number, update: ConversationUpdate): Promise<void>
+  publishToOwner(tabId: number, update: ConversationUpdate): Promise<void>
   session: ConversationSessionStore
   sidePanel: {
     open(tabId: number): Promise<void>
@@ -156,10 +155,9 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     }
   }
 
-  async function snapshotFromStored(
-    stored: StoredConversationSnapshot,
-    settings: DianzhiSettings
-  ): Promise<ConversationSnapshot> {
+  async function normalizeStoredSnapshot(
+    stored: StoredConversationSnapshot
+  ): Promise<StoredConversationSnapshot> {
     const conversations =
       stored.conversations.length > 0 ? stored.conversations : [stored.conversation]
     const active = conversations.find(
@@ -176,7 +174,7 @@ export function createConversationManager(dependencies: ConversationManagerDepen
         selectionSessionId: stored.selectionSession.id,
         conversationId: fallback.id,
       })
-      return snapshotFromStored(recovered, settings)
+      return normalizeStoredSnapshot(recovered)
     }
 
     if (active.id !== stored.conversation.id) {
@@ -190,13 +188,23 @@ export function createConversationManager(dependencies: ConversationManagerDepen
           context: { selectionSessionId: stored.selectionSession.id },
         })
       }
-      return snapshotFromStored(activeStored, settings)
+      return normalizeStoredSnapshot(activeStored)
     }
 
+    return stored
+  }
+
+  async function snapshotFromStored(
+    stored: StoredConversationSnapshot,
+    settings: DianzhiSettings
+  ): Promise<ConversationSnapshot> {
+    const normalized = await normalizeStoredSnapshot(stored)
+    const conversations =
+      normalized.conversations.length > 0 ? normalized.conversations : [normalized.conversation]
     return {
-      selectionSession: { ...stored.selectionSession },
-      conversation: { ...active },
-      messages: stored.messages.map((message) => ({ ...message })),
+      selectionSession: { ...normalized.selectionSession },
+      conversation: { ...normalized.conversation },
+      messages: normalized.messages.map((message) => ({ ...message })),
       tools: settings.tools
         .filter((tool) => tool.enabled)
         .map((tool) => ({
@@ -204,7 +212,7 @@ export function createConversationManager(dependencies: ConversationManagerDepen
           conversationId:
             conversations.find((conversation) => conversation.toolId === tool.id)?.id ?? null,
         })),
-      activeToolId: active.toolId,
+      activeToolId: normalized.conversation.toolId,
     }
   }
 
@@ -261,8 +269,7 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     const conversationId =
       'snapshot' in update ? update.snapshot.conversation.id : update.conversationId
     const tabId = tabForConversation(conversationId)
-    const publishToOwner = dependencies.publishToOwner ?? dependencies.sendToContent
-    if (tabId !== null) await publishToOwner?.(tabId, update).catch(() => undefined)
+    if (tabId !== null) await dependencies.publishToOwner(tabId, update).catch(() => undefined)
   }
 
   async function markPanelClosed(tabId: number, conversationId: number): Promise<void> {
@@ -341,8 +348,6 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     conversationId: number,
     settings: DianzhiSettings
   ): Promise<ConversationSnapshot> {
-    const live = liveSnapshots.get(conversationId)
-    if (live) return cloneSnapshot(live)
     const stored = await dependencies.database.request('getConversation', { id: conversationId })
     if (!stored) {
       throw new DianzhiError({
@@ -351,8 +356,11 @@ export function createConversationManager(dependencies: ConversationManagerDepen
         context: { conversationId },
       })
     }
+    const normalized = await normalizeStoredSnapshot(stored)
+    const live = liveSnapshots.get(normalized.conversation.id)
+    if (live) return cloneSnapshot(live)
     const recoveredMessages = await Promise.all(
-      stored.messages.map((message) =>
+      normalized.messages.map((message) =>
         message.status === 'streaming'
           ? dependencies.database.request('finalizeAssistant', {
               messageId: message.id,
@@ -368,7 +376,10 @@ export function createConversationManager(dependencies: ConversationManagerDepen
           : Promise.resolve(message)
       )
     )
-    const snapshot = await snapshotFromStored({ ...stored, messages: recoveredMessages }, settings)
+    const snapshot = await snapshotFromStored(
+      { ...normalized, messages: recoveredMessages },
+      settings
+    )
     liveSnapshots.set(snapshot.conversation.id, cloneSnapshot(snapshot))
     return snapshot
   }
@@ -406,7 +417,7 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     if (!tool) throw invalid('No enabled tool is available.')
     const previous = tabStates.get(input.tabId)
     if (input.replaceSelectionSessionId !== null)
-      await stopSelectionSession(input.replaceSelectionSessionId)
+      await clearSelectionSessionState(input.replaceSelectionSessionId)
     const promptSnapshot = fillTemplate(effectivePrompt(tool), {
       selected: input.selectedText,
       context: input.contextText,
@@ -503,7 +514,7 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     await Promise.all(handles.map((handle) => handle.done.catch(() => undefined)))
   }
 
-  async function deleteSelectionSession(selectionSessionId: number): Promise<void> {
+  async function clearSelectionSessionState(selectionSessionId: number): Promise<void> {
     await stopSelectionSession(selectionSessionId)
     const conversationIds = [...liveSnapshots.entries()]
       .filter(([, snapshot]) => snapshot.conversation.selectionSessionId === selectionSessionId)
@@ -520,6 +531,10 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       changed = true
     }
     if (changed) await persistStates()
+  }
+
+  async function deleteSelectionSession(selectionSessionId: number): Promise<void> {
+    await clearSelectionSessionState(selectionSessionId)
     await dependencies.database.request('deleteSelectionSession', { id: selectionSessionId })
   }
 

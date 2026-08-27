@@ -122,7 +122,10 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   const queues = new Map<number, Promise<unknown>>()
   const closedTabs = new Set<number>()
   let saveChain = Promise.resolve()
+  // Externally-observable page identity compared against request sources; it can
+  // diverge from state.pageUrl, which only advances inside serialized operations.
   const currentPages = new Map<number, string>()
+  // The panel owns only each window's current active tab; this gates panelOwnsTab.
   const panelActiveTab = new Map<number, number>()
 
   function stateRecord(): StoredStates {
@@ -611,7 +614,16 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
         selectedText: request.payload.selectedText,
         contextText: request.payload.contextText,
       })
-      assertSourceFresh(source)
+      try {
+        assertSourceFresh(source)
+      } catch (error) {
+        // The just-created session is unreferenced; best-effort clean it up while
+        // tolerating a racing navigation that already removed it.
+        await dependencies.conversations
+          .deleteSelectionSession(snapshot.selectionSession.id)
+          .catch(() => undefined)
+        throw error
+      }
       state.selectionSessionId = snapshot.selectionSession.id
 
       if (target === 'sidePanel') {
@@ -661,6 +673,8 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
       const expectedUrl = normalizePageUrl(source.pageUrl)
       const snapshot = await loadSnapshot(state)
       if (windowHasPanel(state.windowId)) {
+        // Reject before the close side effect when identity already turned stale.
+        assertSourceFresh(source)
         await dependencies.sidePanel.close(state.windowId)
         assertSourceFresh(source)
         for (const item of tabStates.values()) {
@@ -731,55 +745,60 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   }
 
   async function onTabActivated(tabId: number, windowId: number): Promise<void> {
+    // Streaming publish must see the new panel owner immediately, so the active-tab
+    // claim stays outside the serialized body even when the body is queued behind work.
     panelActiveTab.set(windowId, tabId)
-    const tab = await dependencies.tabs.get(tabId)
-    const pageUrl = tab.url ? normalizePageUrl(tab.url) : ''
-    const state = tabStates.get(tabId) ?? (pageUrl ? freshState(tabId, windowId, pageUrl) : null)
-    if (!state) return
-    state.windowId = windowId
-    if (pageUrl) {
-      currentPages.set(tabId, pageUrl)
-      await resetForNavigation(state, pageUrl)
-    }
-    tabStates.set(tabId, state)
-    if (!windowHasPanel(windowId)) {
+    await runForTab(tabId, async () => {
+      const tab = await dependencies.tabs.get(tabId)
+      const pageUrl = tab.url ? normalizePageUrl(tab.url) : ''
+      const state = tabStates.get(tabId) ?? (pageUrl ? freshState(tabId, windowId, pageUrl) : null)
+      if (!state) return
+      state.windowId = windowId
+      if (pageUrl) await resetForNavigation(state, pageUrl)
+      // A removed tab must reject without resurrecting its shared-maps entries.
+      checkOpen(tabId)
+      if (pageUrl) currentPages.set(tabId, pageUrl)
+      tabStates.set(tabId, state)
+      if (!windowHasPanel(windowId)) {
+        await persist()
+        return
+      }
+      const snapshot = await loadSnapshot(state)
+      if (state.contentUIAppeared) {
+        await dependencies.content.destroy(tabId).catch((error) =>
+          traceError('content destroy failed on active tab panel ownership', error, {
+            stage: 'tab-activated',
+            tabId,
+            windowId,
+            pageUrl: state.pageUrl,
+            target: 'contentScript',
+            selectionSessionId: state.selectionSessionId,
+            outcome: 'delivery-failed',
+          })
+        )
+        state.contentUIAppeared = false
+      }
+      const expectedUrl = pageUrl || state.pageUrl
+      if (snapshot) state.latestUI = 'sidePanel'
+      await deliverPanel(state, snapshot ? { type: 'render', snapshot } : { type: 'clear' }, {
+        stage: 'tab-activated',
+        expectedUrl,
+      })
+      state.sidePanelAppeared = true
       await persist()
-      return
-    }
-    const snapshot = await loadSnapshot(state)
-    if (state.contentUIAppeared) {
-      await dependencies.content.destroy(tabId).catch((error) =>
-        traceError('content destroy failed on active tab panel ownership', error, {
-          stage: 'tab-activated',
-          tabId,
-          windowId,
-          pageUrl: state.pageUrl,
-          target: 'contentScript',
-          selectionSessionId: state.selectionSessionId,
-          outcome: 'delivery-failed',
-        })
-      )
-      state.contentUIAppeared = false
-    }
-    const expectedUrl = pageUrl || state.pageUrl
-    if (snapshot) state.latestUI = 'sidePanel'
-    await deliverPanel(state, snapshot ? { type: 'render', snapshot } : { type: 'clear' }, {
-      stage: 'tab-activated',
-      expectedUrl,
     })
-    state.sidePanelAppeared = true
-    await persist()
   }
 
   async function onTabUpdated(tabId: number, windowId: number, url: string): Promise<void> {
     await runForTab(tabId, async () => {
       const pageUrl = normalizePageUrl(url)
-      currentPages.set(tabId, pageUrl)
       const state = tabStates.get(tabId) ?? freshState(tabId, windowId, pageUrl)
       state.windowId = windowId
       await resetForNavigation(state, pageUrl)
-      tabStates.set(tabId, state)
+      // A removed tab must reject without resurrecting its shared-maps entries.
       checkOpen(tabId)
+      currentPages.set(tabId, pageUrl)
+      tabStates.set(tabId, state)
       await persist()
     })
   }

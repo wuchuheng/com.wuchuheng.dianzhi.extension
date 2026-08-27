@@ -119,6 +119,20 @@ function noneState(latestUI: TabSessionState['latestUI']): TabSessionState {
   return state({ contentUIAppeared: false, sidePanelAppeared: false, latestUI })
 }
 
+function panelOwnsOtherTab(): Record<string, TabSessionState> {
+  return {
+    '9': panelState(),
+    '10': state({
+      tabId: 10,
+      windowId: 19,
+      pageUrl: PAGE_NORMALIZED,
+      contentUIAppeared: true,
+      latestUI: 'contentScript',
+      selectionSessionId: 11,
+    }),
+  }
+}
+
 function contentSource(tabId = 9, windowId = 19, url = PAGE): UiEventSource {
   return {
     surface: 'contentScript',
@@ -297,12 +311,16 @@ describe('UiSessionCoordinator routing and ownership', () => {
   })
 
   it('falls back to content with the same snapshot when panel delivery fails', async () => {
-    const sidePanel = {
-      command: vi.fn(async () => {
-        throw new Error('delivery failed')
-      }),
-    }
-    const { coordinator, conversations, created } = coordinatorWith(panelState(), { sidePanel })
+    const { coordinator, content, conversations, saved, sidePanel, created } = coordinatorWith(
+      panelState(),
+      {
+        sidePanel: {
+          command: vi.fn(async () => {
+            throw new Error('delivery failed')
+          }),
+        },
+      }
+    )
     await coordinator.initialize()
     await coordinator.reportPanelStatus(statusRequest('appeared', 10), { tabId: 9, windowId: 19 })
 
@@ -310,6 +328,11 @@ describe('UiSessionCoordinator routing and ownership', () => {
 
     expect(conversations.createSelection).toHaveBeenCalledTimes(1)
     expect(result).toEqual({ target: 'contentScript', display: true, snapshot: created })
+    expect(saved()['9'].sidePanelAppeared).toBe(false)
+    const update: ConversationUpdate = { type: 'conversation.sync', snapshot: snapshot(10, 22) }
+    await coordinator.publish(9, update)
+    expect(content.publish).toHaveBeenCalledWith(9, update)
+    expect(sidePanel.publish).not.toHaveBeenCalled()
   })
 
   it('preserves a session for the same URL with a different hash', async () => {
@@ -492,7 +515,7 @@ describe('UiSessionCoordinator stale identity revalidation', () => {
     expect(sidePanel.close).not.toHaveBeenCalled()
   })
 
-  it('revalidates identity before committing a selection when the page changes mid-flight', async () => {
+  it('does not let onTabActivated mutations interleave an in-flight selection', async () => {
     let resumeCreate!: () => void
     const delayedSnapshot = snapshot(20, 44)
     const createSelection = vi.fn(
@@ -501,28 +524,119 @@ describe('UiSessionCoordinator stale identity revalidation', () => {
           resumeCreate = () => resolve(delayedSnapshot)
         })
     )
-    const { coordinator, content, saved } = coordinatorWith(contentState(), {
-      conversations: { createSelection },
-      tabs: {
-        get: vi.fn(async (tabId: number) =>
-          tabId === 9
-            ? { id: 9, windowId: 19, url: OTHER_PAGE }
-            : { id: tabId, windowId: 19, url: PAGE }
-        ),
+    const staleWindow = {
+      '9': state({
+        tabId: 9,
+        windowId: 19,
+        pageUrl: PAGE_NORMALIZED,
+        contentUIAppeared: true,
+        sidePanelAppeared: true,
+        latestUI: 'contentScript',
+        selectionSessionId: 10,
+      }),
+    }
+    const { coordinator, content, conversations, saved } = coordinatorWith(staleWindow, {
+      conversations: {
+        createSelection,
+        loadSelectionSession: vi.fn(async () => delayedSnapshot),
       },
+    })
+    await coordinator.initialize()
+
+    const selection = coordinator.routeSelection(selectionRequest(), sender())
+    void selection.catch(() => undefined)
+    await vi.waitFor(() => expect(createSelection).toHaveBeenCalledTimes(1))
+
+    // Activation lands while the queued selection is still creating its run.
+    const activation = coordinator.onTabActivated(9, 19)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(content.destroy).not.toHaveBeenCalled()
+    expect(conversations.deleteSelectionSession).not.toHaveBeenCalled()
+
+    resumeCreate()
+    await expect(selection).resolves.toMatchObject({ target: 'contentScript', display: true })
+    expect(saved()['9'].selectionSessionId).toBe(20)
+    await activation
+
+    expect(content.destroy).toHaveBeenCalledTimes(1)
+    expect(saved()['9'].latestUI).toBe('sidePanel')
+  })
+
+  it('does not resurrect a removed tab after onTabRemoved interleaves an update', async () => {
+    let resolveStop!: () => void
+    const stopPromise = new Promise<void>((resolve) => {
+      resolveStop = () => resolve()
+    })
+    const stopSelectionSession = vi.fn(() => stopPromise)
+    const { coordinator, saved } = coordinatorWith(contentState(), {
+      conversations: {
+        stopSelectionSession,
+        deleteSelectionSession: vi.fn(async () => undefined),
+      },
+    })
+    await coordinator.initialize()
+
+    const pendingUpdate = coordinator.onTabUpdated(9, 19, OTHER_PAGE)
+    void pendingUpdate.catch(() => undefined)
+    await vi.waitFor(() => expect(stopSelectionSession).toHaveBeenCalledTimes(1))
+
+    const removal = coordinator.onTabRemoved(9, 19)
+    void removal.catch(() => undefined)
+    await vi.waitFor(() => expect(saved()['9']).toBeUndefined())
+    resolveStop()
+
+    await expect(pendingUpdate).rejects.toMatchObject({ code: 'UI_SESSION_STALE' })
+    await removal
+    // A later window event must not re-persist the removed tab from a ghost entry.
+    await coordinator.onPanelOpened(19)
+    expect(saved()['9']).toBeUndefined()
+  })
+
+  it('deletes the orphaned session when the post-create revalidation rejects', async () => {
+    let resumeCreate!: () => void
+    const delayedSnapshot = snapshot(20, 44)
+    const createSelection = vi.fn(
+      () =>
+        new Promise<ConversationSnapshot>((resolve) => {
+          resumeCreate = () => resolve(delayedSnapshot)
+        })
+    )
+    const { coordinator, conversations } = coordinatorWith(contentState(), {
+      conversations: { createSelection },
     })
     await coordinator.initialize()
 
     const pending = coordinator.routeSelection(selectionRequest(), sender())
     void pending.catch(() => undefined)
     await vi.waitFor(() => expect(createSelection).toHaveBeenCalledTimes(1))
-    await coordinator.onTabActivated(9, 19)
+    await coordinator.onTabRemoved(9, 19)
     resumeCreate()
 
     await expect(pending).rejects.toMatchObject({ code: 'UI_SESSION_STALE' })
-    expect(content.publish).not.toHaveBeenCalled()
-    expect(saved()['9'].pageUrl).toBe(OTHER_PAGE)
-    expect(saved()['9'].selectionSessionId).toBeNull()
+    expect(conversations.deleteSelectionSession).toHaveBeenCalledWith(20)
+  })
+
+  it('rejects a stale toggle before closing the panel when the tab is removed mid-flight', async () => {
+    let resumeLoad!: () => void
+    const loadSelectionSession = vi.fn(
+      () =>
+        new Promise<ConversationSnapshot>((resolve) => {
+          resumeLoad = () => resolve(snapshot(10, 22))
+        })
+    )
+    const { coordinator, sidePanel } = coordinatorWith(panelState(), {
+      conversations: { loadSelectionSession },
+    })
+    await coordinator.initialize()
+
+    const pending = coordinator.togglePanel(toggleRequest(), contentSource())
+    void pending.catch(() => undefined)
+    await vi.waitFor(() => expect(loadSelectionSession).toHaveBeenCalledTimes(1))
+    await coordinator.onTabRemoved(9, 19)
+    resumeLoad()
+
+    await expect(pending).rejects.toMatchObject({ code: 'UI_SESSION_STALE' })
+    expect(sidePanel.close).not.toHaveBeenCalled()
   })
 
   it('rejects a selection routed after tab removal without creating a run', async () => {
@@ -554,18 +668,7 @@ describe('UiSessionCoordinator stale identity revalidation', () => {
 
 describe('UiSessionCoordinator active-tab panel ownership', () => {
   it('routes a selection to content when the appeared panel targets a different active tab', async () => {
-    const initial = {
-      '9': panelState(),
-      '10': state({
-        tabId: 10,
-        windowId: 19,
-        pageUrl: PAGE_NORMALIZED,
-        contentUIAppeared: true,
-        latestUI: 'contentScript',
-        selectionSessionId: 11,
-      }),
-    }
-    const { coordinator, sidePanel, saved } = coordinatorWith(initial)
+    const { coordinator, sidePanel, saved } = coordinatorWith(panelOwnsOtherTab())
     await coordinator.initialize()
     await coordinator.reportPanelStatus(statusRequest('appeared', 10), { tabId: 9, windowId: 19 })
 
@@ -579,18 +682,7 @@ describe('UiSessionCoordinator active-tab panel ownership', () => {
   })
 
   it('publishes to content when the panel targets a different active tab', async () => {
-    const initial = {
-      '9': panelState(),
-      '10': state({
-        tabId: 10,
-        windowId: 19,
-        pageUrl: PAGE_NORMALIZED,
-        contentUIAppeared: true,
-        latestUI: 'contentScript',
-        selectionSessionId: 11,
-      }),
-    }
-    const { coordinator, content, sidePanel } = coordinatorWith(initial)
+    const { coordinator, content, sidePanel } = coordinatorWith(panelOwnsOtherTab())
     await coordinator.initialize()
     await coordinator.reportPanelStatus(statusRequest('appeared', 10), { tabId: 9, windowId: 19 })
     const update: ConversationUpdate = { type: 'conversation.sync', snapshot: snapshot(10, 22) }
@@ -603,18 +695,7 @@ describe('UiSessionCoordinator active-tab panel ownership', () => {
   })
 
   it('targets tool shortcuts at the panel only for its active tab', async () => {
-    const initial = {
-      '9': panelState(),
-      '10': state({
-        tabId: 10,
-        windowId: 19,
-        pageUrl: PAGE_NORMALIZED,
-        contentUIAppeared: true,
-        latestUI: 'contentScript',
-        selectionSessionId: 11,
-      }),
-    }
-    const { coordinator, content, sidePanel } = coordinatorWith(initial)
+    const { coordinator, content, sidePanel } = coordinatorWith(panelOwnsOtherTab())
     await coordinator.initialize()
     await coordinator.reportPanelStatus(statusRequest('appeared', 10), { tabId: 9, windowId: 19 })
 

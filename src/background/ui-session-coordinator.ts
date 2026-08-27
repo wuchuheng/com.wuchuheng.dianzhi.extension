@@ -732,16 +732,18 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     return runToolShortcut(request, source)
   }
 
-  async function publish(tabId: number, update: ConversationUpdate): Promise<void> {
+  async function publish(tabId: number, update: ConversationUpdate): Promise<boolean> {
     const state = tabStates.get(tabId)
-    if (!state) return
+    if (!state) return false
     if (panelOwnsTab(state)) {
       await dependencies.sidePanel.publish(state.windowId, update)
-      return
+      return true
     }
     if (state.contentUIAppeared) {
       await dependencies.content.publish(tabId, update)
+      return true
     }
+    return false
   }
 
   async function onTabActivated(tabId: number, windowId: number): Promise<void> {

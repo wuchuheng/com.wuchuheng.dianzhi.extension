@@ -62,7 +62,7 @@ export interface UiSessionCoordinator {
   togglePanel(request: PanelToggleRequest, source: UiEventSource): Promise<PanelToggleResult>
   selectTool(request: SelectToolShortcutRequest, source: UiEventSource): Promise<ToolShortcutResult>
   cycleTool(request: CycleToolShortcutRequest, source: UiEventSource): Promise<ToolShortcutResult>
-  publish(tabId: number, update: ConversationUpdate): Promise<void>
+  publish(tabId: number, update: ConversationUpdate): Promise<boolean>
   onTabActivated(tabId: number, windowId: number): Promise<void>
   onTabUpdated(tabId: number, windowId: number, url: string): Promise<void>
   onTabRemoved(tabId: number, windowId: number): Promise<void>
@@ -205,16 +205,26 @@ export async function resolvePanelBinding(
     contextTypes: [chromeApi.runtime.ContextType.SIDE_PANEL],
     documentUrls: [panelUrl],
   })
-  // A present document ID must match an open panel context; the document URL
-  // fallback applies only when Chrome omitted the sender's document ID.
-  const matchingContext =
-    typeof sender.documentId === 'string' && sender.documentId.length > 0
-      ? contexts.find((context) => context.documentId === sender.documentId)
-      : contexts.find((context) => context.documentUrl === sender.url)
-  if (!matchingContext || !isPositiveInteger(matchingContext.windowId)) {
-    throw invalid('No open Side Panel context matches the sender.')
+  // A present document ID must match an open panel context and stays the only
+  // multi-window disambiguator. Without it the URL fallback is safe only for a
+  // single open panel; two panels in different windows must not guess.
+  // A present document ID must match an open panel context and stays the only
+  // multi-window disambiguator. Without it the URL fallback is safe only for a
+  // single open panel; two panels in different windows must not guess.
+  let windowId: number
+  if (typeof sender.documentId === 'string' && sender.documentId.length > 0) {
+    const documentMatch = contexts.find((context) => context.documentId === sender.documentId)
+    if (!documentMatch || !isPositiveInteger(documentMatch.windowId)) {
+      throw invalid('No open Side Panel context matches the sender document.')
+    }
+    windowId = documentMatch.windowId
+  } else {
+    const urlMatches = contexts.filter((context) => context.documentUrl === sender.url)
+    if (urlMatches.length !== 1 || !isPositiveInteger(urlMatches[0].windowId)) {
+      throw invalid('The Side Panel sender window cannot be resolved unambiguously.')
+    }
+    windowId = urlMatches[0].windowId
   }
-  const windowId = matchingContext.windowId
   const activeTabs = await chromeApi.tabs.query({ active: true, windowId })
   const activeTab = activeTabs.find((tab) => isPositiveInteger(tab.id))
   if (!activeTab || !isPositiveInteger(activeTab.id)) {
@@ -560,6 +570,29 @@ export function createUiSessionEventHandlers(deps: {
 }
 
 /**
+ * Routes a stream update to exactly one owner. The coordinator publishes only to
+ * the surface it owns; when no surface owns the tab yet (legacy content before
+ * Tasks 6-7 surface reporting), the update falls back to the legacy Content
+ * dispatch so existing streaming keeps working.
+ */
+export async function publishToOwnerWithFallback(input: {
+  coordinator: UiSessionCoordinator | undefined
+  tabId: number
+  update: ConversationUpdate
+  deliverToContent(tabId: number, update: ConversationUpdate): Promise<void>
+}): Promise<void> {
+  const { coordinator, tabId, update, deliverToContent } = input
+  if (!coordinator) {
+    await deliverToContent(tabId, update)
+    return
+  }
+  const delivered = await coordinator.publish(tabId, update)
+  if (!delivered) {
+    await deliverToContent(tabId, update)
+  }
+}
+
+/**
  * Wires Chrome native tab and Side Panel lifecycle events into the coordinator and
  * accepts Side Panel ports for the background-to-side-panel events. Returns a
  * cleanup function that removes every registered listener.
@@ -601,6 +634,9 @@ export function registerUiSessionRuntime(input: {
   ): void => {
     // Only committed top-level navigations surface status 'loading' together with
     // the next URL; subframe and pending updates are ignored as lifecycle evidence.
+    // Same-document SPA route changes (pushState) do not flip status, so their
+    // identity resync relies on the coordinator's cached-source revalidation
+    // rejecting stale work instead of this event.
     if (changeInfo.status !== 'loading' || typeof changeInfo.url !== 'string') return
     if (!isPositiveInteger(tab.windowId)) return
     trace('tab navigation committed', {
@@ -718,10 +754,10 @@ function isValidStoredState(value: unknown): value is TabSessionState {
 /**
  * Reconciles persisted UI tab sessions against the live browser tab set: records
  * whose tab/window/URL no longer match exactly are dropped and the retained
- * records are written back. Orphan selection sessions are deleted only when at
- * least one retained record still owns a session, so an empty retained set can
- * never wipe the session table (which would also destroy legacy pre-coordinator
- * sessions that were never tracked here).
+ * records are written back. Only sessions the coordinator itself recorded and
+ * then lost are deleted (previously-tracked minus retained). Sessions that were
+ * never tracked here — including legacy pre-coordinator sessions — are never
+ * collateral damage.
  */
 export async function reconcileUiSessionState(input: {
   sessionStore: {
@@ -729,16 +765,24 @@ export async function reconcileUiSessionState(input: {
     save(state: Record<string, TabSessionState>): Promise<void>
   }
   getTab(tabId: number): Promise<{ id: number; windowId: number; url?: string }>
-  deleteOrphanSelectionSessions(retainedIds: number[]): Promise<void>
+  deleteSelectionSession(selectionSessionId: number): Promise<void>
 }): Promise<void> {
   const stored = await input.sessionStore.load()
   const entries = Object.entries(stored)
-  if (entries.length === 0) return
+  if (entries.length === 0) {
+    trace('reconciled empty UI tab session store', {
+      stage: 'reconcile',
+      retainedTabs: 0,
+      outcome: 'committed',
+    })
+    return
+  }
   const retained: Record<string, TabSessionState> = {}
-  const retainedSessionIds: number[] = []
+  const retainedSessionIds = new Set<number>()
+  const previouslyTrackedSessionIds = new Set<number>()
   for (const [key, raw] of entries) {
-    if (!isValidStoredState(raw)) continue
-    if (String(raw.tabId) !== key) continue
+    if (!isValidStoredState(raw) || String(raw.tabId) !== key) continue
+    if (raw.selectionSessionId !== null) previouslyTrackedSessionIds.add(raw.selectionSessionId)
     let current: { id: number; windowId: number; url?: string }
     try {
       current = await input.getTab(raw.tabId)
@@ -759,19 +803,21 @@ export async function reconcileUiSessionState(input: {
     }
     if (currentNormalized !== storedNormalized) continue
     retained[key] = raw
-    if (raw.selectionSessionId !== null) retainedSessionIds.push(raw.selectionSessionId)
+    if (raw.selectionSessionId !== null) retainedSessionIds.add(raw.selectionSessionId)
   }
   await input.sessionStore.save(retained)
+  const deletedSessionIds: number[] = []
+  for (const sessionId of previouslyTrackedSessionIds) {
+    if (!retainedSessionIds.has(sessionId)) {
+      await input.deleteSelectionSession(sessionId)
+      deletedSessionIds.push(sessionId)
+    }
+  }
   trace('reconciled retained UI tab sessions', {
     stage: 'reconcile',
-    tabId: 0,
-    windowId: 0,
     retainedTabs: Object.keys(retained).length,
-    retainedSessionIds: retainedSessionIds.length,
+    deletedSessions: deletedSessionIds.length,
     droppedRecords: entries.length - Object.keys(retained).length,
     outcome: 'committed',
   })
-  if (retainedSessionIds.length > 0) {
-    await input.deleteOrphanSelectionSessions(retainedSessionIds)
-  }
 }

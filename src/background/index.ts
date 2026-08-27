@@ -45,6 +45,7 @@ import { log, logError, Scope } from '@/events/logger'
 import { createUiSessionCoordinator, type TabSessionState } from './ui-session-coordinator'
 import {
   createUiSessionEventHandlers,
+  publishToOwnerWithFallback,
   reconcileUiSessionState,
   registerUiSessionRuntime,
   type UiSessionCoordinator,
@@ -127,16 +128,14 @@ const manager = createConversationManager({
   loadSettings,
   providerRunner,
   publishToOwner: async (tabId, update) => {
-    const coordinator = coordinatorRef.current
-    if (!coordinator) {
-      logError(
-        Scope.BACKGROUND,
-        'UI session coordinator is not ready for conversation owner delivery.',
-        { tabId, stage: 'publishToOwner', outcome: 'failed' }
-      )
-      return
-    }
-    await coordinator.publish(tabId, update)
+    await publishToOwnerWithFallback({
+      coordinator: coordinatorRef.current,
+      tabId,
+      update,
+      deliverToContent: async (targetTabId, streamUpdate) => {
+        await conversationUpdateToContent.dispatch([streamUpdate, targetTabId])
+      },
+    })
   },
   session: {
     load: async () => {
@@ -340,8 +339,8 @@ void (async () => {
     await reconcileUiSessionState({
       sessionStore: uiSessionStore,
       getTab: async (tabId) => normalizeTabForCoordinator(await chrome.tabs.get(tabId)),
-      deleteOrphanSelectionSessions: (retainedIds) =>
-        database.request('deleteOrphanSelectionSessions', { retainedIds }),
+      deleteSelectionSession: (selectionSessionId) =>
+        database.request('deleteSelectionSession', { id: selectionSessionId }),
     })
   } catch (error) {
     logError(Scope.BACKGROUND, 'Failed to reconcile Dianzhi UI tab sessions', error)

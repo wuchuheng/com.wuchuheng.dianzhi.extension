@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   createUiSessionEventHandlers,
   panelSourceFromBinding,
+  publishToOwnerWithFallback,
   reconcileUiSessionState,
   registerUiSessionRuntime,
   resolvePanelBinding,
@@ -11,7 +12,11 @@ import {
 } from '@/background/ui-session-runtime'
 import { createUiSessionCoordinator } from '@/background/ui-session-coordinator'
 import { DEFAULT_SETTINGS } from '@/dianzhi/domain/settings'
-import type { ConversationSnapshot, MessageRecord } from '@/dianzhi/domain/protocol'
+import type {
+  ConversationSnapshot,
+  ConversationUpdate,
+  MessageRecord,
+} from '@/dianzhi/domain/protocol'
 import type {
   SelectionRouteResult,
   SidePanelCommand,
@@ -189,7 +194,7 @@ function mockCoordinator(): UiSessionCoordinator {
     cycleTool: vi.fn(
       async () => ({ handled: false, reason: 'NO_APPEARED_UI' }) as ToolShortcutResult
     ),
-    publish: vi.fn(async () => undefined),
+    publish: vi.fn(async () => false),
     onTabActivated: vi.fn(async () => undefined),
     onTabUpdated: vi.fn(async () => undefined),
     onTabRemoved: vi.fn(async () => undefined),
@@ -197,6 +202,11 @@ function mockCoordinator(): UiSessionCoordinator {
     onPanelClosed: vi.fn(async () => undefined),
   }
   return coordinator
+}
+
+const SNAPSHOT_UPDATE: ConversationUpdate = {
+  type: 'conversation.sync',
+  snapshot: snapshot(10, 22),
 }
 
 describe('ui-session-runtime: Chrome event routing', () => {
@@ -358,11 +368,23 @@ describe('ui-session-runtime: panel sender to window resolution', () => {
     })
   })
 
-  it('resolves by document URL when the sender has no document ID', async () => {
-    const { chrome, tabs } = fakeChromeRuntime({ panelContexts: twoWindows })
-    tabs.query.mockImplementation(async (queryInfo: chrome.tabs.QueryInfo) => [
-      { id: 9, windowId: queryInfo.windowId ?? 19, url: PAGE },
-    ])
+  it('rejects a document URL fallback when multiple panel contexts are open', async () => {
+    const { chrome } = fakeChromeRuntime({ panelContexts: twoWindows })
+    const senderWithoutDocumentId = {
+      id: 'fake-id',
+      origin: 'chrome-extension://fake-id',
+      url: PANEL_URL,
+    } as chrome.runtime.MessageSender
+    await expect(resolvePanelBinding(chrome, senderWithoutDocumentId)).rejects.toMatchObject({
+      code: 'INVALID_EVENT',
+    })
+  })
+
+  it('resolves by document URL when exactly one panel context is open', async () => {
+    const { chrome, tabs } = fakeChromeRuntime({
+      panelContexts: [panelContext('doc-a', 19)],
+    })
+    tabs.query.mockImplementation(async () => [{ id: 9, windowId: 19, url: PAGE }])
     const senderWithoutDocumentId = {
       id: 'fake-id',
       origin: 'chrome-extension://fake-id',
@@ -464,6 +486,46 @@ describe('ui-session-runtime: typed request handlers', () => {
       )
     ).rejects.toMatchObject({ code: 'INVALID_EVENT' })
     expect(coordinator.routeSelection).not.toHaveBeenCalled()
+  })
+})
+
+describe('ui-session-runtime: owner-or-legacy publication fall-through', () => {
+  it('relies on the coordinator and skips the legacy fallback when an owner delivered', async () => {
+    const coordinator = mockCoordinator()
+    vi.mocked(coordinator.publish).mockResolvedValue(true)
+    const deliverToContent = vi.fn(async () => undefined)
+    await publishToOwnerWithFallback({
+      coordinator,
+      tabId: 9,
+      update: SNAPSHOT_UPDATE,
+      deliverToContent,
+    })
+    expect(coordinator.publish).toHaveBeenCalledWith(9, SNAPSHOT_UPDATE)
+    expect(deliverToContent).not.toHaveBeenCalled()
+  })
+
+  it('falls back to the content dispatch when the coordinator has no owner', async () => {
+    const coordinator = mockCoordinator()
+    vi.mocked(coordinator.publish).mockResolvedValue(false)
+    const deliverToContent = vi.fn(async () => undefined)
+    await publishToOwnerWithFallback({
+      coordinator,
+      tabId: 9,
+      update: SNAPSHOT_UPDATE,
+      deliverToContent,
+    })
+    expect(deliverToContent).toHaveBeenCalledWith(9, SNAPSHOT_UPDATE)
+  })
+
+  it('falls back to the content dispatch when the coordinator is not initialized', async () => {
+    const deliverToContent = vi.fn(async () => undefined)
+    await publishToOwnerWithFallback({
+      coordinator: undefined,
+      tabId: 9,
+      update: SNAPSHOT_UPDATE,
+      deliverToContent,
+    })
+    expect(deliverToContent).toHaveBeenCalledWith(9, SNAPSHOT_UPDATE)
   })
 })
 
@@ -597,14 +659,14 @@ describe('ui-session-runtime: session state reconciliation', () => {
     }
   }
 
-  it('retains exact normalized matches and deletes orphaned sessions', async () => {
+  it('deletes only the tracked session that lost its retained record', async () => {
     const stored = {
       '9': storedState(9, 19, PAGE_NORMALIZED, 10),
       '99': storedState(99, 19, PAGE_NORMALIZED, 11),
       '7': { ...storedState(7, 19, PAGE_NORMALIZED, 12), contentUIAppeared: 'yes' },
     }
     const save = vi.fn(async () => undefined)
-    const deleteOrphan = vi.fn(async () => undefined)
+    const deleteSelectionSession = vi.fn(async () => undefined)
     const getTab = vi.fn(async (tabId: number) => {
       if (tabId === 9)
         return { id: 9, windowId: 19, url: 'https://example.com/docs/rust?chapter=1#later' }
@@ -614,57 +676,63 @@ describe('ui-session-runtime: session state reconciliation', () => {
     await reconcileUiSessionState({
       sessionStore: { load: async () => stored, save },
       getTab,
-      deleteOrphanSelectionSessions: deleteOrphan,
+      deleteSelectionSession,
     })
     expect(save).toHaveBeenCalledWith({
       '9': expect.objectContaining({ selectionSessionId: 10 }),
     })
-    expect(deleteOrphan).toHaveBeenCalledWith([10])
+    expect(deleteSelectionSession).toHaveBeenCalledWith(11)
+    expect(deleteSelectionSession).not.toHaveBeenCalledWith(10)
+    expect(deleteSelectionSession).not.toHaveBeenCalledWith(12)
   })
 
-  it('drops records whose normalized URL no longer matches the live tab without wiping orphans', async () => {
+  it('drops a record whose normalized URL changed and deletes its tracked session', async () => {
     const stored = {
       '9': storedState(9, 19, PAGE_NORMALIZED, 10),
     }
     const save = vi.fn(async () => undefined)
-    const deleteOrphan = vi.fn(async () => undefined)
+    const deleteSelectionSession = vi.fn(async () => undefined)
     const getTab = vi.fn(async () => ({ id: 9, windowId: 19, url: PAGE_2 }))
     await reconcileUiSessionState({
       sessionStore: { load: async () => stored, save },
       getTab,
-      deleteOrphanSelectionSessions: deleteOrphan,
+      deleteSelectionSession,
     })
     expect(save).toHaveBeenCalledWith({})
-    // A zero retained set would delete every selection session; the guard skips it.
-    expect(deleteOrphan).not.toHaveBeenCalled()
+    expect(deleteSelectionSession).toHaveBeenCalledWith(10)
   })
 
-  it('does not call orphan deletion when no records are stored', async () => {
+  it('does not delete any session when no coordinator records are stored', async () => {
     const save = vi.fn(async () => undefined)
-    const deleteOrphan = vi.fn(async () => undefined)
+    const deleteSelectionSession = vi.fn(async () => undefined)
     await reconcileUiSessionState({
       sessionStore: { load: async () => ({}), save },
       getTab: vi.fn(async () => ({ id: 9, windowId: 19, url: PAGE })),
-      deleteOrphanSelectionSessions: deleteOrphan,
+      deleteSelectionSession,
     })
     expect(save).not.toHaveBeenCalled()
-    expect(deleteOrphan).not.toHaveBeenCalled()
+    expect(deleteSelectionSession).not.toHaveBeenCalled()
   })
 
-  it('does not call orphan deletion when no retained record owns a selection session', async () => {
+  it('never deletes a session id from a record whose selection session is null', async () => {
     const stored = {
       '9': storedState(9, 19, PAGE_NORMALIZED, null),
+      '99': storedState(99, 19, PAGE_NORMALIZED, null),
     }
     const save = vi.fn(async () => undefined)
-    const deleteOrphan = vi.fn(async () => undefined)
+    const deleteSelectionSession = vi.fn(async () => undefined)
+    const getTab = vi.fn(async (tabId: number) => {
+      if (tabId === 9) return { id: 9, windowId: 19, url: PAGE }
+      throw new Error('no such tab')
+    })
     await reconcileUiSessionState({
       sessionStore: { load: async () => stored, save },
-      getTab: vi.fn(async () => ({ id: 9, windowId: 19, url: PAGE })),
-      deleteOrphanSelectionSessions: deleteOrphan,
+      getTab,
+      deleteSelectionSession,
     })
     expect(save).toHaveBeenCalledWith({
       '9': expect.objectContaining({ selectionSessionId: null }),
     })
-    expect(deleteOrphan).not.toHaveBeenCalled()
+    expect(deleteSelectionSession).not.toHaveBeenCalled()
   })
 })

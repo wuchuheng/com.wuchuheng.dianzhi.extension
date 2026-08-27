@@ -60,6 +60,8 @@ export interface UiSessionCoordinatorDependencies {
     close(windowId: number): Promise<void>
     command(windowId: number, command: SidePanelCommand): Promise<true>
     publish(windowId: number, update: ConversationUpdate): Promise<void>
+    /** Resolves once the Side Panel typed-event port binds for the window. */
+    ready(windowId: number, timeoutMs?: number): Promise<void>
   }
 }
 
@@ -350,6 +352,11 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     assertPage(state.tabId, input.expectedUrl)
     await destroyContentInWindow(state.windowId)
     assertPage(state.tabId, input.expectedUrl)
+    // A freshly opened panel page has not bound its typed-event port yet; wait for
+    // it (like the legacy `await ready` handshake) before delivering the command.
+    if (input.open) {
+      await dependencies.sidePanel.ready(state.windowId)
+    }
     const snapshot = 'snapshot' in command ? command.snapshot : null
     trace('delivering side panel command', {
       requestId: input.requestId ?? null,

@@ -5,12 +5,19 @@ import type { Cancel } from '../types'
 
 export interface TargetedSidePanelEvent<Args, Return> {
   dispatch(args: Args, windowId: number): Promise<Return>
+  /** Resolves once a port is bound for `windowId`; rejects on timeout or disconnect. */
+  waitForWindow(windowId: number, timeoutMs?: number): Promise<void>
+  /** Window IDs with an active panel port binding, used to disambiguate panel senders. */
+  connectedWindows(): ReadonlySet<number>
   accept(port: chrome.runtime.Port): boolean
   handle(
     binding: { tabId: number; windowId: number },
     callback: (args: Args) => Promise<Return>
   ): Cancel
 }
+
+/** Matches the pre-coordinator Side Panel ready timeout. */
+export const DEFAULT_SIDE_PANEL_READY_TIMEOUT_MS = 5_000
 
 type Binding = { tabId: number; windowId: number }
 type RequestMessage<Args> = { messageId: string; args: Args }
@@ -59,6 +66,12 @@ export function bg2sp<Args, Return>(name: string): TargetedSidePanelEvent<Args, 
   const portsByWindow = new Map<number, chrome.runtime.Port>()
   const windowByPort = new Map<chrome.runtime.Port, number>()
   const pendingByMessageId = new Map<string, PendingRequest<Return>>()
+  type WindowWaiter = {
+    resolve: () => void
+    reject: (error: Error) => void
+    timer: ReturnType<typeof setTimeout>
+  }
+  const waitersByWindow = new Map<number, WindowWaiter[]>()
   let messageSequence = 0
 
   const rejectPendingForPort = (port: chrome.runtime.Port, error: Error) => {
@@ -67,6 +80,43 @@ export function bg2sp<Args, Return>(name: string): TargetedSidePanelEvent<Args, 
       pendingByMessageId.delete(messageId)
       pending.reject(error)
     }
+  }
+
+  const resolveWaiters = (windowId: number) => {
+    const waiters = waitersByWindow.get(windowId)
+    if (!waiters) return
+    waitersByWindow.delete(windowId)
+    for (const waiter of waiters) {
+      clearTimeout(waiter.timer)
+      waiter.resolve()
+    }
+  }
+
+  const rejectWaiters = (windowId: number, error: Error) => {
+    const waiters = waitersByWindow.get(windowId)
+    if (!waiters) return
+    waitersByWindow.delete(windowId)
+    for (const waiter of waiters) {
+      clearTimeout(waiter.timer)
+      waiter.reject(error)
+    }
+  }
+
+  function registerWait(windowId: number, timeoutMs: number): Promise<void> {
+    if (portsByWindow.has(windowId)) return Promise.resolve()
+
+    return new Promise<void>((resolve, reject) => {
+      const waiter: WindowWaiter = {
+        resolve,
+        reject,
+        timer: setTimeout(() => {
+          rejectWaiters(windowId, deliveryError('SIDE_PANEL_READY_TIMEOUT', windowId))
+        }, timeoutMs),
+      }
+      const waiters = waitersByWindow.get(windowId) ?? []
+      waiters.push(waiter)
+      waitersByWindow.set(windowId, waiters)
+    })
   }
 
   return {
@@ -85,6 +135,12 @@ export function bg2sp<Args, Return>(name: string): TargetedSidePanelEvent<Args, 
         }
       })
     },
+    waitForWindow(windowId, timeoutMs = DEFAULT_SIDE_PANEL_READY_TIMEOUT_MS) {
+      return registerWait(windowId, timeoutMs)
+    },
+    connectedWindows() {
+      return new Set(portsByWindow.keys())
+    },
     accept(port) {
       if (port.name !== eventName) return false
 
@@ -100,6 +156,7 @@ export function bg2sp<Args, Return>(name: string): TargetedSidePanelEvent<Args, 
           }
           portsByWindow.set(message.windowId, port)
           windowByPort.set(port, message.windowId)
+          resolveWaiters(message.windowId)
           return
         }
 
@@ -119,6 +176,7 @@ export function bg2sp<Args, Return>(name: string): TargetedSidePanelEvent<Args, 
         if (windowId === undefined) return
         if (portsByWindow.get(windowId) === port) portsByWindow.delete(windowId)
         rejectPendingForPort(port, deliveryError('SIDE_PANEL_READY_TIMEOUT', windowId))
+        rejectWaiters(windowId, deliveryError('SIDE_PANEL_READY_TIMEOUT', windowId))
         windowByPort.delete(port)
       })
 

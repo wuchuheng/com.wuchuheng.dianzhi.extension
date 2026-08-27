@@ -380,6 +380,35 @@ describe('ui-session-runtime: panel sender to window resolution', () => {
     })
   })
 
+  it('narrows an ambiguous panel sender to a window with a live port binding', async () => {
+    const { chrome, tabs } = fakeChromeRuntime({ panelContexts: twoWindows })
+    tabs.query.mockImplementation(async (queryInfo: chrome.tabs.QueryInfo) =>
+      queryInfo.windowId === 20
+        ? [{ id: 12, windowId: 20, url: PAGE }]
+        : [{ id: 9, windowId: 19, url: PAGE }]
+    )
+    const senderWithoutDocumentId = {
+      id: 'fake-id',
+      origin: 'chrome-extension://fake-id',
+      url: PANEL_URL,
+    } as chrome.runtime.MessageSender
+
+    const binding = await resolvePanelBinding(chrome, senderWithoutDocumentId, new Set([19]))
+    expect(binding).toEqual({ tabId: 9, windowId: 19 })
+  })
+
+  it('still rejects an ambiguous panel sender when no live port window is unique', async () => {
+    const { chrome } = fakeChromeRuntime({ panelContexts: twoWindows })
+    const senderWithoutDocumentId = {
+      id: 'fake-id',
+      origin: 'chrome-extension://fake-id',
+      url: PANEL_URL,
+    } as chrome.runtime.MessageSender
+    await expect(
+      resolvePanelBinding(chrome, senderWithoutDocumentId, new Set([19, 20]))
+    ).rejects.toMatchObject({ code: 'INVALID_EVENT' })
+  })
+
   it('resolves by document URL when exactly one panel context is open', async () => {
     const { chrome, tabs } = fakeChromeRuntime({
       panelContexts: [panelContext('doc-a', 19)],

@@ -239,6 +239,7 @@ function coordinatorWith(
     close: vi.fn(async () => undefined),
     command: vi.fn(async () => true as const),
     publish: vi.fn(async () => undefined),
+    ready: vi.fn(async () => undefined),
     ...extras.sidePanel,
   }
   const sessionStore = {
@@ -304,10 +305,31 @@ describe('UiSessionCoordinator panel toggle', () => {
 
     expect(sidePanel.open).toHaveBeenCalledTimes(1)
     expect(sidePanel.open).toHaveBeenCalledWith(9)
+    expect(sidePanel.ready).toHaveBeenCalledWith(19)
+    expect(sidePanel.ready).toHaveBeenCalledBefore(sidePanel.command)
     expect(sidePanel.command).toHaveBeenCalledWith(19, {
       type: 'render',
       snapshot: expect.anything(),
     })
+  })
+
+  it('waits for the panel port before dispatching the toggle-open command', async () => {
+    const { coordinator, sidePanel } = coordinatorWith(contentState())
+    await coordinator.initialize()
+
+    const calls: string[] = []
+    sidePanel.ready.mockImplementation(async () => {
+      calls.push('ready')
+    })
+    sidePanel.command.mockImplementation(async () => {
+      calls.push('command')
+      return true as const
+    })
+
+    coordinator.openPanelForGesture(9, 19)
+    await coordinator.togglePanel(toggleRequest(), contentSource())
+
+    expect(calls).toEqual(['ready', 'command'])
   })
 
   it('does not open when the panel is already open and the toggle closes it', async () => {
@@ -332,8 +354,24 @@ describe('UiSessionCoordinator routing and ownership', () => {
 
     expect(conversations.createSelection).toHaveBeenCalledTimes(1)
     expect(sidePanel.open).not.toHaveBeenCalled()
+    expect(sidePanel.ready).not.toHaveBeenCalled()
     expect(sidePanel.command).toHaveBeenCalledWith(19, expect.objectContaining({ type: 'render' }))
     expect(result).toEqual({ target: 'sidePanel', display: false, snapshot: null })
+  })
+
+  it('propagates a ready wait failure instead of dispatching the command', async () => {
+    const { coordinator, sidePanel } = coordinatorWith(contentState())
+    await coordinator.initialize()
+
+    sidePanel.ready.mockImplementation(async () => {
+      throw new Error('side panel not ready')
+    })
+
+    coordinator.openPanelForGesture(9, 19)
+    await expect(coordinator.togglePanel(toggleRequest(), contentSource())).rejects.toThrow(
+      'side panel not ready'
+    )
+    expect(sidePanel.command).not.toHaveBeenCalledWith(19, expect.anything())
   })
 
   it('falls back to content with the same snapshot when panel delivery fails', async () => {

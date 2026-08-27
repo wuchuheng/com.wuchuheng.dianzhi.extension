@@ -121,3 +121,77 @@ describe('bg2sp', () => {
     await expect(result).resolves.toBe(true)
   })
 })
+
+describe('bg2sp waitForWindow', () => {
+  it('resolves immediately when the window already has a bound port', async () => {
+    const event = bg2sp<SidePanelCommand, true>('dianzhi:side-panel-command')
+    const panel = fakePort({ tabId: 9, windowId: 19 })
+    event.accept(panel.port)
+    panel.bind()
+
+    await expect(event.waitForWindow(19)).resolves.toBeUndefined()
+  })
+
+  it('resolves once the port binds during the wait', async () => {
+    const event = bg2sp<SidePanelCommand, true>('dianzhi:side-panel-command')
+    const panel = fakePort({ tabId: 9, windowId: 19 })
+    event.accept(panel.port)
+
+    let settled = false
+    const waiting = event.waitForWindow(19).then(() => {
+      settled = true
+    })
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    panel.bind()
+    await expect(waiting).resolves.toBeUndefined()
+  })
+
+  it('rejects with SIDE_PANEL_READY_TIMEOUT when the wait expires', async () => {
+    vi.useFakeTimers()
+    try {
+      const event = bg2sp<SidePanelCommand, true>('dianzhi:side-panel-command')
+      const waiting = event.waitForWindow(19, 5_000)
+      const assertion = expect(waiting).rejects.toMatchObject({ code: 'SIDE_PANEL_READY_TIMEOUT' })
+      await vi.advanceTimersByTimeAsync(5_000)
+      await assertion
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps a pending wait alive when an unrelated panel port disconnects', async () => {
+    const event = bg2sp<SidePanelCommand, true>('dianzhi:side-panel-command')
+    const left = fakePort({ tabId: 9, windowId: 19 })
+    event.accept(left.port)
+    left.bind()
+
+    let settled = false
+    const waiting = event.waitForWindow(20).then(() => {
+      settled = true
+    })
+    left.disconnect()
+
+    await Promise.resolve()
+    expect(settled).toBe(false)
+
+    const right = fakePort({ tabId: 10, windowId: 20 })
+    event.accept(right.port)
+    right.bind()
+    await expect(waiting).resolves.toBeUndefined()
+  })
+
+  it('reports only windows with a currently bound panel port', () => {
+    const event = bg2sp<SidePanelCommand, true>('dianzhi:side-panel-command')
+    expect([...event.connectedWindows()]).toEqual([])
+
+    const panel = fakePort({ tabId: 9, windowId: 19 })
+    event.accept(panel.port)
+    panel.bind()
+    expect([...event.connectedWindows()]).toEqual([19])
+
+    panel.disconnect()
+    expect([...event.connectedWindows()]).toEqual([])
+  })
+})

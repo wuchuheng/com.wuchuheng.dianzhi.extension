@@ -196,7 +196,8 @@ export function resolveContentSource(
  */
 export async function resolvePanelBinding(
   chromeApi: typeof chrome,
-  sender: chrome.runtime.MessageSender
+  sender: chrome.runtime.MessageSender,
+  panelWindows?: ReadonlySet<number>
 ): Promise<PanelBinding> {
   const panelUrl = chromeApi.runtime.getURL(SIDE_PANEL_PAGE_PATH)
   if (typeof sender.url !== 'string' || sender.url !== panelUrl) {
@@ -208,10 +209,10 @@ export async function resolvePanelBinding(
   })
   // A present document ID must match an open panel context and stays the only
   // multi-window disambiguator. Without it the URL fallback is safe only for a
-  // single open panel; two panels in different windows must not guess.
-  // A present document ID must match an open panel context and stays the only
-  // multi-window disambiguator. Without it the URL fallback is safe only for a
-  // single open panel; two panels in different windows must not guess.
+  // single open panel; two panels in different windows must not guess. When the
+  // sender stays ambiguous by document ID, a live typed-event port binding is
+  // strict ownership evidence: the panel reports surface status only after
+  // binding its port, and stale contexts have no live port.
   let windowId: number
   if (typeof sender.documentId === 'string' && sender.documentId.length > 0) {
     const documentMatch = contexts.find((context) => context.documentId === sender.documentId)
@@ -221,10 +222,14 @@ export async function resolvePanelBinding(
     windowId = documentMatch.windowId
   } else {
     const urlMatches = contexts.filter((context) => context.documentUrl === sender.url)
-    if (urlMatches.length !== 1 || !isPositiveInteger(urlMatches[0].windowId)) {
+    let candidates = urlMatches.filter((context) => isPositiveInteger(context.windowId))
+    if (candidates.length > 1 && panelWindows) {
+      candidates = candidates.filter((context) => panelWindows.has(context.windowId))
+    }
+    if (candidates.length !== 1) {
       throw invalid('The Side Panel sender window cannot be resolved unambiguously.')
     }
-    windowId = urlMatches[0].windowId
+    windowId = candidates[0].windowId
   }
   const activeTabs = await chromeApi.tabs.query({ active: true, windowId })
   const activeTab = activeTabs.find((tab) => isPositiveInteger(tab.id))
@@ -346,8 +351,9 @@ async function runPanelRequest<P extends { requestId: string }, R>(input: {
   parse: (value: unknown) => ParseResult<P>
   execute: (request: P, source: UiEventSource) => Promise<R>
   commit?: (request: P, result: R) => LogContext
+  panelWindows?: ReadonlySet<number>
 }): Promise<R> {
-  const { chromeApi, stage, value, sender, parse, execute, commit } = input
+  const { chromeApi, stage, value, sender, parse, execute, commit, panelWindows } = input
   trace('ui panel request received', {
     requestId: extractRequestId(value) ?? null,
     stage,
@@ -360,7 +366,7 @@ async function runPanelRequest<P extends { requestId: string }, R>(input: {
   try {
     request = parseUiRequest<P>(value, parse)
     requestId = request.requestId
-    const binding = await resolvePanelBinding(chromeApi, sender)
+    const binding = await resolvePanelBinding(chromeApi, sender, panelWindows)
     source = await panelSourceFromBinding(chromeApi, binding, request.requestId)
     trace('ui panel request validated', {
       requestId: request.requestId,
@@ -415,8 +421,10 @@ async function runPanelRequest<P extends { requestId: string }, R>(input: {
 export function createUiSessionEventHandlers(deps: {
   chromeApi: typeof chrome
   coordinator: UiSessionCoordinator
+  /** Live panel windows from the bg2sp port bindings, used to disambiguate panel senders. */
+  connectedPanelWindows?: () => ReadonlySet<number>
 }): UiSessionEventHandlers {
-  const { chromeApi, coordinator } = deps
+  const { chromeApi, coordinator, connectedPanelWindows } = deps
 
   function snapshotIds(result: {
     snapshot?: { selectionSession?: { id?: number }; conversation?: { id?: number } } | null
@@ -449,6 +457,7 @@ export function createUiSessionEventHandlers(deps: {
         value,
         sender,
         parse: parseSurfaceStatus,
+        panelWindows: connectedPanelWindows?.(),
         execute: (request, source) =>
           coordinator.reportPanelStatus(request, {
             tabId: source.tabId,
@@ -499,6 +508,7 @@ export function createUiSessionEventHandlers(deps: {
         value,
         sender,
         parse: parsePanelToggle,
+        panelWindows: connectedPanelWindows?.(),
         execute: (request, source) => coordinator.togglePanel(request, source),
         commit: (_request, result) => ({
           currentUI: result.currentUI,
@@ -529,6 +539,7 @@ export function createUiSessionEventHandlers(deps: {
         value,
         sender,
         parse: parseToolShortcut,
+        panelWindows: connectedPanelWindows?.(),
         execute: (request, source) => {
           if (request.type !== 'shortcut.selectTool') {
             throw invalid('The tool shortcut type does not match its event channel.')
@@ -560,6 +571,7 @@ export function createUiSessionEventHandlers(deps: {
         value,
         sender,
         parse: parseToolShortcut,
+        panelWindows: connectedPanelWindows?.(),
         execute: (request, source) => {
           if (request.type !== 'shortcut.cycleTool') {
             throw invalid('The tool shortcut type does not match its event channel.')

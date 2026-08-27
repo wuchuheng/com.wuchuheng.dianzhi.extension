@@ -176,6 +176,7 @@ const coordinator = createUiSessionCoordinator({
     publish: async (windowId, update) => {
       await sidePanelConversationUpdate.dispatch(update, windowId)
     },
+    ready: async (windowId) => sidePanelCommand.waitForWindow(windowId),
   },
 })
 coordinatorRef.current = coordinator
@@ -186,7 +187,11 @@ registerUiSessionRuntime({
   sidePanelCommand,
   sidePanelConversationUpdate,
 })
-const uiSessionHandlers = createUiSessionEventHandlers({ chromeApi: chrome, coordinator })
+const uiSessionHandlers = createUiSessionEventHandlers({
+  chromeApi: chrome,
+  coordinator,
+  connectedPanelWindows: () => sidePanelCommand.connectedWindows(),
+})
 contentSurfaceStatus.handleWithSender(uiSessionHandlers.onContentSurfaceStatus)
 selectionRoute.handleWithSender(uiSessionHandlers.onSelectionRoute)
 contentPanelToggle.handleWithSender(uiSessionHandlers.onContentPanelToggle)

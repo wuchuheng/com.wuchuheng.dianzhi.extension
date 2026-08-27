@@ -49,9 +49,9 @@ The panel reports `ui.surfaceStatus` via `ep2bg` (`chrome.runtime.sendMessage`).
 - preferred: match `sender.documentId` to a SIDE_PANEL context;
 - fallback: the sender URL must match exactly one SIDE_PANEL context.
 
-When `sender.documentId` is absent and two SIDE_PANEL contexts share the panel
+When `sender.documentId` is absent and two SIDE*PANEL contexts share the panel
 URL (stale HMR context, or a panel open in another window), the fallback throws
-instead of resolving. The authority that *is* unambiguous — the typed-event port
+instead of resolving. The authority that \_is* unambiguous — the typed-event port
 binding, which carries `{ tabId, windowId }` and drives `portsByWindow` — is
 never consulted.
 

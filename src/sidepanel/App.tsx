@@ -52,10 +52,10 @@ export function SidePanelView({
     [...(snapshot?.messages ?? [])].reverse().find((message) => message.role === 'assistant') ??
     null
   const streaming = latestAssistant?.status === 'streaming'
-  const retryable = latestAssistant?.status === 'error' || latestAssistant?.status === 'stopped'
   const needsSettings = latestAssistant?.errorCode === 'PROVIDER_NOT_CONFIGURED'
 
   const historyRef = useRef<HTMLDivElement | null>(null)
+  const historyContentRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
   const hasSnapshot = snapshot !== null
   const viewKey = `${snapshot?.conversation.id ?? ''}:${snapshot?.activeToolId ?? ''}`
@@ -68,7 +68,8 @@ export function SidePanelView({
   }, [viewKey, streaming, hasSnapshot])
 
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  const { onScroll: onHistoryScroll, onStreamingHeightDelta } = useScrollFollow(historyRef, {
+  const { onScroll: onHistoryScroll } = useScrollFollow(historyRef, {
+    contentRef: historyContentRef,
     reducedMotion,
     messages: snapshot?.messages,
     viewKey,
@@ -104,47 +105,37 @@ export function SidePanelView({
             onSelect={onToolSelect}
           />
           <main className="dz-panel-history" ref={historyRef} onScroll={onHistoryScroll}>
-            <MessageList
-              messages={snapshot.messages}
-              mode="chat"
-              reasoningEnabled={reasoningEnabled}
-              showMeta
-              smoothStreamingGrowth
-              reducedMotion={reducedMotion}
-              onStreamingHeightDelta={onStreamingHeightDelta}
-            />
-            {showSetup ? (
-              <div
-                ref={setupRef}
-                className="dz-provider-setup-host"
-                style={{ height: setupHeight }}
-              >
-                <ProviderSetup
-                  provider={providerSettings}
-                  onSave={(provider) =>
-                    onSaveProvider(provider).then(() => setSetupDismissed(true))
-                  }
-                  onOpenSettings={onOpenSettings}
-                />
-              </div>
-            ) : state.error || latestAssistant?.errorMessage ? (
-              <div className="dz-error" role="alert">
-                <span>{state.error?.message ?? latestAssistant?.errorMessage}</span>
-                {needsSettings && (
-                  <button type="button" onClick={onOpenSettings}>
-                    打开设置
-                  </button>
-                )}
-              </div>
-            ) : null}
+            <div ref={historyContentRef} className="dz-panel-history-content">
+              <MessageList
+                messages={snapshot.messages}
+                mode="chat"
+                reasoningEnabled={reasoningEnabled}
+                showMeta
+                latestAssistantId={latestAssistant?.id}
+                onRetryMessage={() => onRetry()}
+              />
+              {showSetup ? (
+                <div
+                  ref={setupRef}
+                  className="dz-provider-setup-host"
+                  style={{ height: setupHeight }}
+                >
+                  <ProviderSetup
+                    provider={providerSettings}
+                    onSave={(provider) =>
+                      onSaveProvider(provider).then(() => setSetupDismissed(true))
+                    }
+                    onOpenSettings={onOpenSettings}
+                  />
+                </div>
+              ) : state.error && !latestAssistant?.errorMessage ? (
+                <div className="dz-error" role="alert">
+                  <span>{state.error.message}</span>
+                </div>
+              ) : null}
+            </div>
           </main>
           <footer className="dz-panel-composer">
-            {/* <ConversationStatus message={latestAssistant} /> */}
-            {retryable && (
-              <button type="button" className="dz-secondary" onClick={onRetry}>
-                重试
-              </button>
-            )}
             <Composer
               value={draft}
               streaming={streaming}

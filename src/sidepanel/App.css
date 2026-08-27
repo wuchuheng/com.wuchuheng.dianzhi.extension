@@ -82,7 +82,8 @@
 }
 .dz-message {
   position: relative;
-  max-width: 92%;
+  box-sizing: border-box;
+  max-width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--d-border);
   border-radius: var(--d-radius-lg);
@@ -90,22 +91,19 @@
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
-.dz-message.is-user {
+.dz-message-item {
+  display: flex;
+  flex-direction: column;
+  align-self: flex-start;
+  max-width: 92%;
+  gap: 4px;
+}
+.dz-message-item.is-user {
   align-self: flex-end;
+}
+.dz-message.is-user {
   border-color: var(--d-border-brand);
   background: var(--d-surface-brand);
-}
-.dz-message.is-assistant {
-  align-self: flex-start;
-}
-.dz-streaming-message-growth {
-  align-self: flex-start;
-  width: 92%;
-  overflow: hidden;
-}
-.dz-streaming-message-growth-content > .dz-message {
-  box-sizing: border-box;
-  max-width: 100%;
 }
 .dz-message-role {
   margin-bottom: 4px;
@@ -170,34 +168,13 @@
   align-items: center;
   box-sizing: border-box;
   gap: 8px;
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 1;
   min-height: 24px;
-  padding: 2px 4px;
-  border: 1px solid var(--d-border);
-  border-radius: var(--d-radius-sm);
-  background: var(--d-surface);
-  box-shadow: var(--d-shadow-floating);
   color: var(--d-text-muted);
   font-size: 11px;
-  opacity: 0;
-  pointer-events: none;
-  transform: translateY(-2px);
-  transition:
-    opacity 140ms ease,
-    transform 140ms ease;
+  font-variant-numeric: tabular-nums;
 }
-.dz-message.is-user .dz-message-meta {
-  right: 0;
-  left: auto;
-}
-.dz-message:hover .dz-message-meta,
-.dz-message:focus-within .dz-message-meta {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(0);
+.dz-message-item.is-user .dz-message-meta {
+  justify-content: flex-end;
 }
 .dz-message-copy {
   display: inline-flex;
@@ -223,10 +200,7 @@
   cursor: default;
 }
 .dz-copy-toast {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  margin-top: 4px;
+  margin-left: 2px;
   padding: 2px 7px;
   border-radius: var(--d-radius-xs);
   background: var(--d-text-secondary);

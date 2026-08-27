@@ -1,7 +1,7 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ConversationSnapshot } from '@/dianzhi/domain/protocol'
+import type { ConversationSnapshot, MessageRecord } from '@/dianzhi/domain/protocol'
 import { DEFAULT_SETTINGS } from '@/dianzhi/domain/settings'
 
 const { conversationDispatch, settingsDispatch, port } = vi.hoisted(() => {
@@ -160,6 +160,7 @@ describe('Side Panel composer while streaming', () => {
         role: 'assistant',
         content: 'working…',
         reasoningContent: '',
+        estimatedThroughputTps: null,
         status: 'streaming',
         errorCode: null,
         errorMessage: null,
@@ -177,6 +178,61 @@ describe('Side Panel composer while streaming', () => {
   })
 })
 
+describe('Side Panel message toolbar', () => {
+  const assistant = (overrides: Partial<MessageRecord> = {}): MessageRecord => ({
+    id: 1,
+    conversationId: 22,
+    sequence: 1,
+    role: 'assistant',
+    content: '',
+    reasoningContent: '',
+    estimatedThroughputTps: null,
+    status: 'streaming',
+    errorCode: null,
+    errorMessage: null,
+    createdAt: '2026-08-22T00:00:00.000Z',
+    updatedAt: '2026-08-22T00:00:00.000Z',
+    ...overrides,
+  })
+
+  it('shows pending dots before the first assistant text arrives', async () => {
+    await renderApp()
+    const next = snapshot()
+    next.messages = [assistant()]
+    await act(async () => {
+      port.emitMessage({ type: 'conversation.sync', snapshot: next })
+      await Promise.resolve()
+    })
+    expect(host?.querySelector('[aria-label="正在生成"]')).not.toBeNull()
+    expect(host?.querySelector('.dz-message-meta')?.textContent).toContain('正在生成')
+  })
+
+  it('shows final speed and retries the latest failed message from its toolbar', async () => {
+    await renderApp()
+    const next = snapshot()
+    next.messages = [
+      assistant({
+        content: 'answer',
+        estimatedThroughputTps: 65,
+        status: 'error',
+        errorMessage: '请求失败',
+      }),
+    ]
+    await act(async () => {
+      port.emitMessage({ type: 'conversation.sync', snapshot: next })
+      await Promise.resolve()
+    })
+    expect(host?.querySelector('.dz-message-meta')?.textContent).toContain('65t/s')
+    expect(host?.querySelector('.dz-panel-composer .dz-secondary')).toBeNull()
+    await act(async () => {
+      host?.querySelector<HTMLButtonElement>('[aria-label="重新生成"]')?.click()
+    })
+    expect(conversationDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'conversation.retry', payload: { conversationId: 22 } })
+    )
+  })
+})
+
 describe('Side Panel smooth chat scroll', () => {
   let frameCallback: ((now: number) => void) | null
   let nextFrameId: number
@@ -188,6 +244,7 @@ describe('Side Panel smooth chat scroll', () => {
     role: 'assistant',
     content,
     reasoningContent: '',
+    estimatedThroughputTps: null,
     status: 'streaming',
     errorCode: null,
     errorMessage: null,
@@ -264,17 +321,19 @@ describe('Side Panel smooth chat scroll', () => {
     vi.unstubAllGlobals()
   })
 
-  it('synchronizes to the newest bottom without a competing scroll animation', async () => {
+  it('smoothly follows the newest bottom while content remains natural height', async () => {
     await openEmptyHistory()
     defineMetrics()
 
     await syncMessages([message(1, 'first line')])
-    expect(frameCallback).toBeNull()
+    expect(frameCallback).not.toBeNull()
+    driveFrames()
     expect(history().scrollTop).toBe(700)
 
     grow(1300)
     await syncMessages([message(1, 'first line\nsecond line'), message(2, 'third line')])
-    expect(frameCallback).toBeNull()
+    expect(frameCallback).not.toBeNull()
+    driveFrames()
     expect(history().scrollTop).toBe(1000)
   })
 
@@ -282,12 +341,14 @@ describe('Side Panel smooth chat scroll', () => {
     await openEmptyHistory()
     defineMetrics()
     await syncMessages([message(1, 'first line')])
+    driveFrames()
 
     // 120px from the bottom: inside the new 150px guard, outside the old 80px.
     userScroll(700 - 120)
     grow(1200)
     await syncMessages([message(1, 'first line'), message(2, 'grown')])
-    expect(frameCallback).toBeNull()
+    expect(frameCallback).not.toBeNull()
+    driveFrames()
     expect(history().scrollTop).toBe(900)
   })
 
@@ -295,6 +356,7 @@ describe('Side Panel smooth chat scroll', () => {
     await openEmptyHistory()
     defineMetrics()
     await syncMessages([message(1, 'first line')])
+    driveFrames()
 
     // 600px above the bottom: far outside the guard, following pauses.
     userScroll(1000 - 300 - 600)
@@ -307,7 +369,8 @@ describe('Side Panel smooth chat scroll', () => {
     userScroll(1200 - 300 - 50)
     grow(1400)
     await syncMessages([message(1, 'first line'), message(2, 'grown again')])
-    expect(frameCallback).toBeNull()
+    expect(frameCallback).not.toBeNull()
+    driveFrames()
     expect(history().scrollTop).toBe(1100)
   })
 
@@ -351,6 +414,7 @@ describe('Side Panel provider setup panel', () => {
         role: 'assistant',
         content,
         reasoningContent: '',
+        estimatedThroughputTps: null,
         status: 'error',
         errorCode: 'PROVIDER_NOT_CONFIGURED',
         errorMessage: content,

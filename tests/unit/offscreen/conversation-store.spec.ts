@@ -15,12 +15,15 @@ it('round-trips terminal estimated throughput', async () => {
     promptSnapshot: 'Explain run',
   })
   const assistant = await store.appendAssistant(created.conversation.id)
-  await (store.finalizeAssistant as (id: number, input: unknown) => Promise<unknown>)(assistant.id, {
-    status: 'completed',
-    content: 'hello',
-    reasoningContent: '',
-    estimatedThroughputTps: 65,
-  })
+  await (store.finalizeAssistant as (id: number, input: unknown) => Promise<unknown>)(
+    assistant.id,
+    {
+      status: 'completed',
+      content: 'hello',
+      reasoningContent: '',
+      estimatedThroughputTps: 65,
+    }
+  )
 
   const reloaded = await store.getConversation(created.conversation.id)
   expect(

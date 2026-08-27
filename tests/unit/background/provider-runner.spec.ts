@@ -1,8 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import {
-  createProviderRunner,
-  type ProviderRunnerDependencies,
-} from '@/background/provider-runner'
+import { createProviderRunner, type ProviderRunnerDependencies } from '@/background/provider-runner'
 import type { MessageRecord } from '@/dianzhi/domain/protocol'
 import { DEFAULT_SETTINGS } from '@/dianzhi/domain/settings'
 import type { FinalizeAssistantInput } from '@/offscreen/database/store'
@@ -44,14 +41,12 @@ describe('provider runner throughput', () => {
     } as ProviderRunnerDependencies & { now: () => number }
     const runner = createProviderRunner(dependencies)
 
-    await runner
-      .start({
-        conversationId: assistant.conversationId,
-        assistant,
-        provider: { ...DEFAULT_SETTINGS.provider, apiKey: 'test-key' },
-        messages: [],
-      })
-      .done
+    await runner.start({
+      conversationId: assistant.conversationId,
+      assistant,
+      provider: { ...DEFAULT_SETTINGS.provider, apiKey: 'test-key' },
+      messages: [],
+    }).done
 
     expect(finalize).toHaveBeenCalledWith(
       assistant.id,

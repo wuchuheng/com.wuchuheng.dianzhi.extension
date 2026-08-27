@@ -108,10 +108,7 @@ export function createProviderRunner(dependencies: ProviderRunnerDependencies) {
       const terminalThroughput = (terminalAt: number) =>
         firstOutputAt === null
           ? null
-          : calculateEstimatedThroughputTps(
-              content + reasoningContent,
-              terminalAt - firstOutputAt
-            )
+          : calculateEstimatedThroughputTps(content + reasoningContent, terminalAt - firstOutputAt)
 
       try {
         if (!input.provider.apiKey.trim() || !input.provider.model.trim()) {

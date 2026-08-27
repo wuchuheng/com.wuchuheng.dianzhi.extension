@@ -8,8 +8,6 @@ import type { MessageRecord } from '@/dianzhi/domain/protocol'
 
 let root: Root | undefined
 let host: HTMLDivElement | undefined
-let resizeCallback: ResizeObserverCallback | undefined
-let frameCallback: FrameRequestCallback | undefined
 
 function assistantMessage(overrides: Partial<MessageRecord> = {}): MessageRecord {
   const at = new Date(2026, 2, 5, 14, 7).toISOString()
@@ -20,6 +18,7 @@ function assistantMessage(overrides: Partial<MessageRecord> = {}): MessageRecord
     role: 'assistant',
     content: '**hello** world',
     reasoningContent: '',
+    estimatedThroughputTps: null,
     status: 'completed',
     errorCode: null,
     errorMessage: null,
@@ -32,9 +31,8 @@ function assistantMessage(overrides: Partial<MessageRecord> = {}): MessageRecord
 async function renderMessageList(
   showMeta: boolean,
   message: MessageRecord,
-  smoothStreamingGrowth = false,
-  reducedMotion = false,
-  onStreamingHeightDelta?: (delta: number) => void
+  latestAssistantId?: number,
+  onRetryMessage?: (message: MessageRecord) => void
 ) {
   host = document.createElement('div')
   document.body.appendChild(host)
@@ -46,9 +44,8 @@ async function renderMessageList(
         mode="chat"
         reasoningEnabled={false}
         showMeta={showMeta}
-        smoothStreamingGrowth={smoothStreamingGrowth}
-        reducedMotion={reducedMotion}
-        onStreamingHeightDelta={onStreamingHeightDelta}
+        latestAssistantId={latestAssistantId}
+        onRetryMessage={onRetryMessage}
       />
     )
   })
@@ -60,31 +57,11 @@ beforeEach(() => {
     value: { writeText: vi.fn().mockResolvedValue(undefined) },
     configurable: true,
   })
-  vi.stubGlobal(
-    'ResizeObserver',
-    class {
-      constructor(callback: ResizeObserverCallback) {
-        resizeCallback = callback
-      }
-      observe() {}
-      disconnect() {}
-      unobserve() {}
-    }
-  )
-  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
-    frameCallback = callback
-    return 1
-  })
-  vi.stubGlobal('cancelAnimationFrame', () => {
-    frameCallback = undefined
-  })
 })
 
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.clearAllMocks()
-  resizeCallback = undefined
-  frameCallback = undefined
   act(() => root?.unmount())
   root = undefined
   host?.remove()
@@ -100,8 +77,7 @@ describe('MessageList meta', () => {
     expect(time?.textContent).toBe(formatMessageTime(assistantMessage().createdAt))
     expect(meta?.querySelector('[aria-label="复制纯文本"]')).not.toBeNull()
     expect(meta?.querySelector('[aria-label="复制 Markdown"]')).not.toBeNull()
-    // Meta sits below the bubble content, right-aligned (last child).
-    expect(host?.querySelector('.dz-message')?.lastElementChild).toBe(meta)
+    expect(host?.querySelector('.dz-message-item')?.lastElementChild).toBe(meta)
   })
 
   it('copies the reply as plain text when the copy button is clicked', async () => {
@@ -134,12 +110,44 @@ describe('MessageList meta', () => {
     expect(toast?.getAttribute('role')).toBe('status')
   })
 
-  it('disables the copy button while the message is still streaming', async () => {
+  it('hides copy actions while the message is still streaming', async () => {
     await renderMessageList(true, assistantMessage({ status: 'streaming' }))
     const plainButton = host?.querySelector<HTMLButtonElement>('[aria-label="复制纯文本"]')
     const markdownButton = host?.querySelector<HTMLButtonElement>('[aria-label="复制 Markdown"]')
-    expect(plainButton?.disabled).toBe(true)
-    expect(markdownButton?.disabled).toBe(true)
+    expect(plainButton).toBeNull()
+    expect(markdownButton).toBeNull()
+  })
+
+  it('shows pending status without copy actions before the first response text', async () => {
+    await renderMessageList(true, assistantMessage({ content: '', status: 'streaming' }))
+    expect(host?.querySelector('[aria-label="正在生成"]')).not.toBeNull()
+    expect(host?.querySelector('.dz-message-meta')?.textContent).toContain('正在生成')
+    expect(host?.querySelector('.dz-message-copy')).toBeNull()
+  })
+
+  it('shows final throughput after an assistant response completes', async () => {
+    await renderMessageList(
+      true,
+      assistantMessage({ status: 'completed', estimatedThroughputTps: 65 })
+    )
+    expect(host?.querySelector('.dz-message-meta')?.textContent).toContain('65t/s')
+    expect(host?.querySelector('.dz-message-meta')?.textContent).not.toContain('正在生成')
+  })
+
+  it('offers retry only for the latest failed assistant message', async () => {
+    const onRetryMessage = vi.fn()
+    const failed = assistantMessage({ status: 'error', errorMessage: '网络错误' })
+    await renderMessageList(true, failed, failed.id, onRetryMessage)
+    await act(async () => {
+      host?.querySelector<HTMLButtonElement>('[aria-label="重新生成"]')?.click()
+    })
+    expect(onRetryMessage).toHaveBeenCalledWith(failed)
+  })
+
+  it('does not offer retry for an older failed assistant message', async () => {
+    const failed = assistantMessage({ status: 'error', errorMessage: '网络错误' })
+    await renderMessageList(true, failed, failed.id + 1, vi.fn())
+    expect(host?.querySelector('[aria-label="重新生成"]')).toBeNull()
   })
 
   it('does not render meta when the prop is off (popover surfaces)', async () => {
@@ -159,110 +167,5 @@ describe('MessageList meta', () => {
       meta?.querySelector<HTMLButtonElement>('[aria-label="复制纯文本"]')?.click()
     })
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith('你好')
-  })
-})
-
-describe('MessageList streaming growth', () => {
-  it('keeps the latest assistant message in one growth host across completion', async () => {
-    await renderMessageList(true, assistantMessage({ status: 'streaming' }), true)
-    expect(
-      host?.querySelector('.dz-streaming-message-growth .dz-message.is-assistant')
-    ).not.toBeNull()
-
-    await act(async () => {
-      root?.render(
-        <MessageList
-          messages={[assistantMessage({ status: 'completed' })]}
-          mode="chat"
-          reasoningEnabled={false}
-          showMeta
-          smoothStreamingGrowth
-        />
-      )
-    })
-    expect(
-      host?.querySelector('.dz-streaming-message-growth .dz-message.is-assistant')
-    ).not.toBeNull()
-    const completedHost = host?.querySelector<HTMLDivElement>('.dz-streaming-message-growth')
-    const completedMessage = completedHost?.querySelector<HTMLElement>('.dz-message')
-    act(() => {
-      resizeCallback?.(
-        [{ target: completedMessage!, contentRect: { height: 100 } } as ResizeObserverEntry],
-        {} as ResizeObserver
-      )
-    })
-    expect(completedHost?.style.height).toBe('')
-  })
-
-  it('does not add the growth host to user messages', async () => {
-    await renderMessageList(true, assistantMessage({ role: 'user', status: 'streaming' }), true)
-    expect(host?.querySelector('.dz-streaming-message-growth')).toBeNull()
-    await act(async () => {
-      root?.render(
-        <MessageList
-          messages={[assistantMessage({ role: 'user', status: 'streaming' })]}
-          mode="chat"
-          reasoningEnabled={false}
-          showMeta
-          smoothStreamingGrowth
-        />
-      )
-    })
-    expect(host?.querySelector('.dz-streaming-message-growth')).toBeNull()
-  })
-
-  it('reveals a newly measured rendered row over animation frames', async () => {
-    const onStreamingHeightDelta = vi.fn()
-    await renderMessageList(
-      true,
-      assistantMessage({ status: 'streaming' }),
-      true,
-      false,
-      onStreamingHeightDelta
-    )
-    const growthHost = host?.querySelector<HTMLDivElement>('.dz-streaming-message-growth')
-    const message = growthHost?.querySelector<HTMLElement>('.dz-message')
-    expect(growthHost).not.toBeNull()
-    expect(message).not.toBeNull()
-
-    act(() => {
-      resizeCallback?.(
-        [{ target: message!, contentRect: { height: 100 } } as ResizeObserverEntry],
-        {} as ResizeObserver
-      )
-    })
-    expect(growthHost?.style.height).toBe('100px')
-
-    act(() => {
-      resizeCallback?.(
-        [{ target: message!, contentRect: { height: 140 } } as ResizeObserverEntry],
-        {} as ResizeObserver
-      )
-    })
-    expect(frameCallback).toBeDefined()
-    act(() => frameCallback?.(0))
-    act(() => frameCallback?.(100))
-    const animatedHeight = Number.parseFloat(growthHost?.style.height ?? '0')
-    expect(animatedHeight).toBeGreaterThan(100)
-    expect(Number.parseFloat(growthHost?.style.height ?? '0')).toBeLessThan(140)
-    expect(onStreamingHeightDelta).toHaveBeenCalledWith(animatedHeight - 100)
-  })
-
-  it('reveals a newly measured row immediately under reduced motion', async () => {
-    await renderMessageList(true, assistantMessage({ status: 'streaming' }), true, true)
-    const growthHost = host?.querySelector<HTMLDivElement>('.dz-streaming-message-growth')
-    const message = growthHost?.querySelector<HTMLElement>('.dz-message')
-    act(() => {
-      resizeCallback?.(
-        [{ target: message!, contentRect: { height: 100 } } as ResizeObserverEntry],
-        {} as ResizeObserver
-      )
-      resizeCallback?.(
-        [{ target: message!, contentRect: { height: 140 } } as ResizeObserverEntry],
-        {} as ResizeObserver
-      )
-    })
-    expect(growthHost?.style.height).toBe('140px')
-    expect(frameCallback).toBeUndefined()
   })
 })

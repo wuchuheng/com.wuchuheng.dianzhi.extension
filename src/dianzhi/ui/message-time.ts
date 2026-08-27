@@ -7,5 +7,5 @@
 export function formatMessageTime(createdAt: string, locale?: string): string {
   const date = new Date(createdAt)
   if (Number.isNaN(date.getTime())) return ''
-  return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+  return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 }

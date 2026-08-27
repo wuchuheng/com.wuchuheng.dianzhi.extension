@@ -6,17 +6,21 @@ import { ProviderSetup } from '@/dianzhi/ui/ProviderSetup'
 import { useStreamingHeight } from '@/dianzhi/ui/use-streaming-height'
 import { DEFAULT_SETTINGS } from '@/dianzhi/domain/settings'
 import type { DianzhiSettings, ProviderSettings } from '@/dianzhi/domain/types'
-import type { ConversationCommand, ConversationUpdate } from '@/dianzhi/domain/protocol'
-import { SIDEPANEL_PORT_NAME } from '@/dianzhi/domain/protocol'
-import { extensionConversationCommand, settingsCommand } from '@/events/config'
+import type { ConversationCommand } from '@/dianzhi/domain/protocol'
+import {
+  extensionConversationCommand,
+  panelCycleToolShortcut,
+  panelPanelToggle,
+  panelSelectToolShortcut,
+  panelSurfaceStatus,
+  settingsCommand,
+  sidePanelCommand,
+  sidePanelConversationUpdate,
+} from '@/events/config'
+import type { PanelToggleResult, ToolShortcutResult } from '@/dianzhi/domain/ui-session-protocol'
 import { log, logError, Scope } from '@/events/logger'
 import { matchesShortcut, toolShortcutNumber } from '@/dianzhi/domain/shortcuts'
-import {
-  INITIAL_PANEL_STATE,
-  cycleEnabledTool,
-  reducePanelState,
-  type PanelState,
-} from './panel-state'
+import { INITIAL_PANEL_STATE, reducePanelState, type PanelState } from './panel-state'
 import { useScrollFollow } from './scroll-follow'
 import './App.css'
 
@@ -166,80 +170,74 @@ export default function App() {
   const [state, dispatch] = useReducer(reducePanelState, INITIAL_PANEL_STATE)
   const [settings, setSettings] = useState<DianzhiSettings>(DEFAULT_SETTINGS)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
-  const handoffAcknowledged = useRef(false)
-  const panelPortRef = useRef<chrome.runtime.Port | null>(null)
+  const surfacesReported = useRef(false)
 
   const command = useCallback(async (value: ConversationCommand) => {
     const result = await extensionConversationCommand.dispatch(value)
     if (result.snapshot) dispatch({ type: 'conversation.sync', snapshot: result.snapshot })
   }, [])
 
-  useEffect(() => {
-    void settingsCommand
-      .dispatch({ type: 'settings.get', requestId: requestId('settings') })
-      .then(setSettings)
-    let disposed = false
-    let port: chrome.runtime.Port | null = null
-    let reconnectTimer: number | null = null
-
-    const connect = () => {
-      if (disposed) return
-      const current = chrome.runtime.connect({ name: SIDEPANEL_PORT_NAME })
-      port = current
-      panelPortRef.current = current
-      log(Scope.EXTENSION_PAGE, 'Side Panel port connected.')
-      dispatch({ type: 'panel.connected' })
-      current.onMessage.addListener((value: unknown) => {
-        if (
-          typeof value === 'object' &&
-          value !== null &&
-          typeof (value as { type?: unknown }).type === 'string'
-        ) {
-          dispatch(value as ConversationUpdate)
-        }
-      })
-      current.onDisconnect.addListener(() => {
-        if (disposed || port !== current) return
-        log(Scope.EXTENSION_PAGE, 'Side Panel port disconnected; scheduling reconnect.')
-        port = null
-        panelPortRef.current = null
-        dispatch({ type: 'panel.disconnected' })
-        reconnectTimer = window.setTimeout(connect, 100)
-      })
-      void chrome.tabs.query({ active: true, currentWindow: true }).then(([tab]) => {
-        if (disposed || port !== current || !tab?.id) {
-          logError(Scope.EXTENSION_PAGE, 'Side Panel could not bind its port to an active tab.')
-          return
-        }
-        log(Scope.EXTENSION_PAGE, 'Side Panel binding port to active tab.', {
-          tabId: tab.id,
-          windowId: tab.windowId,
-        })
-        current.postMessage({ type: 'ready', tabId: tab.id, windowId: tab.windowId })
-      })
-    }
-
-    connect()
-    return () => {
-      disposed = true
-      if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
-      port?.disconnect()
-      panelPortRef.current = null
+  /** Applies a tool-shortcut response only when Background routed it to the panel. */
+  const applyToolResult = useCallback((result: ToolShortcutResult) => {
+    if (result.handled && result.target === 'sidePanel' && result.snapshot) {
+      dispatch({ type: 'panel.render', snapshot: result.snapshot })
     }
   }, [])
 
+  const reportSurface = useCallback((status: 'appeared' | 'destroyed') => {
+    void panelSurfaceStatus
+      .dispatch({
+        type: 'ui.surfaceStatus',
+        requestId: requestId('surface'),
+        payload: { status, selectionSessionId: null },
+      })
+      .catch((error: unknown) =>
+        logError(Scope.EXTENSION_PAGE, 'Panel surface status report failed.', error)
+      )
+  }, [])
+
   useEffect(() => {
-    const conversationId = state.snapshot?.conversation.id
-    if (!conversationId || handoffAcknowledged.current) return
-    handoffAcknowledged.current = true
-    void command({
-      type: 'panel.rendered',
-      requestId: requestId('rendered'),
-      payload: { conversationId },
-    }).catch(() => {
-      handoffAcknowledged.current = false
-    })
-  }, [command, state.snapshot?.conversation.id])
+    let disposed = false
+    let cancelCommandHandle: (() => void) | undefined
+    let cancelUpdateHandle: (() => void) | undefined
+
+    void chrome.tabs
+      .query({ active: true, currentWindow: true })
+      .then(([tab]) => {
+        if (disposed || !tab?.id || !tab.windowId) {
+          logError(Scope.EXTENSION_PAGE, 'Side Panel could not bind its typed events.')
+          return
+        }
+        const binding = { tabId: tab.id, windowId: tab.windowId }
+        log(Scope.EXTENSION_PAGE, 'Side Panel binding typed events to active tab.', binding)
+        cancelCommandHandle = sidePanelCommand.handle(binding, async (commandValue) => {
+          if (commandValue.type === 'render' || commandValue.type === 'selectTool') {
+            dispatch({ type: 'panel.render', snapshot: commandValue.snapshot })
+          } else {
+            dispatch({ type: 'panel.clear' })
+          }
+          return true
+        })
+        cancelUpdateHandle = sidePanelConversationUpdate.handle(binding, async (update) => {
+          dispatch(update)
+          return true
+        })
+        surfacesReported.current = true
+        dispatch({ type: 'panel.connected' })
+        reportSurface('appeared')
+      })
+      .catch((error: unknown) =>
+        logError(Scope.EXTENSION_PAGE, 'Side Panel typed event binding failed.', error)
+      )
+
+    return () => {
+      disposed = true
+      if (surfacesReported.current) reportSurface('destroyed')
+      surfacesReported.current = false
+      cancelCommandHandle?.()
+      cancelUpdateHandle?.()
+    }
+  }, [reportSurface])
 
   const currentTool = state.snapshot?.activeToolId
   const draftKey = currentTool === undefined ? '' : String(currentTool)
@@ -251,17 +249,31 @@ export default function App() {
     },
     [command, state.snapshot?.conversation.id]
   )
-  const selectTool = useCallback(
-    (toolId: number) => {
-      const snapshot = state.snapshot
-      if (!snapshot || toolId === snapshot.activeToolId) return
-      void command({
-        type: 'conversation.ensureTool',
-        requestId: requestId('tool'),
-        payload: { selectionKey: snapshot.conversation.selectionKey, toolId },
-      })
+  const selectToolByIndex = useCallback(
+    (index: number) => {
+      void panelSelectToolShortcut
+        .dispatch({
+          type: 'shortcut.selectTool',
+          requestId: requestId('tool'),
+          payload: { index },
+        })
+        .then(applyToolResult)
+        .catch((error: unknown) => logError(Scope.EXTENSION_PAGE, 'Tool select failed.', error))
     },
-    [command, state.snapshot]
+    [applyToolResult]
+  )
+  const cycleTool = useCallback(
+    (direction: 'left' | 'right') => {
+      void panelCycleToolShortcut
+        .dispatch({
+          type: 'shortcut.cycleTool',
+          requestId: requestId('cycle'),
+          payload: { direction },
+        })
+        .then(applyToolResult)
+        .catch((error: unknown) => logError(Scope.EXTENSION_PAGE, 'Tool cycle failed.', error))
+    },
+    [applyToolResult]
   )
   const saveProvider = useCallback(
     async (provider: ProviderSettings) => {
@@ -275,40 +287,60 @@ export default function App() {
     [settings]
   )
 
+  const onToolSelect = useCallback(
+    (toolId: number) => {
+      const index = state.snapshot?.tools.findIndex(({ tool }) => tool.id === toolId) ?? -1
+      if (index >= 0) selectToolByIndex(index + 1)
+    },
+    [selectToolByIndex, state.snapshot]
+  )
+
+  useEffect(() => {
+    void settingsCommand
+      .dispatch({ type: 'settings.get', requestId: requestId('settings') })
+      .then(setSettings)
+  }, [])
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const toolNumber = toolShortcutNumber(event)
-      // The configured close (Esc by default) and the dock toggle both close
-      // the panel from inside it — the content-script half of the toggle
-      // cannot hear keys while focus lives in the Side Panel page.
+      // The configured close (Esc by default) and the dock toggle both tell
+      // Background to close the panel directly from inside it — the content-script
+      // half of the toggle cannot hear keys while focus lives in the Side Panel.
       if (
         matchesShortcut(event, settings.shortcuts.close) ||
         matchesShortcut(event, settings.shortcuts.dock)
       ) {
         event.preventDefault()
-        const port = panelPortRef.current
-        log(Scope.EXTENSION_PAGE, 'Side Panel close shortcut received.', {
+        log(Scope.EXTENSION_PAGE, 'Side Panel toggle shortcut received.', {
           shortcut: matchesShortcut(event, settings.shortcuts.dock) ? 'dock' : 'close',
           hasConversation: state.snapshot !== null,
-          portConnected: port !== null,
         })
-        if (!port) {
-          logError(
-            Scope.EXTENSION_PAGE,
-            'Side Panel close shortcut ignored because its port is disconnected.'
+        void panelPanelToggle
+          .dispatch({
+            type: 'shortcut.panelToggle',
+            requestId: requestId('panel'),
+            payload: {},
+          })
+          .then((result: PanelToggleResult) => {
+            if (
+              result.action === 'restore' &&
+              result.currentUI === 'sidePanel' &&
+              result.snapshot
+            ) {
+              dispatch({ type: 'panel.render', snapshot: result.snapshot })
+            }
+            log(Scope.EXTENSION_PAGE, 'Side Panel toggle completed.', {
+              currentUI: result.currentUI,
+              action: result.action,
+            })
+          })
+          .catch((error: unknown) =>
+            logError(Scope.EXTENSION_PAGE, 'Side Panel toggle failed.', error)
           )
-          return
-        }
-        try {
-          port.postMessage({ type: 'close' })
-          log(Scope.EXTENSION_PAGE, 'Side Panel close request posted to background.')
-        } catch (error) {
-          logError(Scope.EXTENSION_PAGE, 'Side Panel close request could not be posted.', error)
-        }
       } else if (toolNumber !== null) {
         event.preventDefault()
-        const tool = state.snapshot?.tools[toolNumber - 1]
-        if (tool) selectTool(tool.tool.id)
+        selectToolByIndex(toolNumber)
       } else if (event.ctrlKey && event.key === '.') {
         event.preventDefault()
         withConversation((conversationId) => ({
@@ -318,13 +350,12 @@ export default function App() {
         }))
       } else if (event.ctrlKey && (event.key === 'ArrowLeft' || event.key === 'ArrowRight')) {
         event.preventDefault()
-        const toolId = cycleEnabledTool(state.snapshot, event.key === 'ArrowLeft' ? -1 : 1)
-        if (toolId) selectTool(toolId)
+        cycleTool(event.key === 'ArrowLeft' ? 'left' : 'right')
       }
     }
     window.addEventListener('keydown', onKeyDown, true)
     return () => window.removeEventListener('keydown', onKeyDown, true)
-  }, [selectTool, settings.shortcuts, state.snapshot, withConversation])
+  }, [cycleTool, selectToolByIndex, settings.shortcuts, state.snapshot, withConversation])
 
   return (
     <SidePanelView
@@ -333,7 +364,7 @@ export default function App() {
       draft={draft}
       providerSettings={settings.provider}
       onDraftChange={(value) => setDrafts((current) => ({ ...current, [draftKey]: value }))}
-      onToolSelect={selectTool}
+      onToolSelect={onToolSelect}
       onSaveProvider={saveProvider}
       onSend={() => {
         const content = draft.trim()

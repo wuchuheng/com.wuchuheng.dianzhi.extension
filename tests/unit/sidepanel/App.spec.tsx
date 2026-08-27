@@ -4,25 +4,67 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ConversationSnapshot, MessageRecord } from '@/dianzhi/domain/protocol'
 import { DEFAULT_SETTINGS } from '@/dianzhi/domain/settings'
 
-const { conversationDispatch, settingsDispatch, port } = vi.hoisted(() => {
-  let messageListener: ((value: unknown) => void) | undefined
+const hoisted = vi.hoisted(() => {
+  const commandConsumer: {
+    capture?: (value: unknown) => Promise<unknown>
+  } = {}
+  const updateConsumer: {
+    capture?: (value: unknown) => Promise<unknown>
+  } = {}
+  const sidePanelCommandHandle = vi.fn(
+    (_binding: unknown, callback: (value: unknown) => Promise<unknown>) => {
+      commandConsumer.capture = callback
+      return vi.fn()
+    }
+  )
+  const sidePanelConversationUpdateHandle = vi.fn(
+    (_binding: unknown, callback: (value: unknown) => Promise<unknown>) => {
+      updateConsumer.capture = callback
+      return vi.fn()
+    }
+  )
   return {
     conversationDispatch: vi.fn(),
     settingsDispatch: vi.fn(),
-    port: {
-      onMessage: { addListener: vi.fn((listener) => (messageListener = listener)) },
-      onDisconnect: { addListener: vi.fn() },
-      postMessage: vi.fn(),
-      disconnect: vi.fn(),
-      emitMessage: (value: unknown) => messageListener?.(value),
-    },
+    panelToggleDispatch: vi.fn(),
+    panelSurfaceStatusDispatch: vi.fn(),
+    panelSelectToolShortcutDispatch: vi.fn(),
+    panelCycleToolShortcutDispatch: vi.fn(),
+    commandConsumer,
+    updateConsumer,
+    sidePanelCommandHandle,
+    sidePanelConversationUpdateHandle,
   }
 })
 
-vi.mock('@/events/config', () => ({
-  extensionConversationCommand: { dispatch: conversationDispatch },
-  settingsCommand: { dispatch: settingsDispatch },
-}))
+const {
+  conversationDispatch,
+  settingsDispatch,
+  panelToggleDispatch,
+  panelSurfaceStatusDispatch,
+  panelSelectToolShortcutDispatch,
+  panelCycleToolShortcutDispatch,
+  commandConsumer,
+  updateConsumer,
+  sidePanelCommandHandle,
+  sidePanelConversationUpdateHandle,
+} = hoisted
+
+const emitMessage = (value: unknown) => updateConsumer.capture?.(value)
+
+vi.mock('@/events/config', () => {
+  const h = hoisted
+  return {
+    extensionConversationCommand: { dispatch: h.conversationDispatch },
+    settingsCommand: { dispatch: h.settingsDispatch },
+    panelPanelToggle: { dispatch: h.panelToggleDispatch },
+    panelSurfaceStatus: { dispatch: h.panelSurfaceStatusDispatch },
+    panelSelectToolShortcut: { dispatch: h.panelSelectToolShortcutDispatch },
+    panelCycleToolShortcut: { dispatch: h.panelCycleToolShortcutDispatch },
+    sidePanelCommand: { handle: h.sidePanelCommandHandle },
+    sidePanelConversationUpdate: { handle: h.sidePanelConversationUpdateHandle },
+  }
+})
 
 import App from '@/sidepanel/App'
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -53,7 +95,7 @@ function snapshot(): ConversationSnapshot {
 
 function installChrome() {
   ;(globalThis as typeof globalThis & { chrome?: unknown }).chrome = {
-    runtime: { connect: () => port, openOptionsPage: vi.fn() },
+    runtime: { openOptionsPage: vi.fn() },
     tabs: { query: async () => [{ id: 9, windowId: 19 }] },
   }
 }
@@ -86,9 +128,24 @@ async function renderApp() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  commandConsumer.capture = undefined
+  updateConsumer.capture = undefined
   installChrome()
   settingsDispatch.mockResolvedValue(DEFAULT_SETTINGS)
   conversationDispatch.mockResolvedValue({ accepted: true, snapshot: null })
+  panelToggleDispatch.mockResolvedValue({
+    currentUI: 'none',
+    latestUI: 'contentScript',
+    action: 'none',
+    snapshot: null,
+  })
+  panelSurfaceStatusDispatch.mockResolvedValue({
+    currentUI: 'none',
+    latestUI: 'contentScript',
+    selectionSessionId: null,
+  })
+  panelSelectToolShortcutDispatch.mockResolvedValue({ handled: false, reason: 'NO_APPEARED_UI' })
+  panelCycleToolShortcutDispatch.mockResolvedValue({ handled: false, reason: 'NO_APPEARED_UI' })
   stubMatchMedia(false)
 })
 
@@ -100,10 +157,10 @@ afterEach(() => {
 })
 
 describe('Side Panel dock shortcut', () => {
-  it('requests panel closure when Ctrl+[ is pressed in the empty state', async () => {
+  it('dispatches the panel-toggle event when Ctrl+[ is pressed in the empty state', async () => {
     await renderApp()
-    expect(port.postMessage).toHaveBeenCalledWith({ type: 'ready', tabId: 9, windowId: 19 })
-    port.postMessage.mockClear()
+    expect(sidePanelCommandHandle).toHaveBeenCalledTimes(1)
+    expect(sidePanelConversationUpdateHandle).toHaveBeenCalledTimes(1)
 
     await act(async () => {
       window.dispatchEvent(
@@ -118,13 +175,15 @@ describe('Side Panel dock shortcut', () => {
       await Promise.resolve()
     })
 
-    expect(port.postMessage).toHaveBeenCalledWith({ type: 'close' })
+    expect(panelToggleDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'shortcut.panelToggle' })
+    )
   })
 
-  it('closes the panel when Ctrl+[ is pressed in a composer that stops bubbling', async () => {
+  it('dispatches the panel-toggle event when Ctrl+[ is pressed in a composer that stops bubbling', async () => {
     await renderApp()
     await act(async () => {
-      port.emitMessage({ type: 'conversation.sync', snapshot: snapshot() })
+      await emitMessage({ type: 'conversation.sync', snapshot: snapshot() })
       await Promise.resolve()
     })
     const input = host?.querySelector<HTMLTextAreaElement>('textarea')
@@ -144,7 +203,9 @@ describe('Side Panel dock shortcut', () => {
       await Promise.resolve()
     })
 
-    expect(port.postMessage).toHaveBeenCalledWith({ type: 'close' })
+    expect(panelToggleDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'shortcut.panelToggle' })
+    )
   })
 })
 
@@ -169,7 +230,7 @@ describe('Side Panel composer while streaming', () => {
       },
     ]
     await act(async () => {
-      port.emitMessage({ type: 'conversation.sync', snapshot: streaming })
+      emitMessage({ type: 'conversation.sync', snapshot: streaming })
       await Promise.resolve()
     })
     const textarea = host?.querySelector<HTMLTextAreaElement>('textarea')
@@ -200,7 +261,7 @@ describe('Side Panel message toolbar', () => {
     const next = snapshot()
     next.messages = [assistant()]
     await act(async () => {
-      port.emitMessage({ type: 'conversation.sync', snapshot: next })
+      emitMessage({ type: 'conversation.sync', snapshot: next })
       await Promise.resolve()
     })
     expect(host?.querySelector('[aria-label="正在生成"]')).not.toBeNull()
@@ -220,7 +281,7 @@ describe('Side Panel message toolbar', () => {
       }),
     ]
     await act(async () => {
-      port.emitMessage({ type: 'conversation.sync', snapshot: next })
+      emitMessage({ type: 'conversation.sync', snapshot: next })
       await Promise.resolve()
     })
     expect(host?.querySelector('.dz-message-meta')?.textContent).toContain('65t/s')
@@ -283,7 +344,7 @@ describe('Side Panel smooth chat scroll', () => {
     const next = snapshot()
     next.messages = messages
     await act(async () => {
-      port.emitMessage({ type: 'conversation.sync', snapshot: next })
+      emitMessage({ type: 'conversation.sync', snapshot: next })
       await Promise.resolve()
     })
   }
@@ -301,7 +362,7 @@ describe('Side Panel smooth chat scroll', () => {
   const openEmptyHistory = async () => {
     await renderApp()
     await act(async () => {
-      port.emitMessage({ type: 'conversation.sync', snapshot: snapshot() })
+      emitMessage({ type: 'conversation.sync', snapshot: snapshot() })
       await Promise.resolve()
     })
   }
@@ -391,7 +452,7 @@ describe('Side Panel smooth chat scroll', () => {
     other.conversation.id = 23
     other.messages = [message(1, 'other context')]
     await act(async () => {
-      port.emitMessage({ type: 'conversation.sync', snapshot: other })
+      emitMessage({ type: 'conversation.sync', snapshot: other })
       await Promise.resolve()
     })
     expect(history().scrollTop).toBe(700)
@@ -423,7 +484,7 @@ describe('Side Panel provider setup panel', () => {
   it('renders the inline setup panel instead of the banner when unconfigured', async () => {
     await renderApp()
     await act(async () => {
-      port.emitMessage({ type: 'conversation.sync', snapshot: unconfigured('need setup') })
+      emitMessage({ type: 'conversation.sync', snapshot: unconfigured('need setup') })
       await Promise.resolve()
     })
     expect(host?.querySelector('.dz-provider-setup')).not.toBeNull()
@@ -433,7 +494,7 @@ describe('Side Panel provider setup panel', () => {
   it('dismisses the panel after a successful save', async () => {
     await renderApp()
     await act(async () => {
-      port.emitMessage({ type: 'conversation.sync', snapshot: unconfigured('need setup') })
+      emitMessage({ type: 'conversation.sync', snapshot: unconfigured('need setup') })
       await Promise.resolve()
     })
     expect(host?.querySelector('.dz-provider-setup')).not.toBeNull()
@@ -460,7 +521,7 @@ describe('Side Panel provider setup panel', () => {
 
     await renderApp()
     await act(async () => {
-      port.emitMessage({ type: 'conversation.sync', snapshot: unconfigured('need setup') })
+      emitMessage({ type: 'conversation.sync', snapshot: unconfigured('need setup') })
       await Promise.resolve()
     })
     const panel = host?.querySelector<HTMLDivElement>('.dz-provider-setup-host')
@@ -471,7 +532,7 @@ describe('Side Panel provider setup panel', () => {
     })
 
     await act(async () => {
-      port.emitMessage({ type: 'conversation.sync', snapshot: unconfigured('need setup again') })
+      emitMessage({ type: 'conversation.sync', snapshot: unconfigured('need setup again') })
       await Promise.resolve()
     })
     expect(frameCallback).not.toBeNull()

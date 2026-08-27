@@ -20,12 +20,22 @@ export const INITIAL_PANEL_STATE: PanelState = {
 
 export type PanelStateEvent =
   | ConversationViewEvent
-  | { type: 'panel.disconnected' }
+  | { type: 'panel.render'; snapshot: ConversationSnapshot }
+  | { type: 'panel.clear' }
   | { type: 'panel.connected' }
+  | { type: 'panel.disconnected' }
 
 export function reducePanelState(state: PanelState, event: PanelStateEvent): PanelState {
   if (event.type === 'panel.disconnected') return { ...state, connected: false }
   if (event.type === 'panel.connected') return { ...state, connected: true, error: null }
+  if (event.type === 'panel.clear') return { ...state, snapshot: null, error: null }
+  if (event.type === 'panel.render') {
+    return {
+      ...state,
+      snapshot: cloneSnapshot(event.snapshot),
+      error: null,
+    }
+  }
   const reduced = reduceConversationView(
     {
       ...INITIAL_CONVERSATION_VIEW,
@@ -38,17 +48,15 @@ export function reducePanelState(state: PanelState, event: PanelStateEvent): Pan
   return { connected: state.connected, snapshot: reduced.snapshot, error: reduced.error }
 }
 
-export function cycleEnabledTool(
-  snapshot: ConversationSnapshot | null,
-  direction: -1 | 1
-): number | null {
-  if (!snapshot || snapshot.tools.length === 0) return null
-  const index = Math.max(
-    0,
-    snapshot.tools.findIndex(({ tool }) => tool.id === snapshot.activeToolId)
-  )
-  return (
-    snapshot.tools[(index + direction + snapshot.tools.length) % snapshot.tools.length]?.tool.id ??
-    null
-  )
+function cloneSnapshot(snapshot: ConversationSnapshot): ConversationSnapshot {
+  return {
+    selectionSession: { ...snapshot.selectionSession },
+    conversation: { ...snapshot.conversation },
+    messages: snapshot.messages.map((message) => ({ ...message })),
+    tools: snapshot.tools.map(({ tool, conversationId }) => ({
+      tool: { ...tool },
+      conversationId,
+    })),
+    activeToolId: snapshot.activeToolId,
+  }
 }

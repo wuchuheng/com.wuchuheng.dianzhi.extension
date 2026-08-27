@@ -4,6 +4,7 @@ import type { ProviderSettings } from '@/dianzhi/domain/types'
 import { streamChat as defaultStreamChat } from '@/dianzhi/provider/client'
 import type { ProviderMessage } from '@/dianzhi/provider/request'
 import type { ProviderDelta } from '@/dianzhi/provider/sse'
+import { calculateEstimatedThroughputTps } from '@/dianzhi/provider/throughput'
 import type { FinalizeAssistantInput } from '@/offscreen/database/store'
 
 const CHECKPOINT_INTERVAL_MS = 250
@@ -26,6 +27,7 @@ export interface ProviderRunnerDependencies {
   checkpoint(messageId: number, content: string, reasoningContent: string): Promise<MessageRecord>
   finalize(messageId: number, input: FinalizeAssistantInput): Promise<MessageRecord>
   publish(update: ConversationUpdate): void | Promise<void>
+  now?(): number
   setTimeout?: typeof globalThis.setTimeout
   clearTimeout?: typeof globalThis.clearTimeout
 }
@@ -47,6 +49,7 @@ export function createProviderRunner(dependencies: ProviderRunnerDependencies) {
   const runStream = dependencies.streamChat ?? defaultStreamChat
   const schedule = dependencies.setTimeout ?? globalThis.setTimeout
   const cancel = dependencies.clearTimeout ?? globalThis.clearTimeout
+  const now = dependencies.now ?? (() => performance.now())
   const encoder = new TextEncoder()
 
   function start(input: ProviderRunInput): ProviderRunHandle {
@@ -61,6 +64,7 @@ export function createProviderRunner(dependencies: ProviderRunnerDependencies) {
       let checkpointedBytes = encoder.encode(content + reasoningContent).byteLength
       let checkpointChain = Promise.resolve<MessageRecord | null>(null)
       let timer: ReturnType<typeof setTimeout> | null = null
+      let firstOutputAt: number | null = null
 
       const isCurrent = () => runs.get(input.conversationId)?.token === token
 
@@ -89,6 +93,7 @@ export function createProviderRunner(dependencies: ProviderRunnerDependencies) {
 
       const publishDelta = (delta: ProviderDelta) => {
         if (!isCurrent()) return
+        if (firstOutputAt === null) firstOutputAt = now()
         if (delta.kind === 'content') content += delta.delta
         else reasoningContent += delta.delta
         void dependencies.publish({
@@ -99,6 +104,14 @@ export function createProviderRunner(dependencies: ProviderRunnerDependencies) {
         })
         armCheckpoint()
       }
+
+      const terminalThroughput = (terminalAt: number) =>
+        firstOutputAt === null
+          ? null
+          : calculateEstimatedThroughputTps(
+              content + reasoningContent,
+              terminalAt - firstOutputAt
+            )
 
       try {
         if (!input.provider.apiKey.trim() || !input.provider.model.trim()) {
@@ -120,13 +133,14 @@ export function createProviderRunner(dependencies: ProviderRunnerDependencies) {
           }
         )
         if (!isCurrent()) return
+        const terminalAt = now()
         if (timer !== null) cancel(timer)
         await checkpointChain
         const message = await dependencies.finalize(input.assistant.id, {
           status: 'completed',
           content,
           reasoningContent,
-          estimatedThroughputTps: null,
+          estimatedThroughputTps: terminalThroughput(terminalAt),
         })
         if (isCurrent()) {
           await dependencies.publish({
@@ -136,6 +150,7 @@ export function createProviderRunner(dependencies: ProviderRunnerDependencies) {
           })
         }
       } catch (error) {
+        const terminalAt = now()
         if (!isCurrent()) return
         if (timer !== null) cancel(timer)
         await checkpointChain.catch(() => null)
@@ -144,7 +159,7 @@ export function createProviderRunner(dependencies: ProviderRunnerDependencies) {
             status: 'stopped',
             content,
             reasoningContent,
-            estimatedThroughputTps: null,
+            estimatedThroughputTps: terminalThroughput(terminalAt),
           })
           if (isCurrent()) {
             await dependencies.publish({
@@ -161,7 +176,7 @@ export function createProviderRunner(dependencies: ProviderRunnerDependencies) {
           status: 'error',
           content,
           reasoningContent,
-          estimatedThroughputTps: null,
+          estimatedThroughputTps: terminalThroughput(terminalAt),
           errorCode: shape.code,
           errorMessage: shape.message,
         })

@@ -13,6 +13,19 @@ import type {
   SettingsCommand,
   ToolsCommand,
 } from '@/dianzhi/domain/protocol'
+import type {
+  ContentUiCommand,
+  CycleToolShortcutRequest,
+  PanelToggleRequest,
+  PanelToggleResult,
+  SelectToolShortcutRequest,
+  SelectionRouteRequest,
+  SelectionRouteResult,
+  SidePanelCommand,
+  SurfaceStatusRequest,
+  SurfaceStatusResponse,
+  ToolShortcutResult,
+} from '@/dianzhi/domain/ui-session-protocol'
 import type { DianzhiSettings } from '@/dianzhi/domain/types'
 import type { DatabaseRequest, DatabaseResult } from '@/offscreen/database/rpc'
 import type { ToolRecord } from '@/offscreen/database/config-store'
@@ -36,6 +49,51 @@ export const conversationUpdateToContent = events.bg2cs<ConversationUpdate, void
 )
 
 export const conversationUpdateToExtension = events.bg2ep<ConversationUpdate, void>(
+  'dianzhi:conversation-update'
+)
+
+export const contentSurfaceStatus = events.cs2bg<SurfaceStatusRequest, SurfaceStatusResponse>(
+  'dianzhi:ui-surface-status'
+)
+
+export const panelSurfaceStatus = events.ep2bg<SurfaceStatusRequest, SurfaceStatusResponse>(
+  'dianzhi:ui-surface-status'
+)
+
+export const selectionRoute = events.cs2bg<SelectionRouteRequest, SelectionRouteResult>(
+  'dianzhi:selection-route'
+)
+
+export const contentPanelToggle = events.cs2bg<PanelToggleRequest, PanelToggleResult>(
+  'dianzhi:shortcut-panel-toggle'
+)
+
+export const panelPanelToggle = events.ep2bg<PanelToggleRequest, PanelToggleResult>(
+  'dianzhi:shortcut-panel-toggle'
+)
+
+export const contentSelectToolShortcut = events.cs2bg<
+  SelectToolShortcutRequest,
+  ToolShortcutResult
+>('dianzhi:shortcut-select-tool')
+
+export const panelSelectToolShortcut = events.ep2bg<SelectToolShortcutRequest, ToolShortcutResult>(
+  'dianzhi:shortcut-select-tool'
+)
+
+export const contentCycleToolShortcut = events.cs2bg<CycleToolShortcutRequest, ToolShortcutResult>(
+  'dianzhi:shortcut-cycle-tool'
+)
+
+export const panelCycleToolShortcut = events.ep2bg<CycleToolShortcutRequest, ToolShortcutResult>(
+  'dianzhi:shortcut-cycle-tool'
+)
+
+export const contentUiCommand = events.bg2cs<ContentUiCommand, void>('dianzhi:content-ui-command')
+
+export const sidePanelCommand = events.bg2sp<SidePanelCommand, true>('dianzhi:side-panel-command')
+
+export const sidePanelConversationUpdate = events.bg2sp<ConversationUpdate, true>(
   'dianzhi:conversation-update'
 )
 

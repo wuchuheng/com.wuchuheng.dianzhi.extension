@@ -113,6 +113,9 @@ export { bg2cs } from './background/background'
  */
 export { bg2ep } from './background/background'
 
+export { bg2sp } from './sidePanel/sidePanel'
+export type { TargetedSidePanelEvent } from './sidePanel/sidePanel'
+
 /**
  * Relay service for ep2cs (extension page to content script).
  * Must be called once in background initialization.

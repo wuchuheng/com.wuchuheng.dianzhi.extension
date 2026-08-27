@@ -18,7 +18,6 @@ function conversation(
   return {
     id,
     selectionSessionId: input.selectionSessionId,
-    selectionKey: input.selectionSessionId,
     tabId: input.tabId,
     toolId: input.toolId,
     toolName: input.toolName ?? `Tool ${input.toolId}`,
@@ -94,8 +93,6 @@ function createManager(
     loadSettings: async () => DEFAULT_SETTINGS,
     providerRunner,
     publishToOwner,
-    session: { load: async () => ({}), save: async () => undefined },
-    sidePanel: { open: vi.fn(), close: vi.fn() },
     ...extras,
   })
   return { manager, providerRunner, publishToOwner }
@@ -229,26 +226,14 @@ describe('ConversationManager session gateway', () => {
       }),
     } as unknown as OffscreenClient
     const { manager, publishToOwner } = createManager(database)
-    const port = {
-      name: 'dianzhi:sidepanel',
-      onMessage: { addListener: vi.fn() },
-      onDisconnect: { addListener: vi.fn() },
-      postMessage: vi.fn(),
-    } as unknown as chrome.runtime.Port
 
-    const snapshot = await manager.createSelection({
+    await manager.createSelection({
       tabId: 9,
       replaceSelectionSessionId: null,
       selectedText: 'run',
       contextText: 'run fast',
     })
-    manager.connect(port)
-    ;(port.onMessage.addListener as ReturnType<typeof vi.fn>).mock.calls[0][0]({
-      type: 'subscribe',
-      conversationId: snapshot.conversation.id,
-    })
     vi.mocked(publishToOwner).mockClear()
-    ;(port.postMessage as ReturnType<typeof vi.fn>).mockClear()
 
     await manager.publish({
       type: 'stream.delta',
@@ -263,7 +248,6 @@ describe('ConversationManager session gateway', () => {
       messageId: 102,
       content: 'fast',
     })
-    expect(port.postMessage).not.toHaveBeenCalled()
   })
 
   it('stops every live run in a selection session before deleting it', async () => {

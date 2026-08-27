@@ -28,7 +28,6 @@ function visibleState(): ConversationViewState {
     snapshot: {
       conversation: {
         id: 1,
-        selectionKey: 1,
         tabId: 1,
         toolId: 1,
         toolName: '词典',

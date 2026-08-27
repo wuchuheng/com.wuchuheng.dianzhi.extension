@@ -55,7 +55,6 @@ function snapshot(conversationId = 10): ConversationSnapshot {
     conversation: {
       id: conversationId,
       selectionSessionId: conversationId,
-      selectionKey: conversationId,
       tabId: 9,
       toolId: 1,
       toolName: '词典',

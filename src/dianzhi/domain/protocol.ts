@@ -19,8 +19,6 @@ export interface SelectionSessionRecord {
 export interface ConversationRecord {
   id: number
   selectionSessionId: number
-  /** Temporary compatibility alias; remove in Task 8. */
-  selectionKey: number
   tabId: number
   toolId: number
   toolName: string
@@ -62,11 +60,6 @@ export interface ConversationSnapshot {
 
 export type ConversationCommand =
   | {
-      type: 'conversation.create'
-      requestId: string
-      payload: { selectedText: string; contextText: string }
-    }
-  | {
       type: 'conversation.sync'
       requestId: string
       payload: { conversationId: number }
@@ -82,34 +75,7 @@ export type ConversationCommand =
       payload: { conversationId: number }
     }
   | {
-      type: 'conversation.ensureTool'
-      requestId: string
-      payload: { selectionKey: number; toolId: number }
-    }
-  | {
       type: 'stream.stop'
-      requestId: string
-      payload: { conversationId: number }
-    }
-  | {
-      type: 'panel.open'
-      requestId: string
-      payload: { conversationId: number }
-    }
-  | {
-      /** Content-script shortcut: opens the Side Panel, or closes it when it
-       *  is already open and showing this conversation (toggle). */
-      type: 'panel.toggle'
-      requestId: string
-      payload: { conversationId: number }
-    }
-  | {
-      type: 'panel.rendered'
-      requestId: string
-      payload: { conversationId: number }
-    }
-  | {
-      type: 'panel.close'
       requestId: string
       payload: { conversationId: number }
     }
@@ -140,8 +106,6 @@ export type ConversationUpdate =
       message: MessageRecord
       error: DianzhiErrorShape
     }
-  | { type: 'panel.handoffReady'; conversationId: number }
-  | { type: 'panel.closed'; conversationId: number }
 
 export type SettingsCommand =
   | { type: 'settings.get'; requestId: string }
@@ -256,30 +220,9 @@ export function parseConversationCommand(value: unknown): ParseResult<Conversati
   const requestId = value.requestId
   const payload = value.payload
   switch (value.type) {
-    case 'conversation.create':
-      if (
-        typeof payload.selectedText !== 'string' ||
-        payload.selectedText.trim().length < 1 ||
-        typeof payload.contextText !== 'string' ||
-        !payload.contextText.trim()
-      ) {
-        return invalid('Selection command content is invalid.')
-      }
-      return {
-        ok: true,
-        value: {
-          type: value.type,
-          requestId,
-          payload: { selectedText: payload.selectedText, contextText: payload.contextText },
-        },
-      }
     case 'conversation.sync':
     case 'conversation.retry':
     case 'stream.stop':
-    case 'panel.open':
-    case 'panel.toggle':
-    case 'panel.rendered':
-    case 'panel.close':
       if (!isPositiveInteger(payload.conversationId)) return invalid('Conversation ID is invalid.')
       return {
         ok: true,
@@ -296,18 +239,6 @@ export function parseConversationCommand(value: unknown): ParseResult<Conversati
           type: value.type,
           requestId,
           payload: { conversationId: payload.conversationId, content: payload.content },
-        },
-      }
-    case 'conversation.ensureTool':
-      if (!isPositiveInteger(payload.selectionKey) || !isPositiveInteger(payload.toolId)) {
-        return invalid('Tool conversation payload is invalid.')
-      }
-      return {
-        ok: true,
-        value: {
-          type: value.type,
-          requestId,
-          payload: { selectionKey: payload.selectionKey, toolId: payload.toolId },
         },
       }
     default:

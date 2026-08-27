@@ -65,7 +65,6 @@ function snapshot(
     conversation: {
       id: conversationId,
       selectionSessionId,
-      selectionKey: selectionSessionId,
       tabId,
       toolId,
       toolName: `Tool ${toolId}`,

@@ -59,7 +59,6 @@ export interface FinalizeAssistantInput {
 const CONVERSATION_COLUMNS = `
   id,
   selection_session_id AS selectionSessionId,
-  selection_session_id AS selectionKey,
   tab_id AS tabId,
   tool_id AS toolId,
   tool_name AS toolName,

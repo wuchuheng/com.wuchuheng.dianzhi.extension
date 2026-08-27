@@ -52,7 +52,6 @@ import {
 } from './ui-session-runtime'
 
 const SETTINGS_KEY = 'dianzhi.settings'
-const SESSION_KEY = 'dianzhi.tab-conversations'
 const UI_SESSION_KEY = 'dianzhi.ui-tab-sessions'
 const nativeSidePanel = chrome.sidePanel as typeof chrome.sidePanel & {
   close(options: { windowId: number }): Promise<void>
@@ -136,20 +135,6 @@ const manager = createConversationManager({
         await conversationUpdateToContent.dispatch([streamUpdate, targetTabId])
       },
     })
-  },
-  session: {
-    load: async () => {
-      const stored = await chrome.storage.session.get(SESSION_KEY)
-      const value = stored[SESSION_KEY]
-      return typeof value === 'object' && value !== null ? (value as Record<string, never>) : {}
-    },
-    save: async (state) => {
-      await chrome.storage.session.set({ [SESSION_KEY]: state })
-    },
-  },
-  sidePanel: {
-    open: async (tabId) => chrome.sidePanel.open({ tabId }),
-    close: async (windowId) => nativeSidePanel.close({ windowId }),
   },
 })
 managerRef.current = manager
@@ -331,7 +316,6 @@ contentSettingsCommand.handle(async (value) => {
   return loadSettings()
 })
 
-chrome.runtime.onConnect.addListener((port) => manager.connect(port))
 chrome.runtime.onConnect.addListener((port) => optionsTestRunner.connect(port))
 relayService()
 void (async () => {

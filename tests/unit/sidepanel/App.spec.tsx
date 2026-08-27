@@ -76,7 +76,6 @@ function snapshot(): ConversationSnapshot {
   return {
     conversation: {
       id: 22,
-      selectionKey: 1,
       tabId: 9,
       toolId: 1,
       toolName: '词典',

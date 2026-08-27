@@ -453,6 +453,34 @@ export function createConfigStore(db: DatabaseConnection, clock: () => string): 
         await tx.exec(
           'CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_selection_tool ON conversations(selection_key, tool_id)'
         )
+      } else {
+        const legacyBridge = await tx.query<{ name: string }>(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'conversation_legacy_tools'"
+        )
+        if (legacyBridge.length > 0) {
+          const ghostRows = await tx.query<{ tool_id_legacy: string }>(
+            'SELECT DISTINCT tool_id_legacy FROM conversation_legacy_tools'
+          )
+          for (const row of ghostRows) {
+            const legacy = row.tool_id_legacy
+            if (mapping[legacy] !== undefined) continue
+            while (usedIds.has(nextId) || existing.has(nextId)) nextId += 1
+            mapping[legacy] = nextId
+            usedIds.add(nextId)
+            nextId += 1
+            await tx.exec(GHOST_TOOL_INSERT_SQL, [mapping[legacy], legacy, '', now, now, now])
+          }
+          for (const [legacy, id] of Object.entries(mapping)) {
+            await tx.exec(
+              `UPDATE conversations SET tool_id = ?
+               WHERE id IN (
+                 SELECT conversation_id FROM conversation_legacy_tools WHERE tool_id_legacy = ?
+               )`,
+              [id, legacy]
+            )
+          }
+          await tx.exec('DROP TABLE conversation_legacy_tools')
+        }
       }
 
       await tx.exec('UPDATE tools SET is_default = 0 WHERE is_default = 1 AND deleted_at IS NULL')

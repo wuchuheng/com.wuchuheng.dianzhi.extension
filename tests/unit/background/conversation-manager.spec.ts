@@ -103,3 +103,46 @@ describe('ConversationManager panel.toggle', () => {
     })
   })
 })
+
+describe('ConversationManager selection-session failure logging', () => {
+  it('does not serialize selection or prompt values after session creation fails', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const database = {
+      request: vi.fn(async (operation: string) => {
+        if (operation === 'createSelectionSession') throw new Error('database unavailable')
+        throw new Error(`Unexpected database operation: ${operation}`)
+      }),
+    } as unknown as OffscreenClient
+    const manager = createConversationManager({
+      database,
+      loadSettings: async () => DEFAULT_SETTINGS,
+      providerRunner: { start: () => ({ stop: vi.fn(), done: Promise.resolve() }) },
+      sendToContent: async () => undefined,
+      session: { load: async () => ({}), save: async () => undefined },
+      sidePanel: { open: vi.fn(), close: vi.fn() },
+    })
+    await manager.initialize()
+
+    await expect(
+      manager.handle(
+        {
+          type: 'conversation.create',
+          requestId: 'create-safe-log',
+          payload: {
+            selectedText: 'SELECTED_TEXT_SENTINEL',
+            contextText: 'CONTEXT_SENTINEL',
+          },
+        },
+        { tab: { id: 9, windowId: 19 } } as chrome.runtime.MessageSender,
+        'content'
+      )
+    ).rejects.toThrow('database unavailable')
+
+    const serialized = JSON.stringify(error.mock.calls)
+    expect(serialized).toContain('createSelectionSession')
+    expect(serialized).toContain('create-safe-log')
+    expect(serialized).not.toContain('SELECTED_TEXT_SENTINEL')
+    expect(serialized).not.toContain('CONTEXT_SENTINEL')
+    expect(serialized).not.toContain('PROMPT_SENTINEL')
+  })
+})

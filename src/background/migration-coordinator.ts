@@ -21,8 +21,8 @@ export interface MigrationDependencies {
  * The running guard makes the migration at-most-once per background life:
  * `ensureMigrated` is invoked on every settings read and every tools command,
  * but the store ops are additionally idempotent (presets are never
- * re-inserted; conversation re-points are guarded by the cleared
- * `tool_id_legacy` column; the settings row is upserted from the same
+ * re-inserted; conversation re-points are guarded by the consumed legacy-tool
+ * staging data; the settings row is upserted from the same
  * document).
  */
 export function createMigrationCoordinator(deps: MigrationDependencies) {

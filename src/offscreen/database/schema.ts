@@ -207,6 +207,16 @@ SELECT selection_key, NULL, MIN(created_at), MAX(updated_at)
 FROM conversations
 GROUP BY selection_key;
 
+CREATE TABLE conversation_legacy_tools (
+  conversation_id INTEGER PRIMARY KEY,
+  tool_id_legacy TEXT NOT NULL
+);
+
+INSERT INTO conversation_legacy_tools (conversation_id, tool_id_legacy)
+SELECT id, tool_id_legacy
+FROM conversations
+WHERE tool_id_legacy IS NOT NULL;
+
 CREATE TABLE conversations_new (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   selection_session_id INTEGER NOT NULL
@@ -227,7 +237,9 @@ INSERT INTO conversations_new (
   id, selection_session_id, tab_id, tool_id, tool_name, title, selected_text,
   context_text, prompt_snapshot, created_at, updated_at
 )
-SELECT id, selection_key, tab_id, tool_id, tool_name, title, selected_text,
+SELECT id, selection_key, tab_id,
+  CASE WHEN tool_id_legacy IS NULL THEN tool_id ELSE -id END,
+  tool_name, title, selected_text,
   context_text, prompt_snapshot, created_at, updated_at
 FROM conversations;
 

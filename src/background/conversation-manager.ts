@@ -383,7 +383,13 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     const stored = await dependencies.database
       .request('createSelectionSession', createArgs)
       .catch((createError: unknown) => {
-        console.error('[dianzhi] createSelectionSession args:', JSON.stringify(createArgs))
+        console.error('[dianzhi] createSelectionSession failed', {
+          operation: 'createSelectionSession',
+          requestId: command.requestId,
+          tabId,
+          replaceSelectionSessionId: createArgs.replaceSelectionSessionId ?? null,
+          code: createError instanceof DianzhiError ? createError.code : 'DB_UNAVAILABLE',
+        })
         throw createError
       })
     const snapshot = snapshotFromStored(stored, settings, tool.id)

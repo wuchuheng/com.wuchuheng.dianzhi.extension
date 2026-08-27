@@ -297,7 +297,7 @@ function assertDatabaseRequest(value: unknown): asserts value is DatabaseRequest
     console.error('[dianzhi] rejected database request', {
       requestId: value.requestId,
       operation: value.operation,
-      args: value.args,
+      code: 'INVALID_EVENT',
     })
     throw invalidRequest()
   }

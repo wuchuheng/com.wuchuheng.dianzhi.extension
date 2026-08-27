@@ -20,6 +20,12 @@ function databaseAt220(): DatabaseSync {
   return db
 }
 
+function databaseAt100(): DatabaseSync {
+  const db = new DatabaseSync(':memory:')
+  db.exec(SCHEMA_RELEASE.migrationSQL)
+  return db
+}
+
 function insertConversation(
   db: DatabaseSync,
   input: { id?: number; selectionKey: number; toolId: number }
@@ -73,6 +79,39 @@ function applyRelease(db: DatabaseSync, release: SelectionSessionRelease): void 
 }
 
 describe('SELECTION_SESSION_RELEASE 2.3.0', () => {
+  it('preserves distinct pre-runtime legacy tool identifiers during a direct upgrade', () => {
+    const release = selectionSessionRelease()
+    expect(release?.version).toBe('2.3.0')
+    if (!release) return
+    const db = databaseAt100()
+    db.exec(`
+      INSERT INTO conversations (
+        id, selection_key, tab_id, tool_id, tool_name, title, selected_text,
+        context_text, prompt_snapshot, created_at, updated_at
+      ) VALUES
+        (10, 10, 9, 'context', 'Context', 'run', 'run', 'run fast', 'Context run', '2026-08-27', '2026-08-27'),
+        (11, 10, 9, 'custom-tool', 'Custom', 'run', 'run', 'run fast', 'Custom run', '2026-08-27', '2026-08-27');
+    `)
+    applyRelease(db, CONFIG_RELEASE)
+    applyRelease(db, TOOL_ID_RELEASE)
+    applyRelease(db, MESSAGE_THROUGHPUT_RELEASE)
+
+    applyRelease(db, release)
+
+    expect(
+      db.prepare('SELECT id, tool_id FROM conversations ORDER BY id').all()
+    ).toEqual([
+      { id: 10, tool_id: -10 },
+      { id: 11, tool_id: -11 },
+    ])
+    expect(
+      db.prepare('SELECT conversation_id, tool_id_legacy FROM conversation_legacy_tools ORDER BY conversation_id').all()
+    ).toEqual([
+      { conversation_id: 10, tool_id_legacy: 'context' },
+      { conversation_id: 11, tool_id_legacy: 'custom-tool' },
+    ])
+  })
+
   it('migrates one selection group into one explicit session', () => {
     const release = selectionSessionRelease()
     expect(release?.version).toBe('2.3.0')

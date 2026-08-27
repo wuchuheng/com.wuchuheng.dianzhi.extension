@@ -98,6 +98,51 @@ describe('ConfigStore customer-tool ID allocation', () => {
     ).resolves.toMatchObject({ context: 1 })
   })
 
+  it('rewires direct-upgrade conversation placeholders from the legacy-tool bridge', async () => {
+    const { connection, db } = createNodeDatabase()
+    const now = clock()
+    const selectionSessionId = createSelectionSession(db, now)
+    db.prepare(
+      `INSERT INTO conversations (
+        id, selection_session_id, tab_id, tool_id, tool_name, title, selected_text,
+        context_text, prompt_snapshot, created_at, updated_at
+      ) VALUES
+        (10, ?, 9, -10, '语境', 'run', 'run', 'run fast', 'Context run', ?, ?),
+        (11, ?, 9, -11, '我的工具', 'run', 'run', 'run fast', 'Custom run', ?, ?)`
+    ).run(selectionSessionId, now, now, selectionSessionId, now, now)
+    db.prepare(
+      `INSERT INTO conversation_legacy_tools (conversation_id, tool_id_legacy)
+       VALUES (10, 'context'), (11, 'myCustom')`
+    ).run()
+    const config = createConfigStore(connection, clock)
+
+    await config.migrateLegacy({
+      legacySettings: {
+        version: 1,
+        ui: { defaultToolId: 'context' },
+        tools: [
+          {
+            id: 'myCustom',
+            name: '我的工具',
+            builtin: false,
+            enabled: true,
+            customPrompt: 'hello',
+          },
+        ],
+      },
+    })
+
+    expect(db.prepare('SELECT id, tool_id FROM conversations ORDER BY id').all()).toEqual([
+      { id: 10, tool_id: 1 },
+      { id: 11, tool_id: 1025 },
+    ])
+    expect(
+      db.prepare(
+        "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'conversation_legacy_tools'"
+      ).get()
+    ).toEqual({ count: 0 })
+  })
+
   it('does not reuse ids after soft removal', async () => {
     const { connection } = createNodeDatabase()
     const config = createConfigStore(connection, clock)

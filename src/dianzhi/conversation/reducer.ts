@@ -33,6 +33,7 @@ export type ConversationViewEvent =
 
 function cloneSnapshot(snapshot: ConversationSnapshot): ConversationSnapshot {
   return {
+    selectionSession: { ...snapshot.selectionSession },
     conversation: { ...snapshot.conversation },
     messages: snapshot.messages.map((message) => ({ ...message })),
     tools: snapshot.tools.map(({ tool, conversationId }) => ({

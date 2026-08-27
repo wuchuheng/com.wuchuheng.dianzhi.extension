@@ -28,6 +28,19 @@ export interface ConversationSessionStore {
   save(state: Record<string, TabConversationState>): Promise<void>
 }
 
+export interface UiConversationGateway {
+  createSelection(input: {
+    tabId: number
+    replaceSelectionSessionId: number | null
+    selectedText: string
+    contextText: string
+  }): Promise<ConversationSnapshot>
+  loadSelectionSession(selectionSessionId: number): Promise<ConversationSnapshot>
+  activateTool(selectionSessionId: number, toolId: number): Promise<ConversationSnapshot>
+  stopSelectionSession(selectionSessionId: number): Promise<void>
+  deleteSelectionSession(selectionSessionId: number): Promise<void>
+}
+
 interface PendingHandoff {
   tabId: number
   resolve(): void
@@ -48,7 +61,8 @@ export interface ConversationManagerDependencies {
     start(input: ProviderRunInput): ProviderRunHandle
     stop?(conversationId: number): boolean
   }
-  sendToContent(tabId: number, update: ConversationUpdate): Promise<void>
+  publishToOwner?(tabId: number, update: ConversationUpdate): Promise<void>
+  sendToContent?(tabId: number, update: ConversationUpdate): Promise<void>
   session: ConversationSessionStore
   sidePanel: {
     open(tabId: number): Promise<void>
@@ -65,6 +79,7 @@ const DEFAULT_SIDE_PANEL_DISCONNECT_GRACE_MS = 500
 
 function cloneSnapshot(snapshot: ConversationSnapshot): ConversationSnapshot {
   return {
+    selectionSession: { ...snapshot.selectionSession },
     conversation: { ...snapshot.conversation },
     messages: snapshot.messages.map((message) => ({ ...message })),
     tools: snapshot.tools.map(({ tool, conversationId }) => ({
@@ -141,25 +156,55 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     }
   }
 
-  function snapshotFromStored(
+  async function snapshotFromStored(
     stored: StoredConversationSnapshot,
-    settings: DianzhiSettings,
-    activeToolId = stored.conversation.toolId
-  ): ConversationSnapshot {
-    const conversations = stored.conversations
-    const messages = stored.messages
+    settings: DianzhiSettings
+  ): Promise<ConversationSnapshot> {
+    const conversations =
+      stored.conversations.length > 0 ? stored.conversations : [stored.conversation]
+    const active = conversations.find(
+      (conversation) => conversation.id === stored.selectionSession.activeConversationId
+    )
+    if (!active) {
+      const fallback = conversations[0]
+      if (!fallback) throw invalid('The selection session has no valid active conversation.')
+      log(Scope.BACKGROUND, 'Recovered stale selection-session active conversation pointer.', {
+        selectionSessionId: stored.selectionSession.id,
+        fallbackConversationId: fallback.id,
+      })
+      const recovered = await dependencies.database.request('setActiveConversation', {
+        selectionSessionId: stored.selectionSession.id,
+        conversationId: fallback.id,
+      })
+      return snapshotFromStored(recovered, settings)
+    }
+
+    if (active.id !== stored.conversation.id) {
+      const activeStored = await dependencies.database.request('getSelectionSession', {
+        id: stored.selectionSession.id,
+      })
+      if (!activeStored) {
+        throw new DianzhiError({
+          code: 'CONVERSATION_NOT_FOUND',
+          message: 'The requested selection session was not found.',
+          context: { selectionSessionId: stored.selectionSession.id },
+        })
+      }
+      return snapshotFromStored(activeStored, settings)
+    }
+
     return {
-      conversation: { ...stored.conversation },
-      messages: messages.map((message) => ({ ...message })),
+      selectionSession: { ...stored.selectionSession },
+      conversation: { ...active },
+      messages: stored.messages.map((message) => ({ ...message })),
       tools: settings.tools
         .filter((tool) => tool.enabled)
         .map((tool) => ({
           tool: { ...tool },
           conversationId:
-            conversations.find((conversation) => conversation.toolId === tool.id)?.id ??
-            (stored.conversation.toolId === tool.id ? stored.conversation.id : null),
+            conversations.find((conversation) => conversation.toolId === tool.id)?.id ?? null,
         })),
-      activeToolId,
+      activeToolId: active.toolId,
     }
   }
 
@@ -179,25 +224,6 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     const destination = subscribers.get(toConversationId) ?? new Set<chrome.runtime.Port>()
     for (const port of ports) destination.add(port)
     subscribers.set(toConversationId, destination)
-  }
-
-  async function stopSelectionRuns(
-    tabId: number,
-    selectionKey: number,
-    fallbackConversationId: number
-  ): Promise<void> {
-    const handles = [...liveRuns.entries()]
-      .filter(([conversationId]) => {
-        const conversation = liveSnapshots.get(conversationId)?.conversation
-        return conversation?.tabId === tabId && conversation.selectionKey === selectionKey
-      })
-      .map(([, handle]) => handle)
-    if (handles.length === 0) {
-      dependencies.providerRunner.stop?.(fallbackConversationId)
-      return
-    }
-    for (const handle of handles) handle.stop()
-    await Promise.all(handles.map((handle) => handle.done.catch(() => undefined)))
   }
 
   function applyUpdate(update: ConversationUpdate): void {
@@ -235,14 +261,8 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     const conversationId =
       'snapshot' in update ? update.snapshot.conversation.id : update.conversationId
     const tabId = tabForConversation(conversationId)
-    if (tabId !== null) await dependencies.sendToContent(tabId, update).catch(() => undefined)
-    for (const port of subscribers.get(conversationId) ?? []) {
-      try {
-        port.postMessage(update)
-      } catch {
-        subscribers.get(conversationId)?.delete(port)
-      }
-    }
+    const publishToOwner = dependencies.publishToOwner ?? dependencies.sendToContent
+    if (tabId !== null) await publishToOwner?.(tabId, update).catch(() => undefined)
   }
 
   async function markPanelClosed(tabId: number, conversationId: number): Promise<void> {
@@ -348,9 +368,159 @@ export function createConversationManager(dependencies: ConversationManagerDepen
           : Promise.resolve(message)
       )
     )
-    const snapshot = snapshotFromStored({ ...stored, messages: recoveredMessages }, settings)
-    liveSnapshots.set(conversationId, cloneSnapshot(snapshot))
+    const snapshot = await snapshotFromStored({ ...stored, messages: recoveredMessages }, settings)
+    liveSnapshots.set(snapshot.conversation.id, cloneSnapshot(snapshot))
     return snapshot
+  }
+
+  async function loadSelectionSession(selectionSessionId: number): Promise<ConversationSnapshot> {
+    const settings = await dependencies.loadSettings()
+    const stored = await dependencies.database.request('getSelectionSession', {
+      id: selectionSessionId,
+    })
+    if (!stored) {
+      throw new DianzhiError({
+        code: 'CONVERSATION_NOT_FOUND',
+        message: 'The requested selection session was not found.',
+        context: { selectionSessionId },
+      })
+    }
+    const snapshot = await snapshotFromStored(stored, settings)
+    liveSnapshots.set(snapshot.conversation.id, cloneSnapshot(snapshot))
+    return cloneSnapshot(snapshot)
+  }
+
+  async function createSelection(
+    input: {
+      tabId: number
+      replaceSelectionSessionId: number | null
+      selectedText: string
+      contextText: string
+    },
+    metadata: { requestId?: string; windowId?: number } = {}
+  ): Promise<ConversationSnapshot> {
+    const settings = await dependencies.loadSettings()
+    const tool =
+      settings.tools.find((item) => item.id === settings.ui.defaultToolId && item.enabled) ??
+      settings.tools.find((item) => item.enabled)
+    if (!tool) throw invalid('No enabled tool is available.')
+    const previous = tabStates.get(input.tabId)
+    if (input.replaceSelectionSessionId !== null)
+      await stopSelectionSession(input.replaceSelectionSessionId)
+    const promptSnapshot = fillTemplate(effectivePrompt(tool), {
+      selected: input.selectedText,
+      context: input.contextText,
+    })
+    const createArgs = {
+      tabId: input.tabId,
+      ...(input.replaceSelectionSessionId !== null
+        ? { replaceSelectionSessionId: input.replaceSelectionSessionId }
+        : {}),
+      tool,
+      selectedText: input.selectedText,
+      contextText: input.contextText,
+      promptSnapshot,
+    }
+    const stored = await dependencies.database
+      .request('createSelectionSession', createArgs)
+      .catch((createError: unknown) => {
+        console.error('[dianzhi] createSelectionSession failed', {
+          operation: 'createSelectionSession',
+          requestId: metadata.requestId,
+          tabId: input.tabId,
+          replaceSelectionSessionId: createArgs.replaceSelectionSessionId ?? null,
+          code: createError instanceof DianzhiError ? createError.code : 'DB_UNAVAILABLE',
+        })
+        throw createError
+      })
+    const snapshot = await snapshotFromStored(stored, settings)
+    tabStates.set(input.tabId, {
+      selectionKey: snapshot.selectionSession.id,
+      activeToolId: snapshot.activeToolId,
+      activeConversationId: snapshot.conversation.id,
+      panelOpen: previous?.panelOpen ?? false,
+      windowId: metadata.windowId ?? previous?.windowId,
+    })
+    await persistStates()
+    const assistant = await dependencies.database.request('appendAssistant', {
+      conversationId: snapshot.conversation.id,
+    })
+    await startProvider(snapshot, settings, assistant)
+    if (previous?.panelOpen) {
+      moveSubscribers(previous.activeConversationId, snapshot.conversation.id)
+    }
+    return cloneSnapshot(liveSnapshots.get(snapshot.conversation.id)!)
+  }
+
+  async function activateTool(
+    selectionSessionId: number,
+    toolId: number
+  ): Promise<ConversationSnapshot> {
+    const settings = await dependencies.loadSettings()
+    const current = await loadSelectionSession(selectionSessionId)
+    const tool = settings.tools.find((item) => item.id === toolId && item.enabled)
+    if (!tool) throw invalid('The requested tool is unavailable.')
+    const promptSnapshot = fillTemplate(effectivePrompt(tool), {
+      selected: current.conversation.selectedText,
+      context: current.conversation.contextText,
+    })
+    const stored = await dependencies.database.request('ensureToolConversation', {
+      selectionSessionId,
+      tool,
+      promptSnapshot,
+    })
+    const snapshot = await snapshotFromStored(stored, settings)
+    const previous = tabStates.get(snapshot.conversation.tabId)
+    tabStates.set(snapshot.conversation.tabId, {
+      selectionKey: snapshot.selectionSession.id,
+      activeToolId: snapshot.activeToolId,
+      activeConversationId: snapshot.conversation.id,
+      panelOpen: previous?.panelOpen ?? false,
+      windowId: previous?.windowId,
+    })
+    liveSnapshots.set(snapshot.conversation.id, cloneSnapshot(snapshot))
+    if (previous?.panelOpen)
+      moveSubscribers(previous.activeConversationId, snapshot.conversation.id)
+    await persistStates()
+    await publish({ type: 'conversation.toolChanged', snapshot })
+    if (snapshot.messages.length === 1) {
+      const assistant = await dependencies.database.request('appendAssistant', {
+        conversationId: snapshot.conversation.id,
+      })
+      await startProvider(snapshot, settings, assistant)
+    }
+    return cloneSnapshot(liveSnapshots.get(snapshot.conversation.id) ?? snapshot)
+  }
+
+  async function stopSelectionSession(selectionSessionId: number): Promise<void> {
+    const conversationIds = [...liveSnapshots.entries()]
+      .filter(([, snapshot]) => snapshot.conversation.selectionSessionId === selectionSessionId)
+      .map(([conversationId]) => conversationId)
+    const handles = conversationIds
+      .map((conversationId) => liveRuns.get(conversationId))
+      .filter((handle): handle is ProviderRunHandle => handle !== undefined)
+    for (const handle of handles) handle.stop()
+    await Promise.all(handles.map((handle) => handle.done.catch(() => undefined)))
+  }
+
+  async function deleteSelectionSession(selectionSessionId: number): Promise<void> {
+    await stopSelectionSession(selectionSessionId)
+    const conversationIds = [...liveSnapshots.entries()]
+      .filter(([, snapshot]) => snapshot.conversation.selectionSessionId === selectionSessionId)
+      .map(([conversationId]) => conversationId)
+    for (const conversationId of conversationIds) {
+      liveSnapshots.delete(conversationId)
+      liveRuns.delete(conversationId)
+      subscribers.delete(conversationId)
+    }
+    let changed = false
+    for (const [tabId, state] of tabStates) {
+      if (state.selectionKey !== selectionSessionId) continue
+      tabStates.delete(tabId)
+      changed = true
+    }
+    if (changed) await persistStates()
+    await dependencies.database.request('deleteSelectionSession', { id: selectionSessionId })
   }
 
   async function handleCreate(
@@ -359,69 +529,17 @@ export function createConversationManager(dependencies: ConversationManagerDepen
   ): Promise<ConversationCommandResult> {
     const tabId = sender.tab?.id
     if (!tabId) throw invalid('A trusted content-script tab is required to create a conversation.')
-    const settings = await dependencies.loadSettings()
-    const tool =
-      settings.tools.find((item) => item.id === settings.ui.defaultToolId && item.enabled) ??
-      settings.tools.find((item) => item.enabled)
-    if (!tool) throw invalid('No enabled tool is available.')
     const previous = tabStates.get(tabId)
-    if (previous) {
-      await stopSelectionRuns(tabId, previous.selectionKey, previous.activeConversationId)
-    }
-    const promptSnapshot = fillTemplate(effectivePrompt(tool), {
-      selected: command.payload.selectedText,
-      context: command.payload.contextText,
-    })
-    const createArgs = {
-      tabId,
-      ...(previous ? { replaceSelectionSessionId: previous.selectionKey } : {}),
-      tool,
-      selectedText: command.payload.selectedText,
-      contextText: command.payload.contextText,
-      promptSnapshot,
-    }
-    const stored = await dependencies.database
-      .request('createSelectionSession', createArgs)
-      .catch((createError: unknown) => {
-        console.error('[dianzhi] createSelectionSession failed', {
-          operation: 'createSelectionSession',
-          requestId: command.requestId,
-          tabId,
-          replaceSelectionSessionId: createArgs.replaceSelectionSessionId ?? null,
-          code: createError instanceof DianzhiError ? createError.code : 'DB_UNAVAILABLE',
-        })
-        throw createError
-      })
-    const snapshot = snapshotFromStored(stored, settings, tool.id)
-    tabStates.set(tabId, {
-      selectionKey: stored.selectionSession.id,
-      activeToolId: tool.id,
-      activeConversationId: stored.conversation.id,
-      panelOpen: previous?.panelOpen ?? false,
-      windowId: sender.tab?.windowId,
-    })
-    await persistStates()
-    const assistant = await dependencies.database.request('appendAssistant', {
-      conversationId: stored.conversation.id,
-    })
-    await startProvider(snapshot, settings, assistant)
-    if (previous?.panelOpen) {
-      moveSubscribers(previous.activeConversationId, stored.conversation.id)
-      const previousSubscribers = subscribers.get(stored.conversation.id)
-      if (previousSubscribers) {
-        const current = liveSnapshots.get(stored.conversation.id)
-        if (current) {
-          for (const port of previousSubscribers) {
-            try {
-              port.postMessage({ type: 'conversation.sync', snapshot: cloneSnapshot(current) })
-            } catch {
-              previousSubscribers.delete(port)
-            }
-          }
-        }
-      }
-    }
-    return { accepted: true, snapshot: cloneSnapshot(liveSnapshots.get(stored.conversation.id)!) }
+    const snapshot = await createSelection(
+      {
+        tabId,
+        replaceSelectionSessionId: previous?.selectionKey ?? null,
+        selectedText: command.payload.selectedText,
+        contextText: command.payload.contextText,
+      },
+      { requestId: command.requestId, windowId: sender.tab?.windowId }
+    )
+    return { accepted: true, snapshot }
   }
 
   async function handle(
@@ -551,8 +669,9 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       if (source === 'content' && snapshot.conversation.tabId !== sender.tab?.id) {
         throw invalid('The conversation does not belong to the sender tab.')
       }
-      liveRuns.get(command.payload.conversationId)?.stop()
-      dependencies.providerRunner.stop?.(command.payload.conversationId)
+      const conversationId = snapshot.conversation.id
+      liveRuns.get(conversationId)?.stop()
+      dependencies.providerRunner.stop?.(conversationId)
       return { accepted: true, snapshot }
     }
 
@@ -561,22 +680,23 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       if (source === 'content' && snapshot.conversation.tabId !== sender.tab?.id) {
         throw invalid('The conversation does not belong to the sender tab.')
       }
-      const previous = liveRuns.get(command.payload.conversationId)
+      const conversationId = snapshot.conversation.id
+      const previous = liveRuns.get(conversationId)
       if (previous) {
         previous.stop()
         await previous.done.catch(() => undefined)
-        const current = liveSnapshots.get(command.payload.conversationId)
+        const current = liveSnapshots.get(conversationId)
         if (current) snapshot.messages = current.messages.map((message) => ({ ...message }))
       }
       const turn = await dependencies.database.request('appendTurn', {
-        conversationId: command.payload.conversationId,
+        conversationId,
         content: command.payload.content,
       })
       snapshot.messages.push({ ...turn.user }, { ...turn.assistant })
       await startProvider(snapshot, settings, turn.assistant)
       return {
         accepted: true,
-        snapshot: cloneSnapshot(liveSnapshots.get(command.payload.conversationId)!),
+        snapshot: cloneSnapshot(liveSnapshots.get(conversationId)!),
       }
     }
 
@@ -591,13 +711,14 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       if (!lastAssistant || !['error', 'stopped'].includes(lastAssistant.status)) {
         throw invalid('Only a failed or stopped response can be retried.')
       }
+      const conversationId = snapshot.conversation.id
       const assistant = await dependencies.database.request('appendAssistant', {
-        conversationId: command.payload.conversationId,
+        conversationId,
       })
       await startProvider(snapshot, settings, assistant)
       return {
         accepted: true,
-        snapshot: cloneSnapshot(liveSnapshots.get(command.payload.conversationId)!),
+        snapshot: cloneSnapshot(liveSnapshots.get(conversationId)!),
       }
     }
 
@@ -606,38 +727,14 @@ export function createConversationManager(dependencies: ConversationManagerDepen
         ([, state]) => state.selectionKey === command.payload.selectionKey
       )
       if (!stateEntry) throw invalid('The selection does not belong to an active tab.')
-      const [tabId, state] = stateEntry
+      const [tabId] = stateEntry
       if (source === 'content' && sender.tab?.id !== tabId) {
         throw invalid('The selection does not belong to the sender tab.')
       }
-      const current = await loadSnapshot(state.activeConversationId, settings)
-      const tool = settings.tools.find((item) => item.id === command.payload.toolId && item.enabled)
-      if (!tool) throw invalid('The requested tool is unavailable.')
-      const promptSnapshot = fillTemplate(effectivePrompt(tool), {
-        selected: current.conversation.selectedText,
-        context: current.conversation.contextText,
-      })
-      const stored = await dependencies.database.request('ensureToolConversation', {
-        selectionSessionId: command.payload.selectionKey,
-        tool,
-        promptSnapshot,
-      })
-      const snapshot = snapshotFromStored(stored, settings, tool.id)
-      const previousConversationId = state.activeConversationId
-      state.activeToolId = tool.id
-      state.activeConversationId = stored.conversation.id
-      tabStates.set(tabId, state)
-      liveSnapshots.set(stored.conversation.id, cloneSnapshot(snapshot))
-      if (state.panelOpen) moveSubscribers(previousConversationId, stored.conversation.id)
-      await persistStates()
-      await publish({ type: 'conversation.toolChanged', snapshot })
-      if (stored.messages.length === 1) {
-        const assistant = await dependencies.database.request('appendAssistant', {
-          conversationId: stored.conversation.id,
-        })
-        await startProvider(snapshot, settings, assistant)
+      return {
+        accepted: true,
+        snapshot: await activateTool(command.payload.selectionKey, command.payload.toolId),
       }
-      return { accepted: true, snapshot: cloneSnapshot(liveSnapshots.get(stored.conversation.id)!) }
     }
 
     if (command.type === 'panel.rendered') {
@@ -826,7 +923,20 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     return snapshot ? cloneSnapshot(snapshot) : null
   }
 
-  return { initialize, handle, publish, connect, disconnect, getLiveSnapshot }
+  return {
+    initialize,
+    handle,
+    publish,
+    connect,
+    disconnect,
+    getLiveSnapshot,
+    createSelection,
+    loadSelectionSession,
+    activateTool,
+    stopSelectionSession,
+    deleteSelectionSession,
+  }
 }
 
-export type ConversationManager = ReturnType<typeof createConversationManager>
+export type ConversationManager = ReturnType<typeof createConversationManager> &
+  UiConversationGateway

@@ -2,104 +2,379 @@ import { describe, expect, it, vi } from 'vitest'
 import { createConversationManager } from '@/background/conversation-manager'
 import type { OffscreenClient } from '@/background/offscreen-client'
 import { DEFAULT_SETTINGS } from '@/dianzhi/domain/settings'
+import type { ConversationRecord, MessageRecord } from '@/dianzhi/domain/protocol'
 import type { StoredConversationSnapshot } from '@/offscreen/database/store'
 
 const at = '2026-08-22T00:00:00.000Z'
 
-function storedConversation(id: number, tabId: number): StoredConversationSnapshot {
+function conversation(
+  id: number,
+  input: { selectionSessionId: number; tabId: number; toolId: number; toolName?: string }
+): ConversationRecord {
   return {
-    selectionSession: {
-      id: 1,
-      activeConversationId: id,
-      createdAt: at,
-      updatedAt: at,
-    },
-    conversation: {
-      id,
-      selectionSessionId: 1,
-      selectionKey: 1,
-      tabId,
-      toolId: 1,
-      toolName: '词典',
-      title: 'run',
-      selectedText: 'run',
-      contextText: 'run fast',
-      promptSnapshot: 'Explain run',
-      createdAt: at,
-      updatedAt: at,
-    },
-    conversations: [],
-    messages: [],
+    id,
+    selectionSessionId: input.selectionSessionId,
+    selectionKey: input.selectionSessionId,
+    tabId: input.tabId,
+    toolId: input.toolId,
+    toolName: input.toolName ?? `Tool ${input.toolId}`,
+    title: 'run',
+    selectedText: 'run',
+    contextText: 'run fast',
+    promptSnapshot: 'Explain run',
+    createdAt: at,
+    updatedAt: at,
   }
 }
 
-describe('ConversationManager panel.toggle', () => {
-  it('closes an empty Side Panel through its tab-bound port', async () => {
-    const close = vi.fn().mockResolvedValue(undefined)
-    let onMessage: ((message: unknown) => void) | undefined
-    const port = {
-      name: 'dianzhi:sidepanel',
-      onMessage: { addListener: vi.fn((listener) => (onMessage = listener)) },
-      onDisconnect: { addListener: vi.fn() },
-      postMessage: vi.fn(),
-    } as unknown as chrome.runtime.Port
-    const manager = createConversationManager({
-      database: {} as OffscreenClient,
-      loadSettings: async () => DEFAULT_SETTINGS,
-      providerRunner: { start: () => ({ stop: vi.fn(), done: Promise.resolve() }) },
-      sendToContent: async () => undefined,
-      session: { load: async () => ({}), save: async () => undefined },
-      sidePanel: { open: vi.fn(), close },
-    })
-    await manager.initialize()
-    manager.connect(port)
+function message(
+  id: number,
+  conversationId: number,
+  input: { sequence: number; role: MessageRecord['role']; status?: MessageRecord['status'] }
+): MessageRecord {
+  return {
+    id,
+    conversationId,
+    sequence: input.sequence,
+    role: input.role,
+    content: input.role === 'user' ? 'Explain run' : '',
+    reasoningContent: '',
+    estimatedThroughputTps: null,
+    status: input.status ?? (input.role === 'assistant' ? 'streaming' : 'completed'),
+    errorCode: null,
+    errorMessage: null,
+    createdAt: at,
+    updatedAt: at,
+  }
+}
 
-    onMessage?.({ type: 'ready', tabId: 9, windowId: 19 })
-    onMessage?.({ type: 'close' })
-    await Promise.resolve()
+function storedSnapshot(input: {
+  selectionSessionId: number
+  activeConversationId: number
+  conversation: ConversationRecord
+  conversations?: ConversationRecord[]
+  messages?: MessageRecord[]
+}): StoredConversationSnapshot {
+  return {
+    selectionSession: {
+      id: input.selectionSessionId,
+      activeConversationId: input.activeConversationId,
+      createdAt: at,
+      updatedAt: at,
+    },
+    conversation: input.conversation,
+    conversations: input.conversations ?? [input.conversation],
+    messages: input.messages ?? [],
+  }
+}
 
-    expect(close).toHaveBeenCalledWith(19)
+function createDoneHandle() {
+  let resolveDone!: () => void
+  const done = new Promise<void>((resolve) => {
+    resolveDone = resolve
   })
+  const stop = vi.fn(() => resolveDone())
+  return { done, stop }
+}
 
-  it('closes the tab panel even when the content script sends an older conversation ID', async () => {
-    const close = vi.fn().mockResolvedValue(undefined)
-    const savedStates: Record<string, unknown>[] = []
+function createManager(
+  database: OffscreenClient,
+  extras: Partial<Parameters<typeof createConversationManager>[0]> = {}
+) {
+  const providerRunner = extras.providerRunner ?? {
+    start: vi.fn(() => ({ stop: vi.fn(), done: Promise.resolve() })),
+  }
+  const publishToOwner = extras.publishToOwner ?? vi.fn(async () => undefined)
+  const manager = createConversationManager({
+    database,
+    loadSettings: async () => DEFAULT_SETTINGS,
+    providerRunner,
+    publishToOwner,
+    session: { load: async () => ({}), save: async () => undefined },
+    sidePanel: { open: vi.fn(), close: vi.fn() },
+    ...extras,
+  })
+  return { manager, providerRunner, publishToOwner }
+}
+
+describe('ConversationManager session gateway', () => {
+  it('creates one session, appends one assistant, and starts one run', async () => {
+    const root = conversation(22, { selectionSessionId: 10, tabId: 9, toolId: 1 })
+    const assistant = message(102, 22, { sequence: 2, role: 'assistant' })
     const database = {
-      request: vi.fn(async (operation: string, args: { id: number }) => {
-        if (operation === 'getConversation') return storedConversation(args.id, 9)
+      request: vi.fn(async (operation: string, args: unknown) => {
+        if (operation === 'createSelectionSession') {
+          return storedSnapshot({
+            selectionSessionId: 10,
+            activeConversationId: 22,
+            conversation: root,
+            messages: [message(101, 22, { sequence: 1, role: 'user' })],
+          })
+        }
+        if (operation === 'appendAssistant') return assistant
         throw new Error(`Unexpected database operation: ${operation}`)
       }),
     } as unknown as OffscreenClient
-    const manager = createConversationManager({
-      database,
-      loadSettings: async () => DEFAULT_SETTINGS,
-      providerRunner: { start: () => ({ stop: vi.fn(), done: Promise.resolve() }) },
-      sendToContent: async () => undefined,
-      session: {
-        load: async () => ({
-          '9': {
-            selectionKey: 1,
-            activeToolId: 1,
-            activeConversationId: 22,
-            panelOpen: true,
-            windowId: 19,
-          },
-        }),
-        save: async (state) => savedStates.push(state),
-      },
-      sidePanel: { open: vi.fn(), close },
+    const { manager, providerRunner } = createManager(database)
+
+    const snapshot = await manager.createSelection({
+      tabId: 9,
+      replaceSelectionSessionId: null,
+      selectedText: 'run',
+      contextText: 'run fast',
     })
-    await manager.initialize()
+
+    expect(database.request).toHaveBeenCalledWith(
+      'createSelectionSession',
+      expect.objectContaining({ tabId: 9 })
+    )
+    expect(database.request).toHaveBeenCalledWith('appendAssistant', { conversationId: 22 })
+    expect(providerRunner.start).toHaveBeenCalledTimes(1)
+    expect(snapshot.selectionSession.id).toBe(10)
+    expect(snapshot.conversation.id).toBe(22)
+  })
+
+  it('activates the unique conversation for a tool and persists the pointer', async () => {
+    const root = conversation(22, { selectionSessionId: 10, tabId: 9, toolId: 1 })
+    const toolConversation = conversation(23, { selectionSessionId: 10, tabId: 9, toolId: 2 })
+    const database = {
+      request: vi.fn(async (operation: string) => {
+        if (operation === 'getSelectionSession') {
+          return storedSnapshot({
+            selectionSessionId: 10,
+            activeConversationId: 22,
+            conversation: root,
+            conversations: [root],
+          })
+        }
+        if (operation === 'ensureToolConversation') {
+          return storedSnapshot({
+            selectionSessionId: 10,
+            activeConversationId: 23,
+            conversation: toolConversation,
+            conversations: [root, toolConversation],
+          })
+        }
+        throw new Error(`Unexpected database operation: ${operation}`)
+      }),
+    } as unknown as OffscreenClient
+    const { manager } = createManager(database)
+
+    const snapshot = await manager.activateTool(10, 2)
+
+    expect(database.request).toHaveBeenCalledWith(
+      'ensureToolConversation',
+      expect.objectContaining({
+        selectionSessionId: 10,
+        tool: expect.objectContaining({ id: 2 }),
+      })
+    )
+    expect(snapshot.selectionSession.activeConversationId).toBe(23)
+    expect(snapshot.activeToolId).toBe(2)
+  })
+
+  it('recovers a stale active pointer before exposing a session snapshot', async () => {
+    const root = conversation(22, { selectionSessionId: 10, tabId: 9, toolId: 1 })
+    const repaired = storedSnapshot({
+      selectionSessionId: 10,
+      activeConversationId: 22,
+      conversation: root,
+      conversations: [root],
+    })
+    const database = {
+      request: vi.fn(async (operation: string) => {
+        if (operation === 'getSelectionSession') {
+          return storedSnapshot({
+            selectionSessionId: 10,
+            activeConversationId: 999,
+            conversation: root,
+            conversations: [root],
+          })
+        }
+        if (operation === 'setActiveConversation') return repaired
+        throw new Error(`Unexpected database operation: ${operation}`)
+      }),
+    } as unknown as OffscreenClient
+    const { manager } = createManager(database)
+
+    const snapshot = await manager.loadSelectionSession(10)
+
+    expect(database.request).toHaveBeenCalledWith('setActiveConversation', {
+      selectionSessionId: 10,
+      conversationId: 22,
+    })
+    expect(snapshot.selectionSession.activeConversationId).toBe(22)
+    expect(snapshot.conversation.id).toBe(22)
+  })
+
+  it('routes stream updates through the owner publisher without broadcasting to subscribers', async () => {
+    const root = conversation(22, { selectionSessionId: 10, tabId: 9, toolId: 1 })
+    const assistant = message(102, 22, { sequence: 2, role: 'assistant' })
+    const database = {
+      request: vi.fn(async (operation: string) => {
+        if (operation === 'createSelectionSession') {
+          return storedSnapshot({
+            selectionSessionId: 10,
+            activeConversationId: 22,
+            conversation: root,
+            messages: [message(101, 22, { sequence: 1, role: 'user' })],
+          })
+        }
+        if (operation === 'appendAssistant') return assistant
+        throw new Error(`Unexpected database operation: ${operation}`)
+      }),
+    } as unknown as OffscreenClient
+    const { manager, publishToOwner } = createManager(database)
+    const port = {
+      name: 'dianzhi:sidepanel',
+      onMessage: { addListener: vi.fn() },
+      onDisconnect: { addListener: vi.fn() },
+      postMessage: vi.fn(),
+    } as unknown as chrome.runtime.Port
+
+    const snapshot = await manager.createSelection({
+      tabId: 9,
+      replaceSelectionSessionId: null,
+      selectedText: 'run',
+      contextText: 'run fast',
+    })
+    manager.connect(port)
+    ;(port.onMessage.addListener as ReturnType<typeof vi.fn>).mock.calls[0][0]({
+      type: 'subscribe',
+      conversationId: snapshot.conversation.id,
+    })
+    vi.mocked(publishToOwner).mockClear()
+    ;(port.postMessage as ReturnType<typeof vi.fn>).mockClear()
+
+    await manager.publish({
+      type: 'stream.delta',
+      conversationId: 22,
+      messageId: 102,
+      content: 'fast',
+    })
+
+    expect(publishToOwner).toHaveBeenCalledWith(9, {
+      type: 'stream.delta',
+      conversationId: 22,
+      messageId: 102,
+      content: 'fast',
+    })
+    expect(port.postMessage).not.toHaveBeenCalled()
+  })
+
+  it('stops every live run in a selection session before deleting it', async () => {
+    const root = conversation(22, { selectionSessionId: 10, tabId: 9, toolId: 1 })
+    const toolConversation = conversation(23, { selectionSessionId: 10, tabId: 9, toolId: 2 })
+    const handles = [createDoneHandle(), createDoneHandle()]
+    let appendAssistantCalls = 0
+    const database = {
+      request: vi.fn(async (operation: string) => {
+        if (operation === 'createSelectionSession') {
+          return storedSnapshot({
+            selectionSessionId: 10,
+            activeConversationId: 22,
+            conversation: root,
+            conversations: [root],
+            messages: [message(101, 22, { sequence: 1, role: 'user' })],
+          })
+        }
+        if (operation === 'appendAssistant') {
+          const conversationId = appendAssistantCalls === 0 ? 22 : 23
+          const assistant = message(102 + appendAssistantCalls, conversationId, {
+            sequence: 2,
+            role: 'assistant',
+          })
+          appendAssistantCalls += 1
+          return assistant
+        }
+        if (operation === 'getSelectionSession') {
+          return storedSnapshot({
+            selectionSessionId: 10,
+            activeConversationId: 22,
+            conversation: root,
+            conversations: [root],
+          })
+        }
+        if (operation === 'ensureToolConversation') {
+          return storedSnapshot({
+            selectionSessionId: 10,
+            activeConversationId: 23,
+            conversation: toolConversation,
+            conversations: [root, toolConversation],
+            messages: [message(201, 23, { sequence: 1, role: 'user' })],
+          })
+        }
+        if (operation === 'deleteSelectionSession') return undefined
+        throw new Error(`Unexpected database operation: ${operation}`)
+      }),
+    } as unknown as OffscreenClient
+    let nextHandle = 0
+    const { manager } = createManager(database, {
+      providerRunner: {
+        start: vi.fn(() => handles[nextHandle++]),
+      },
+    })
+
+    await manager.createSelection({
+      tabId: 9,
+      replaceSelectionSessionId: null,
+      selectedText: 'run',
+      contextText: 'run fast',
+    })
+    await manager.activateTool(10, 2)
+    await manager.deleteSelectionSession(10)
+
+    expect(handles[0].stop).toHaveBeenCalledTimes(1)
+    expect(handles[1].stop).toHaveBeenCalledTimes(1)
+    expect(database.request).toHaveBeenCalledWith('deleteSelectionSession', { id: 10 })
+    expect(manager.getLiveSnapshot(22)).toBeNull()
+    expect(manager.getLiveSnapshot(23)).toBeNull()
+  })
+
+  it('routes legacy followups to the active conversation in the owning session', async () => {
+    const staleConversation = conversation(22, { selectionSessionId: 10, tabId: 9, toolId: 1 })
+    const activeConversation = conversation(23, { selectionSessionId: 10, tabId: 9, toolId: 2 })
+    const turn = {
+      user: message(201, 23, { sequence: 2, role: 'user' }),
+      assistant: message(202, 23, { sequence: 3, role: 'assistant' }),
+    }
+    const database = {
+      request: vi.fn(async (operation: string) => {
+        if (operation === 'getConversation') {
+          return storedSnapshot({
+            selectionSessionId: 10,
+            activeConversationId: 23,
+            conversation: staleConversation,
+            conversations: [staleConversation, activeConversation],
+          })
+        }
+        if (operation === 'getSelectionSession') {
+          return storedSnapshot({
+            selectionSessionId: 10,
+            activeConversationId: 23,
+            conversation: activeConversation,
+            conversations: [staleConversation, activeConversation],
+          })
+        }
+        if (operation === 'appendTurn') return turn
+        throw new Error(`Unexpected database operation: ${operation}`)
+      }),
+    } as unknown as OffscreenClient
+    const { manager } = createManager(database)
 
     await manager.handle(
-      { type: 'panel.toggle', requestId: 'toggle-1', payload: { conversationId: 11 } },
+      {
+        type: 'conversation.followup',
+        requestId: 'followup-active',
+        payload: { conversationId: 22, content: 'again' },
+      },
       { tab: { id: 9, windowId: 19 } } as chrome.runtime.MessageSender,
       'content'
     )
 
-    expect(close).toHaveBeenCalledWith(19)
-    expect(savedStates.at(-1)).toMatchObject({
-      '9': { activeConversationId: 22, panelOpen: false },
+    expect(database.request).toHaveBeenCalledWith('appendTurn', {
+      conversationId: 23,
+      content: 'again',
     })
   })
 })
@@ -113,36 +388,22 @@ describe('ConversationManager selection-session failure logging', () => {
         throw new Error(`Unexpected database operation: ${operation}`)
       }),
     } as unknown as OffscreenClient
-    const manager = createConversationManager({
-      database,
-      loadSettings: async () => DEFAULT_SETTINGS,
-      providerRunner: { start: () => ({ stop: vi.fn(), done: Promise.resolve() }) },
-      sendToContent: async () => undefined,
-      session: { load: async () => ({}), save: async () => undefined },
-      sidePanel: { open: vi.fn(), close: vi.fn() },
-    })
-    await manager.initialize()
+    const { manager } = createManager(database)
 
     await expect(
-      manager.handle(
-        {
-          type: 'conversation.create',
-          requestId: 'create-safe-log',
-          payload: {
-            selectedText: 'SELECTED_TEXT_SENTINEL',
-            contextText: 'CONTEXT_SENTINEL',
-          },
-        },
-        { tab: { id: 9, windowId: 19 } } as chrome.runtime.MessageSender,
-        'content'
-      )
+      manager.createSelection({
+        tabId: 9,
+        replaceSelectionSessionId: null,
+        selectedText: 'SELECTED_TEXT_SENTINEL',
+        contextText: 'CONTEXT_SENTINEL',
+      })
     ).rejects.toThrow('database unavailable')
 
     const serialized = JSON.stringify(error.mock.calls)
     expect(serialized).toContain('createSelectionSession')
-    expect(serialized).toContain('create-safe-log')
     expect(serialized).not.toContain('SELECTED_TEXT_SENTINEL')
     expect(serialized).not.toContain('CONTEXT_SENTINEL')
     expect(serialized).not.toContain('PROMPT_SENTINEL')
+    error.mockRestore()
   })
 })

@@ -97,7 +97,7 @@ const manager = createConversationManager({
   database,
   loadSettings,
   providerRunner,
-  sendToContent: async (tabId, update) => {
+  publishToOwner: async (tabId, update) => {
     await conversationUpdateToContent.dispatch([update, tabId])
   },
   session: {

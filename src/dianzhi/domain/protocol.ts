@@ -53,6 +53,7 @@ export interface ToolConversationRef {
 }
 
 export interface ConversationSnapshot {
+  selectionSession: SelectionSessionRecord
   conversation: ConversationRecord
   messages: MessageRecord[]
   tools: ToolConversationRef[]

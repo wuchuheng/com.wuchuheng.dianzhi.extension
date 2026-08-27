@@ -306,6 +306,36 @@ describe('ui-session-runtime: Chrome event routing', () => {
     expect(coordinator.onTabRemoved).not.toHaveBeenCalled()
     expect(coordinator.onPanelOpened).not.toHaveBeenCalled()
   })
+
+  it('registers on Chrome 141 without sidePanel.onClosed and still wires the other listeners', () => {
+    const { chrome, tabs, sidePanel } = fakeChromeRuntime()
+    // Chrome 141 exposes onOpened but not onClosed (added in Chrome 142).
+    const chrome141 = {
+      ...chrome,
+      sidePanel: { onOpened: sidePanel.onOpened },
+    } as unknown as typeof chrome
+    const coordinator = mockCoordinator()
+    const command = stubSidePanelEvent()
+    const updates = stubSidePanelEvent()
+    const stop = registerUiSessionRuntime({
+      chromeApi: chrome141,
+      coordinator,
+      sidePanelCommand: command,
+      sidePanelConversationUpdate: updates,
+    })
+
+    tabs.onActivated.emit({ tabId: 9, windowId: 19 })
+    tabs.onRemoved.emit(9, { windowId: 19, isWindowClosing: false })
+    tabs.onUpdated.emit(9, { status: 'loading', url: PAGE_2 }, tab(9, 19, PAGE_2))
+    sidePanel.onOpened.emit({ windowId: 19, path: PANEL_PATH })
+    sidePanel.onClosed.emit({ windowId: 19, path: PANEL_PATH })
+    expect(coordinator.onTabActivated).toHaveBeenCalledWith(9, 19)
+    expect(coordinator.onTabRemoved).toHaveBeenCalledWith(9, 19)
+    expect(coordinator.onTabUpdated).toHaveBeenCalledWith(9, 19, PAGE_2)
+    expect(coordinator.onPanelOpened).toHaveBeenCalledWith(19)
+    expect(coordinator.onPanelClosed).not.toHaveBeenCalled()
+    expect(stop).not.toThrow()
+  })
 })
 
 describe('ui-session-runtime: panel sender to window resolution', () => {
@@ -592,7 +622,7 @@ describe('ui-session-runtime: session state reconciliation', () => {
     expect(deleteOrphan).toHaveBeenCalledWith([10])
   })
 
-  it('drops records whose normalized URL no longer matches the live tab', async () => {
+  it('drops records whose normalized URL no longer matches the live tab without wiping orphans', async () => {
     const stored = {
       '9': storedState(9, 19, PAGE_NORMALIZED, 10),
     }
@@ -605,6 +635,36 @@ describe('ui-session-runtime: session state reconciliation', () => {
       deleteOrphanSelectionSessions: deleteOrphan,
     })
     expect(save).toHaveBeenCalledWith({})
-    expect(deleteOrphan).toHaveBeenCalledWith([])
+    // A zero retained set would delete every selection session; the guard skips it.
+    expect(deleteOrphan).not.toHaveBeenCalled()
+  })
+
+  it('does not call orphan deletion when no records are stored', async () => {
+    const save = vi.fn(async () => undefined)
+    const deleteOrphan = vi.fn(async () => undefined)
+    await reconcileUiSessionState({
+      sessionStore: { load: async () => ({}), save },
+      getTab: vi.fn(async () => ({ id: 9, windowId: 19, url: PAGE })),
+      deleteOrphanSelectionSessions: deleteOrphan,
+    })
+    expect(save).not.toHaveBeenCalled()
+    expect(deleteOrphan).not.toHaveBeenCalled()
+  })
+
+  it('does not call orphan deletion when no retained record owns a selection session', async () => {
+    const stored = {
+      '9': storedState(9, 19, PAGE_NORMALIZED, null),
+    }
+    const save = vi.fn(async () => undefined)
+    const deleteOrphan = vi.fn(async () => undefined)
+    await reconcileUiSessionState({
+      sessionStore: { load: async () => stored, save },
+      getTab: vi.fn(async () => ({ id: 9, windowId: 19, url: PAGE })),
+      deleteOrphanSelectionSessions: deleteOrphan,
+    })
+    expect(save).toHaveBeenCalledWith({
+      '9': expect.objectContaining({ selectionSessionId: null }),
+    })
+    expect(deleteOrphan).not.toHaveBeenCalled()
   })
 })

@@ -35,10 +35,11 @@ type SidePanelClosedEvent = chrome.events.Event<(info: chrome.sidePanel.PanelClo
 
 /**
  * Chrome 142 added `sidePanel.onClosed`; the pinned type defs still only expose
- * `onOpened`. The narrow cast keeps the runtime listener available on 141+.
+ * `onOpened`. The narrow cast keeps the runtime listener available when Chrome
+ * exposes the event and yields `undefined` on 141 so registration can be guarded.
  */
-function sidePanelClosedEvent(chromeApi: typeof chrome): SidePanelClosedEvent {
-  return (chromeApi.sidePanel as typeof chrome.sidePanel & { onClosed: SidePanelClosedEvent })
+function sidePanelClosedEvent(chromeApi: typeof chrome): SidePanelClosedEvent | undefined {
+  return (chromeApi.sidePanel as typeof chrome.sidePanel & { onClosed?: SidePanelClosedEvent })
     .onClosed
 }
 
@@ -279,7 +280,7 @@ async function runContentRequest<P extends { requestId: string }, R>(input: {
       source: 'contentScript',
       tabId: source.tabId,
       windowId: source.windowId,
-      pageUrl: source.pageUrl,
+      pageUrl: normalizedForLog(source.pageUrl),
       outcome: 'validated',
     })
   } catch (error) {
@@ -302,7 +303,7 @@ async function runContentRequest<P extends { requestId: string }, R>(input: {
       source: 'contentScript',
       tabId: source.tabId,
       windowId: source.windowId,
-      pageUrl: source.pageUrl,
+      pageUrl: normalizedForLog(source.pageUrl),
       outcome: 'committed',
       ...(commit?.(request, result) ?? {}),
     })
@@ -314,7 +315,7 @@ async function runContentRequest<P extends { requestId: string }, R>(input: {
       source: 'contentScript',
       tabId: source.tabId,
       windowId: source.windowId,
-      pageUrl: source.pageUrl,
+      pageUrl: normalizedForLog(source.pageUrl),
       outcome: 'failed',
     })
     throw error
@@ -351,7 +352,7 @@ async function runPanelRequest<P extends { requestId: string }, R>(input: {
       source: 'sidePanel',
       tabId: source.tabId,
       windowId: source.windowId,
-      pageUrl: source.pageUrl,
+      pageUrl: normalizedForLog(source.pageUrl),
       outcome: 'validated',
     })
   } catch (error) {
@@ -371,7 +372,7 @@ async function runPanelRequest<P extends { requestId: string }, R>(input: {
       source: 'sidePanel',
       tabId: source.tabId,
       windowId: source.windowId,
-      pageUrl: source.pageUrl,
+      pageUrl: normalizedForLog(source.pageUrl),
       outcome: 'committed',
       ...(commit?.(request, result) ?? {}),
     })
@@ -383,7 +384,7 @@ async function runPanelRequest<P extends { requestId: string }, R>(input: {
       source: 'sidePanel',
       tabId: source.tabId,
       windowId: source.windowId,
-      pageUrl: source.pageUrl,
+      pageUrl: normalizedForLog(source.pageUrl),
       outcome: 'failed',
     })
     throw error
@@ -676,8 +677,10 @@ export function registerUiSessionRuntime(input: {
     })
   }
   const panelClosedEvent = sidePanelClosedEvent(chromeApi)
-  panelClosedEvent.addListener(onSidePanelClosed)
-  disposers.push(() => panelClosedEvent.removeListener(onSidePanelClosed))
+  if (panelClosedEvent) {
+    panelClosedEvent.addListener(onSidePanelClosed)
+    disposers.push(() => panelClosedEvent.removeListener(onSidePanelClosed))
+  }
 
   const onConnect = (port: chrome.runtime.Port): void => {
     const commandAccepted = sidePanelCommand.accept(port)
@@ -714,8 +717,11 @@ function isValidStoredState(value: unknown): value is TabSessionState {
 
 /**
  * Reconciles persisted UI tab sessions against the live browser tab set: records
- * whose tab/window/URL no longer match exactly are dropped, the retained records
- * are written back, and the dropped selection sessions are deleted as orphans.
+ * whose tab/window/URL no longer match exactly are dropped and the retained
+ * records are written back. Orphan selection sessions are deleted only when at
+ * least one retained record still owns a session, so an empty retained set can
+ * never wipe the session table (which would also destroy legacy pre-coordinator
+ * sessions that were never tracked here).
  */
 export async function reconcileUiSessionState(input: {
   sessionStore: {
@@ -765,5 +771,7 @@ export async function reconcileUiSessionState(input: {
     droppedRecords: entries.length - Object.keys(retained).length,
     outcome: 'committed',
   })
-  await input.deleteOrphanSelectionSessions(retainedSessionIds)
+  if (retainedSessionIds.length > 0) {
+    await input.deleteOrphanSelectionSessions(retainedSessionIds)
+  }
 }

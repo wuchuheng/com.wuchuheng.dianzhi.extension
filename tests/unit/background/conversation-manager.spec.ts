@@ -106,7 +106,7 @@ describe('ConversationManager session gateway', () => {
     const root = conversation(22, { selectionSessionId: 10, tabId: 9, toolId: 1 })
     const assistant = message(102, 22, { sequence: 2, role: 'assistant' })
     const database = {
-      request: vi.fn(async (operation: string, args: unknown) => {
+      request: vi.fn(async (operation: string, _args: unknown) => {
         if (operation === 'createSelectionSession') {
           return storedSnapshot({
             selectionSessionId: 10,
@@ -505,10 +505,14 @@ describe('ConversationManager session gateway', () => {
       root: ConversationSnapshot | null
       tool: ConversationSnapshot | null
     } | null = null
-    let manager!: ReturnType<typeof createConversationManager>
+    const managerRef: { current: ReturnType<typeof createConversationManager> | null } = {
+      current: null,
+    }
     const database = {
       request: vi.fn(async (operation: string, args: { replaceSelectionSessionId?: number }) => {
         if (operation === 'createSelectionSession' && args.replaceSelectionSessionId === 10) {
+          const manager = managerRef.current
+          if (!manager) throw new Error('Manager fixture is not initialized.')
           oldStateAtReplacement = {
             root: manager.getLiveSnapshot(22),
             tool: manager.getLiveSnapshot(23),
@@ -561,11 +565,12 @@ describe('ConversationManager session gateway', () => {
       }),
     } as unknown as OffscreenClient
     let nextHandle = 0
-    ;({ manager } = createManager(database, {
+    const { manager } = createManager(database, {
       providerRunner: {
         start: vi.fn(() => handles[nextHandle++]),
       },
-    }))
+    })
+    managerRef.current = manager
 
     await manager.createSelection({
       tabId: 9,

@@ -75,7 +75,8 @@ it('repairs a nullable active pointer before restoring a selection session', asy
 
   expect(restored?.selectionSession.activeConversationId).toBe(created.conversation.id)
   expect(
-    db.prepare('SELECT active_conversation_id FROM selection_sessions WHERE id = ?')
+    db
+      .prepare('SELECT active_conversation_id FROM selection_sessions WHERE id = ?')
       .get(created.selectionSession.id)
   ).toEqual({ active_conversation_id: created.conversation.id })
 })

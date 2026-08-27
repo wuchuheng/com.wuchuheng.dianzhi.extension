@@ -425,7 +425,9 @@ export function createConfigStore(db: DatabaseConnection, clock: () => string): 
         ])
       }
 
-      const conversationColumns = await tx.query<{ name: string }>('PRAGMA table_info(conversations)')
+      const conversationColumns = await tx.query<{ name: string }>(
+        'PRAGMA table_info(conversations)'
+      )
       if (conversationColumns.some((column) => column.name === 'tool_id_legacy')) {
         const ghostRows = await tx.query<{ tool_id_legacy: string }>(
           'SELECT DISTINCT tool_id_legacy FROM conversations WHERE tool_id_legacy IS NOT NULL'
@@ -441,7 +443,10 @@ export function createConfigStore(db: DatabaseConnection, clock: () => string): 
         }
 
         for (const [legacy, id] of Object.entries(mapping)) {
-          await tx.exec('UPDATE conversations SET tool_id = ? WHERE tool_id_legacy = ?', [id, legacy])
+          await tx.exec('UPDATE conversations SET tool_id = ? WHERE tool_id_legacy = ?', [
+            id,
+            legacy,
+          ])
         }
         await tx.exec(
           'UPDATE conversations SET tool_id_legacy = NULL WHERE tool_id_legacy IS NOT NULL'

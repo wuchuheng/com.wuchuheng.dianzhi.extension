@@ -158,7 +158,9 @@ function isOrderedIds(value: unknown): value is number[] {
 }
 
 function isUniquePositiveIntegerList(value: unknown): value is number[] {
-  return Array.isArray(value) && value.every(isPositiveInteger) && new Set(value).size === value.length
+  return (
+    Array.isArray(value) && value.every(isPositiveInteger) && new Set(value).size === value.length
+  )
 }
 
 function isSettingsData(value: unknown): value is string {

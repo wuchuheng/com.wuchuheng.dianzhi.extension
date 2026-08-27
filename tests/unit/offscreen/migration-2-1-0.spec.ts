@@ -14,7 +14,7 @@ describe('TOOL_ID_RELEASE 2.1.0', () => {
   })
 
   it('moves a pre-2.1.0 customer tool out of the reserved range and lets english insert at id 5', async () => {
-    const { connection, db } = createNodeDatabase()
+    const { connection, db } = createNodeDatabase({ includeToolIdRelease: false })
     const now = clock()
     // A pre-2.1.0 install: four presets plus a customer tool sitting at id 5.
     ;(

@@ -5,7 +5,10 @@ import { createNodeDatabase } from './sqlite-helper'
 
 const clock = () => '2026-08-26T00:00:00.000Z'
 
-function createSelectionSession(db: ReturnType<typeof createNodeDatabase>['db'], now: string): number {
+function createSelectionSession(
+  db: ReturnType<typeof createNodeDatabase>['db'],
+  now: string
+): number {
   return Number(
     db
       .prepare(
@@ -137,9 +140,11 @@ describe('ConfigStore customer-tool ID allocation', () => {
       { id: 11, tool_id: 1025 },
     ])
     expect(
-      db.prepare(
-        "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'conversation_legacy_tools'"
-      ).get()
+      db
+        .prepare(
+          "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name = 'conversation_legacy_tools'"
+        )
+        .get()
     ).toEqual({ count: 0 })
   })
 

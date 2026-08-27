@@ -280,7 +280,9 @@ export function createConversationStore(db: DatabaseConnection, clock: () => str
     const now = clock()
     const selectionSessionId = await db.transaction(async (tx) => {
       if (input.replaceSelectionSessionId !== undefined) {
-        await tx.exec('DELETE FROM selection_sessions WHERE id = ?', [input.replaceSelectionSessionId])
+        await tx.exec('DELETE FROM selection_sessions WHERE id = ?', [
+          input.replaceSelectionSessionId,
+        ])
       }
       const sessionInsert = await tx.exec(
         `INSERT INTO selection_sessions (active_conversation_id, created_at, updated_at)
@@ -330,7 +332,9 @@ export function createConversationStore(db: DatabaseConnection, clock: () => str
     selectionSessionId: number,
     conversationId: number
   ): Promise<StoredConversationSnapshot> {
-    await db.transaction((tx) => updateActiveConversation(tx, selectionSessionId, conversationId, clock()))
+    await db.transaction((tx) =>
+      updateActiveConversation(tx, selectionSessionId, conversationId, clock())
+    )
     const snapshot = await getSelectionSession(selectionSessionId)
     if (snapshot) return snapshot
     throw new DianzhiError({

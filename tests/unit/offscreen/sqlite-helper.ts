@@ -13,6 +13,12 @@ export interface NodeDb {
   connection: DatabaseConnection
 }
 
+export interface NodeDatabaseOptions {
+  includeToolIdRelease?: boolean
+  includeMessageThroughputRelease?: boolean
+  includeSelectionSessionRelease?: boolean
+}
+
 /**
  * ConfigStore emits positional `?` bindings only, and the vendored migration
  * DDL runs directly on the raw `db` (see createNodeDatabase), so every
@@ -35,13 +41,21 @@ function bindValue(value: SqlValue): unknown {
  * wraps it in the app's DatabaseConnection contract so ConfigStore can run
  * against a real SQL engine in unit tests.
  */
-export function createNodeDatabase(options: { includeSelectionSessionRelease?: boolean } = {}): NodeDb {
+export function createNodeDatabase(options: NodeDatabaseOptions = {}): NodeDb {
   const db = new DatabaseSync(':memory:')
   db.exec(SCHEMA_RELEASE.migrationSQL)
   db.exec(CONFIG_RELEASE.migrationSQL)
-  db.exec(TOOL_ID_RELEASE.migrationSQL)
-  db.exec(MESSAGE_THROUGHPUT_RELEASE.migrationSQL)
-  if (options.includeSelectionSessionRelease ?? true) {
+  if (options.includeToolIdRelease ?? true) {
+    db.exec(TOOL_ID_RELEASE.migrationSQL)
+  }
+  if ((options.includeToolIdRelease ?? true) && (options.includeMessageThroughputRelease ?? true)) {
+    db.exec(MESSAGE_THROUGHPUT_RELEASE.migrationSQL)
+  }
+  if (
+    (options.includeToolIdRelease ?? true) &&
+    (options.includeMessageThroughputRelease ?? true) &&
+    (options.includeSelectionSessionRelease ?? true)
+  ) {
     db.exec(SELECTION_SESSION_RELEASE.migrationSQL)
   }
 

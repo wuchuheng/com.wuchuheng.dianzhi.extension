@@ -98,14 +98,16 @@ describe('SELECTION_SESSION_RELEASE 2.3.0', () => {
 
     applyRelease(db, release)
 
-    expect(
-      db.prepare('SELECT id, tool_id FROM conversations ORDER BY id').all()
-    ).toEqual([
+    expect(db.prepare('SELECT id, tool_id FROM conversations ORDER BY id').all()).toEqual([
       { id: 10, tool_id: -10 },
       { id: 11, tool_id: -11 },
     ])
     expect(
-      db.prepare('SELECT conversation_id, tool_id_legacy FROM conversation_legacy_tools ORDER BY conversation_id').all()
+      db
+        .prepare(
+          'SELECT conversation_id, tool_id_legacy FROM conversation_legacy_tools ORDER BY conversation_id'
+        )
+        .all()
     ).toEqual([
       { conversation_id: 10, tool_id_legacy: 'context' },
       { conversation_id: 11, tool_id_legacy: 'custom-tool' },

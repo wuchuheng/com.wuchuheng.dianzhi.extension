@@ -7,8 +7,10 @@ export interface ProviderDelta {
 
 export interface SseHandlers {
   onDelta(delta: ProviderDelta): void
-  onDone(): void
+  onDone(signal: StreamCompletionSignal): void
 }
+
+export type StreamCompletionSignal = 'done_marker' | 'finish_reason' | 'response_end'
 
 export interface SseParser {
   readonly done: boolean
@@ -29,10 +31,10 @@ export function createSseParser(handlers: SseHandlers): SseParser {
   let dataLines: string[] = []
   let done = false
 
-  const complete = () => {
+  const complete = (signal: StreamCompletionSignal) => {
     if (done) return
     done = true
-    handlers.onDone()
+    handlers.onDone(signal)
   }
 
   const dispatchEvent = () => {
@@ -43,7 +45,7 @@ export function createSseParser(handlers: SseHandlers): SseParser {
     const data = dataLines.join('\n')
     dataLines = []
     if (data.trim() === '[DONE]') {
-      complete()
+      complete('done_marker')
       return
     }
 
@@ -58,6 +60,7 @@ export function createSseParser(handlers: SseHandlers): SseParser {
       throw streamError('The provider reported an error while streaming.')
     }
     if (!Array.isArray(payload.choices)) return
+    let hasFinishReason = false
     for (const choice of payload.choices) {
       if (!isRecord(choice) || !isRecord(choice.delta)) continue
       if (typeof choice.delta.content === 'string' && choice.delta.content) {
@@ -66,7 +69,9 @@ export function createSseParser(handlers: SseHandlers): SseParser {
       if (typeof choice.delta.reasoning_content === 'string' && choice.delta.reasoning_content) {
         handlers.onDelta({ kind: 'reasoning', delta: choice.delta.reasoning_content })
       }
+      if (typeof choice.finish_reason === 'string' && choice.finish_reason) hasFinishReason = true
     }
+    if (hasFinishReason) complete('finish_reason')
   }
 
   const processLine = (rawLine: string) => {
@@ -99,7 +104,7 @@ export function createSseParser(handlers: SseHandlers): SseParser {
       if (buffer) processLine(buffer)
       buffer = ''
       dispatchEvent()
-      complete()
+      complete('response_end')
     },
   }
 }

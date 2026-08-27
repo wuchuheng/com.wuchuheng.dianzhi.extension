@@ -4,6 +4,34 @@ import { DEFAULT_SETTINGS } from '@/dianzhi/domain/settings'
 import { streamChat } from '@/dianzhi/provider/client'
 
 describe('streamChat', () => {
+  it('completes after DONE even when reader cancellation never settles', async () => {
+    const encoder = new TextEncoder()
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'))
+      },
+      cancel() {
+        return new Promise<void>(() => undefined)
+      },
+    })
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(body))
+    const completion = streamChat(
+      {
+        provider: { ...DEFAULT_SETTINGS.provider, apiKey: 'test-key' },
+        messages: [{ role: 'user', content: 'Hello' }],
+        signal: new AbortController().signal,
+      },
+      { fetch, onDelta: () => undefined, onDone: () => undefined }
+    ).then(() => 'completed')
+
+    await expect(
+      Promise.race([
+        completion,
+        new Promise<'timed-out'>((resolve) => setTimeout(() => resolve('timed-out'), 20)),
+      ])
+    ).resolves.toBe('completed')
+  })
+
   it('retries once without reasoning fields after a provider rejects the generic reasoning dialect', async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()

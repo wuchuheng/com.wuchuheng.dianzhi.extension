@@ -80,6 +80,7 @@ export default tseslint.config(
             'tests/unit/dianzhi/protocol.spec.ts',
             'tests/unit/dianzhi/provider/client.spec.ts',
             'tests/unit/dianzhi/provider/request.spec.ts',
+            'tests/unit/dianzhi/provider/sse.spec.ts',
             'tests/unit/dianzhi/provider/throughput.spec.ts',
             'tests/unit/dianzhi/settings.spec.ts',
             'tests/unit/dianzhi/ui/Composer.spec.tsx',

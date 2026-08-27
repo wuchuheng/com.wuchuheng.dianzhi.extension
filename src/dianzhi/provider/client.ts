@@ -1,6 +1,7 @@
 import { DianzhiError } from '@/dianzhi/domain/errors'
 import { buildChatCompletionsUrl, buildRequestBody, type ProviderRequestInput } from './request'
 import { createSseParser, type ProviderDelta } from './sse'
+import type { StreamCompletionSignal } from './sse'
 
 export interface StreamChatInput extends ProviderRequestInput {
   signal: AbortSignal
@@ -9,8 +10,15 @@ export interface StreamChatInput extends ProviderRequestInput {
 export interface StreamChatDependencies {
   fetch: typeof globalThis.fetch
   onDelta(delta: ProviderDelta): void
-  onDone(): void
+  onDone(signal: StreamCompletionSignal): void
+  onLifecycle?(event: StreamLifecycleEvent): void
 }
+
+export type StreamLifecycleEvent =
+  | { phase: 'response'; status: number }
+  | { phase: 'terminal_signal'; signal: StreamCompletionSignal }
+  | { phase: 'reader_cancel'; state: 'requested' | 'completed' }
+  | { phase: 'reader_cancel'; state: 'failed'; error: unknown }
 
 function redactCredentials(value: string, apiKey: string): string {
   let redacted = value.replace(/Bearer\s+[^\s"']+/gi, 'Bearer [REDACTED]')
@@ -128,10 +136,14 @@ export async function streamChat(
       message: 'The provider response did not contain a readable stream.',
     })
   }
+  dependencies.onLifecycle?.({ phase: 'response', status: response.status })
 
   const parser = createSseParser({
     onDelta: dependencies.onDelta,
-    onDone: dependencies.onDone,
+    onDone: (signal) => {
+      dependencies.onLifecycle?.({ phase: 'terminal_signal', signal })
+      dependencies.onDone(signal)
+    },
   })
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
@@ -146,7 +158,12 @@ export async function streamChat(
       parser.push(decoder.decode())
       parser.finish()
     } else {
-      await reader.cancel()
+      dependencies.onLifecycle?.({ phase: 'reader_cancel', state: 'requested' })
+      void reader.cancel().then(
+        () => dependencies.onLifecycle?.({ phase: 'reader_cancel', state: 'completed' }),
+        (error: unknown) =>
+          dependencies.onLifecycle?.({ phase: 'reader_cancel', state: 'failed', error })
+      )
     }
   } catch (error) {
     if (isAbortError(error) || error instanceof DianzhiError) throw error

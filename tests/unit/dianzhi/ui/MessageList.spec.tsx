@@ -69,6 +69,32 @@ afterEach(() => {
 })
 
 describe('MessageList meta', () => {
+  it('smoothly grows only the latest assistant message', async () => {
+    host = document.createElement('div')
+    document.body.appendChild(host)
+    root = createRoot(host)
+    const older = assistantMessage({ id: 1, sequence: 1, content: 'older' })
+    const latest = assistantMessage({ id: 2, sequence: 2, content: 'latest', status: 'streaming' })
+
+    await act(async () => {
+      root?.render(
+        <MessageList
+          messages={[older, latest]}
+          mode="chat"
+          reasoningEnabled={false}
+          showMeta
+          smoothStreamingGrowth
+          reducedMotion={false}
+        />
+      )
+    })
+
+    const growth = host?.querySelector('.dz-streaming-message-growth')
+    expect(host?.querySelectorAll('.dz-streaming-message-growth')).toHaveLength(1)
+    expect(growth?.textContent).toContain('latest')
+    expect(growth?.textContent).not.toContain('older')
+  })
+
   it('renders the created time and both copy actions on messages when enabled', async () => {
     await renderMessageList(true, assistantMessage())
     const meta = host?.querySelector('.dz-message-meta')

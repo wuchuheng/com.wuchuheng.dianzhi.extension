@@ -55,7 +55,6 @@ export function SidePanelView({
   const needsSettings = latestAssistant?.errorCode === 'PROVIDER_NOT_CONFIGURED'
 
   const historyRef = useRef<HTMLDivElement | null>(null)
-  const historyContentRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
   const hasSnapshot = snapshot !== null
   const viewKey = `${snapshot?.conversation.id ?? ''}:${snapshot?.activeToolId ?? ''}`
@@ -68,8 +67,7 @@ export function SidePanelView({
   }, [viewKey, streaming, hasSnapshot])
 
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  const { onScroll: onHistoryScroll } = useScrollFollow(historyRef, {
-    contentRef: historyContentRef,
+  const { onScroll: onHistoryScroll, onStreamingHeightDelta } = useScrollFollow(historyRef, {
     reducedMotion,
     messages: snapshot?.messages,
     viewKey,
@@ -105,7 +103,7 @@ export function SidePanelView({
             onSelect={onToolSelect}
           />
           <main className="dz-panel-history" ref={historyRef} onScroll={onHistoryScroll}>
-            <div ref={historyContentRef} className="dz-panel-history-content">
+            <div className="dz-panel-history-content">
               <MessageList
                 messages={snapshot.messages}
                 mode="chat"
@@ -113,6 +111,9 @@ export function SidePanelView({
                 showMeta
                 latestAssistantId={latestAssistant?.id}
                 onRetryMessage={() => onRetry()}
+                smoothStreamingGrowth
+                reducedMotion={reducedMotion}
+                onStreamingHeightDelta={onStreamingHeightDelta}
               />
               {showSetup ? (
                 <div

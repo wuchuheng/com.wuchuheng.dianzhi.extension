@@ -78,7 +78,7 @@
 .dz-messages {
   display: flex;
   flex-direction: column;
-  gap: 30px;
+  gap: 4px;
 }
 .dz-message {
   position: relative;
@@ -100,6 +100,15 @@
 }
 .dz-message-item.is-user {
   align-self: flex-end;
+}
+.dz-streaming-message-growth {
+  align-self: flex-start;
+  width: 92%;
+  overflow: hidden;
+}
+.dz-streaming-message-growth-content > .dz-message-item {
+  box-sizing: border-box;
+  max-width: 100%;
 }
 .dz-message.is-user {
   border-color: var(--d-border-brand);
@@ -172,6 +181,18 @@
   color: var(--d-text-muted);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+.dz-message-item:hover .dz-message-meta,
+.dz-message-item:focus-within .dz-message-meta {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
 }
 .dz-message-item.is-user .dz-message-meta {
   justify-content: flex-end;

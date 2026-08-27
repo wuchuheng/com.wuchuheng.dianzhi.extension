@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import type { MessageRecord } from '@/dianzhi/domain/protocol'
 import { formatMessageTime } from './message-time'
 import { markdownToPlainText } from './markdown-text'
 import { Markdown } from './Markdown'
 import { Reasoning } from './Reasoning'
+import { StreamingMessageGrowth } from './StreamingMessageGrowth'
 
 export interface MessageListProps {
   messages: readonly MessageRecord[]
@@ -13,6 +14,9 @@ export interface MessageListProps {
   showMeta?: boolean
   latestAssistantId?: number
   onRetryMessage?(message: MessageRecord): void
+  smoothStreamingGrowth?: boolean
+  reducedMotion?: boolean
+  onStreamingHeightDelta?(delta: number): void
 }
 
 function RetryGlyph() {
@@ -206,6 +210,9 @@ export function MessageList({
   showMeta,
   latestAssistantId,
   onRetryMessage,
+  smoothStreamingGrowth = false,
+  reducedMotion = false,
+  onStreamingHeightDelta,
 }: MessageListProps) {
   const visible =
     mode === 'card'
@@ -221,15 +228,26 @@ export function MessageList({
   return (
     <div className={`dz-messages is-${mode}`} role="log" aria-live="polite">
       {visible.map((message) => {
-        return (
+        const content = (
           <Message
-            key={message.id}
             message={message}
             reasoningEnabled={reasoningEnabled}
             showMeta={showMeta}
             latestAssistantId={retryLatestAssistantId}
             onRetryMessage={onRetryMessage}
           />
+        )
+        return smoothStreamingGrowth && message.id === visibleLatestAssistantId ? (
+          <StreamingMessageGrowth
+            key={message.id}
+            streaming={message.status === 'streaming'}
+            reducedMotion={reducedMotion}
+            onHeightDelta={onStreamingHeightDelta}
+          >
+            {content}
+          </StreamingMessageGrowth>
+        ) : (
+          <Fragment key={message.id}>{content}</Fragment>
         )
       })}
     </div>

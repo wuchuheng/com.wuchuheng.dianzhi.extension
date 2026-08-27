@@ -30,7 +30,7 @@
 | ---------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | Initial plan-file path typo                                | Corrected before any product file was written.                                         |
 | Full repository lint includes unrelated skill/vendor trees | Scope verification to changed production files; do not modify unrelated configuration. |
-| Large plan correction patch did not match Prettier output  | No partial edit occurred; switch to small exact-context patches.                         |
+| Large plan correction patch did not match Prettier output  | No partial edit occurred; switch to small exact-context patches.                       |
 
 ## 2026-08-27
 
@@ -60,3 +60,29 @@
 - Completed the five-task TDD implementation plan and self-reviewed spec coverage,
   placeholder absence, type/signature consistency, whitespace, and dirty-worktree scope.
 - User explicitly selected direct implementation on `main`; worktree creation was skipped.
+
+### Side Panel message toolbar and throughput implementation
+
+- **Status:** complete
+- Persisted terminal estimated throughput, calculated it at the provider-runner boundary,
+  and rendered it after terminal assistant messages.
+- Moved message status, copy controls, and latest-failure retry into a permanent
+  background-free toolbar under each Side Panel message.
+- Removed streaming-message clipping so content paints immediately; Side Panel follows
+  natural content growth only while the pre-growth bottom distance is strictly below 150px.
+- Verified `pnpm run lint`, `pnpm run test` (33 files / 169 tests), and `pnpm run build`.
+
+### Provider terminal-state hardening
+
+- **Status:** in progress
+- Confirmed from the captured OpenRouter SSE that `finish_reason: "stop"` and `[DONE]`
+  are both present; investigation moved downstream to reader cleanup and finalization.
+- Approved bounded design: non-blocking cancellation, compatible terminal recognition,
+  safe stage-by-stage logs, and visible terminal failure evidence.
+- RED confirmed: focused tests fail because cancellation blocks completion,
+  `finish_reason` is ignored, and terminal persistence rejection escapes without a
+  published error state.
+- GREEN confirmed: all three focused suites pass after non-blocking cancellation,
+  finish-reason completion, terminal fallback publication, and lifecycle logging.
+- Full verification passed: lint/typecheck, 34 Vitest files with 172 tests,
+  formatting, and the production extension build.

@@ -204,6 +204,7 @@ describe('Side Panel message toolbar', () => {
       await Promise.resolve()
     })
     expect(host?.querySelector('[aria-label="正在生成"]')).not.toBeNull()
+    expect(host?.querySelector('.dz-streaming-message-growth')).not.toBeNull()
     expect(host?.querySelector('.dz-message-meta')?.textContent).toContain('正在生成')
   })
 
@@ -321,19 +322,17 @@ describe('Side Panel smooth chat scroll', () => {
     vi.unstubAllGlobals()
   })
 
-  it('smoothly follows the newest bottom while content remains natural height', async () => {
+  it('synchronizes to the newest bottom without a competing scroll animation', async () => {
     await openEmptyHistory()
     defineMetrics()
 
     await syncMessages([message(1, 'first line')])
-    expect(frameCallback).not.toBeNull()
-    driveFrames()
+    expect(frameCallback).toBeNull()
     expect(history().scrollTop).toBe(700)
 
     grow(1300)
     await syncMessages([message(1, 'first line\nsecond line'), message(2, 'third line')])
-    expect(frameCallback).not.toBeNull()
-    driveFrames()
+    expect(frameCallback).toBeNull()
     expect(history().scrollTop).toBe(1000)
   })
 
@@ -341,14 +340,12 @@ describe('Side Panel smooth chat scroll', () => {
     await openEmptyHistory()
     defineMetrics()
     await syncMessages([message(1, 'first line')])
-    driveFrames()
 
     // 120px from the bottom: inside the new 150px guard, outside the old 80px.
     userScroll(700 - 120)
     grow(1200)
     await syncMessages([message(1, 'first line'), message(2, 'grown')])
-    expect(frameCallback).not.toBeNull()
-    driveFrames()
+    expect(frameCallback).toBeNull()
     expect(history().scrollTop).toBe(900)
   })
 
@@ -356,7 +353,6 @@ describe('Side Panel smooth chat scroll', () => {
     await openEmptyHistory()
     defineMetrics()
     await syncMessages([message(1, 'first line')])
-    driveFrames()
 
     // 600px above the bottom: far outside the guard, following pauses.
     userScroll(1000 - 300 - 600)
@@ -369,8 +365,7 @@ describe('Side Panel smooth chat scroll', () => {
     userScroll(1200 - 300 - 50)
     grow(1400)
     await syncMessages([message(1, 'first line'), message(2, 'grown again')])
-    expect(frameCallback).not.toBeNull()
-    driveFrames()
+    expect(frameCallback).toBeNull()
     expect(history().scrollTop).toBe(1100)
   })
 

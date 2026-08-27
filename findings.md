@@ -105,3 +105,15 @@
 ## Side Panel design resource
 
 - `docs/superpowers/specs/2026-08-27-dianzhi-side-panel-message-toolbar-throughput-design.md`
+
+## 2026-08-27 Provider terminal-state debugging
+
+- The captured OpenRouter stream includes both `finish_reason: "stop"` and `data: [DONE]`,
+  so the provider is supplying an explicit terminal signal.
+- `streamChat` currently awaits `reader.cancel()` after parsing `[DONE]`; a cancellation
+  promise that does not settle prevents provider-runner finalization and `stream.done`.
+- Provider-runner terminal failures are swallowed by `conversation-manager`'s detached
+  `handle.done.catch`, which leaves the visible message in `streaming` without enough
+  lifecycle evidence.
+- Diagnostic output must include phase, conversation/message IDs, elapsed time, terminal
+  status, byte counts, and safe error fields, but never API keys, prompts, or generated text.

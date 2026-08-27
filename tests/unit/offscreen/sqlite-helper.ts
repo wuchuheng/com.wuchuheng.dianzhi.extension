@@ -3,6 +3,7 @@ import {
   CONFIG_RELEASE,
   MESSAGE_THROUGHPUT_RELEASE,
   SCHEMA_RELEASE,
+  SELECTION_SESSION_RELEASE,
   TOOL_ID_RELEASE,
 } from '@/offscreen/database/schema'
 import type { DatabaseConnection, SqlParams, SqlValue } from '@/offscreen/database/store'
@@ -34,12 +35,15 @@ function bindValue(value: SqlValue): unknown {
  * wraps it in the app's DatabaseConnection contract so ConfigStore can run
  * against a real SQL engine in unit tests.
  */
-export function createNodeDatabase(): NodeDb {
+export function createNodeDatabase(options: { includeSelectionSessionRelease?: boolean } = {}): NodeDb {
   const db = new DatabaseSync(':memory:')
   db.exec(SCHEMA_RELEASE.migrationSQL)
   db.exec(CONFIG_RELEASE.migrationSQL)
   db.exec(TOOL_ID_RELEASE.migrationSQL)
   db.exec(MESSAGE_THROUGHPUT_RELEASE.migrationSQL)
+  if (options.includeSelectionSessionRelease ?? true) {
+    db.exec(SELECTION_SESSION_RELEASE.migrationSQL)
+  }
 
   const connection: DatabaseConnection = {
     async exec(sql, params) {

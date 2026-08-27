@@ -3,15 +3,19 @@ import type { ToolDefinition } from '@/dianzhi/domain/types'
 import type { ConfigStore, LegacySettingsDocument } from './config-store'
 import type {
   ConversationStore,
-  CreateSelectionInput,
+  CreateSelectionSessionInput,
   EnsureToolConversationInput,
   FinalizeAssistantInput,
 } from './store'
 
 export interface DatabaseOperationMap {
-  createSelection: {
-    args: CreateSelectionInput
-    result: Awaited<ReturnType<ConversationStore['createSelection']>>
+  createSelectionSession: {
+    args: CreateSelectionSessionInput
+    result: Awaited<ReturnType<ConversationStore['createSelectionSession']>>
+  }
+  getSelectionSession: {
+    args: { id: number }
+    result: Awaited<ReturnType<ConversationStore['getSelectionSession']>>
   }
   ensureToolConversation: {
     args: EnsureToolConversationInput
@@ -37,9 +41,17 @@ export interface DatabaseOperationMap {
     args: { messageId: number; input: FinalizeAssistantInput }
     result: Awaited<ReturnType<ConversationStore['finalizeAssistant']>>
   }
-  deleteSelection: {
-    args: { tabId: number; selectionKey: number }
-    result: Awaited<ReturnType<ConversationStore['deleteSelection']>>
+  setActiveConversation: {
+    args: { selectionSessionId: number; conversationId: number }
+    result: Awaited<ReturnType<ConversationStore['setActiveConversation']>>
+  }
+  deleteSelectionSession: {
+    args: { id: number }
+    result: Awaited<ReturnType<ConversationStore['deleteSelectionSession']>>
+  }
+  deleteOrphanSelectionSessions: {
+    args: { retainedIds: number[] }
+    result: Awaited<ReturnType<ConversationStore['deleteOrphanSelectionSessions']>>
   }
   getSettings: {
     args: Record<string, never>
@@ -103,13 +115,15 @@ export type DatabaseRequest = {
 export type DatabaseResult = DatabaseOperationMap[DatabaseOperation]['result']
 
 const MUTATIONS = new Set<DatabaseOperation>([
-  'createSelection',
+  'createSelectionSession',
   'ensureToolConversation',
+  'setActiveConversation',
   'appendAssistant',
   'appendTurn',
   'checkpointAssistant',
   'finalizeAssistant',
-  'deleteSelection',
+  'deleteSelectionSession',
+  'deleteOrphanSelectionSessions',
   'saveSettings',
   'ensurePresets',
   'createTool',
@@ -143,6 +157,10 @@ function isOrderedIds(value: unknown): value is number[] {
   return Array.isArray(value) && value.length > 0 && value.every(isPositiveInteger)
 }
 
+function isUniquePositiveIntegerList(value: unknown): value is number[] {
+  return Array.isArray(value) && value.every(isPositiveInteger) && new Set(value).size === value.length
+}
+
 function isSettingsData(value: unknown): value is string {
   return typeof value === 'string' && value.length <= MAX_SETTINGS_DATA_LENGTH
 }
@@ -173,10 +191,11 @@ function assertDatabaseRequest(value: unknown): asserts value is DatabaseRequest
   const args = value.args
   let valid = false
   switch (value.operation) {
-    case 'createSelection':
+    case 'createSelectionSession':
       valid =
         isPositiveInteger(args.tabId) &&
-        (args.replaceSelectionKey === undefined || isPositiveInteger(args.replaceSelectionKey)) &&
+        (args.replaceSelectionSessionId === undefined ||
+          isPositiveInteger(args.replaceSelectionSessionId)) &&
         isTool(args.tool) &&
         typeof args.selectedText === 'string' &&
         Boolean(args.selectedText.trim()) &&
@@ -187,11 +206,12 @@ function assertDatabaseRequest(value: unknown): asserts value is DatabaseRequest
       break
     case 'ensureToolConversation':
       valid =
-        isPositiveInteger(args.selectionKey) &&
+        isPositiveInteger(args.selectionSessionId) &&
         isTool(args.tool) &&
         typeof args.promptSnapshot === 'string' &&
         Boolean(args.promptSnapshot.trim())
       break
+    case 'getSelectionSession':
     case 'getConversation':
       valid = isPositiveInteger(args.id)
       break
@@ -228,8 +248,14 @@ function assertDatabaseRequest(value: unknown): asserts value is DatabaseRequest
           args.input.errorMessage === null ||
           typeof args.input.errorMessage === 'string')
       break
-    case 'deleteSelection':
-      valid = isPositiveInteger(args.tabId) && isPositiveInteger(args.selectionKey)
+    case 'setActiveConversation':
+      valid = isPositiveInteger(args.selectionSessionId) && isPositiveInteger(args.conversationId)
+      break
+    case 'deleteSelectionSession':
+      valid = isPositiveInteger(args.id)
+      break
+    case 'deleteOrphanSelectionSessions':
+      valid = isUniquePositiveIntegerList(args.retainedIds)
       break
     case 'getSettings':
     case 'ensurePresets':
@@ -294,10 +320,12 @@ async function dispatch(
   request: DatabaseRequest
 ): Promise<DatabaseResult> {
   switch (request.operation) {
-    case 'createSelection':
-      return handlers.conversation.createSelection(request.args)
+    case 'createSelectionSession':
+      return handlers.conversation.createSelectionSession(request.args)
     case 'ensureToolConversation':
       return handlers.conversation.ensureToolConversation(request.args)
+    case 'getSelectionSession':
+      return handlers.conversation.getSelectionSession(request.args.id)
     case 'getConversation':
       return handlers.conversation.getConversation(request.args.id)
     case 'appendAssistant':
@@ -312,8 +340,15 @@ async function dispatch(
       )
     case 'finalizeAssistant':
       return handlers.conversation.finalizeAssistant(request.args.messageId, request.args.input)
-    case 'deleteSelection':
-      return handlers.conversation.deleteSelection(request.args.tabId, request.args.selectionKey)
+    case 'setActiveConversation':
+      return handlers.conversation.setActiveConversation(
+        request.args.selectionSessionId,
+        request.args.conversationId
+      )
+    case 'deleteSelectionSession':
+      return handlers.conversation.deleteSelectionSession(request.args.id)
+    case 'deleteOrphanSelectionSessions':
+      return handlers.conversation.deleteOrphanSelectionSessions(request.args.retainedIds)
     case 'getSettings':
       return handlers.config.getSettings()
     case 'saveSettings':

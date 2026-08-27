@@ -8,8 +8,18 @@ export const OPTIONS_TOOL_TEST_PORT_NAME = 'dianzhi:options-tool-test'
 export type MessageRole = 'user' | 'assistant'
 export type MessageStatus = 'pending' | 'streaming' | 'completed' | 'error' | 'stopped'
 
+/** Persistent aggregate root for all tool conversations from one selection. */
+export interface SelectionSessionRecord {
+  id: number
+  activeConversationId: number
+  createdAt: string
+  updatedAt: string
+}
+
 export interface ConversationRecord {
   id: number
+  selectionSessionId: number
+  /** Temporary compatibility alias; remove in Task 8. */
   selectionKey: number
   tabId: number
   toolId: number

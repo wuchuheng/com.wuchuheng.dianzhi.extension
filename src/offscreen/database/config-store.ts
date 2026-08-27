@@ -425,34 +425,35 @@ export function createConfigStore(db: DatabaseConnection, clock: () => string): 
         ])
       }
 
-      const ghostRows = await tx.query<{ tool_id_legacy: string }>(
-        'SELECT DISTINCT tool_id_legacy FROM conversations WHERE tool_id_legacy IS NOT NULL'
-      )
-      for (const row of ghostRows) {
-        const legacy = row.tool_id_legacy
-        if (mapping[legacy] !== undefined) continue
-        while (usedIds.has(nextId) || existing.has(nextId)) nextId += 1
-        mapping[legacy] = nextId
-        usedIds.add(nextId)
-        nextId += 1
-        await tx.exec(GHOST_TOOL_INSERT_SQL, [mapping[legacy], legacy, '', now, now, now])
-      }
+      const conversationColumns = await tx.query<{ name: string }>('PRAGMA table_info(conversations)')
+      if (conversationColumns.some((column) => column.name === 'tool_id_legacy')) {
+        const ghostRows = await tx.query<{ tool_id_legacy: string }>(
+          'SELECT DISTINCT tool_id_legacy FROM conversations WHERE tool_id_legacy IS NOT NULL'
+        )
+        for (const row of ghostRows) {
+          const legacy = row.tool_id_legacy
+          if (mapping[legacy] !== undefined) continue
+          while (usedIds.has(nextId) || existing.has(nextId)) nextId += 1
+          mapping[legacy] = nextId
+          usedIds.add(nextId)
+          nextId += 1
+          await tx.exec(GHOST_TOOL_INSERT_SQL, [mapping[legacy], legacy, '', now, now, now])
+        }
 
-      for (const [legacy, id] of Object.entries(mapping)) {
-        await tx.exec('UPDATE conversations SET tool_id = ? WHERE tool_id_legacy = ?', [id, legacy])
-      }
-      await tx.exec(
-        'UPDATE conversations SET tool_id_legacy = NULL WHERE tool_id_legacy IS NOT NULL'
-      )
+        for (const [legacy, id] of Object.entries(mapping)) {
+          await tx.exec('UPDATE conversations SET tool_id = ? WHERE tool_id_legacy = ?', [id, legacy])
+        }
+        await tx.exec(
+          'UPDATE conversations SET tool_id_legacy = NULL WHERE tool_id_legacy IS NOT NULL'
+        )
 
-      // Tool ids are now distinct per (selection_key, tool_id): v1's unique
-      // pair used TEXT tool ids and the mapping is injective per selection, so
-      // the reconstructed table is unique. The constraint was deferred out of
-      // the 2.0.0 rebuild (which stages every legacy row at tool_id = 0); create
-      // it now, before any conversation upsert can rely on it.
-      await tx.exec(
-        'CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_selection_tool ON conversations(selection_key, tool_id)'
-      )
+        // The 2.0.0 rebuild defers this index while every historical row is
+        // staged at tool_id = 0. It is unnecessary after the 2.3.0 rebuild,
+        // whose table-level session/tool constraint already enforces it.
+        await tx.exec(
+          'CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_selection_tool ON conversations(selection_key, tool_id)'
+        )
+      }
 
       await tx.exec('UPDATE tools SET is_default = 0 WHERE is_default = 1 AND deleted_at IS NULL')
       if (defaultToolId !== null) {

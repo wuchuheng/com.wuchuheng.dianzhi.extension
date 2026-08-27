@@ -8,8 +8,15 @@ const at = '2026-08-22T00:00:00.000Z'
 
 function storedConversation(id: number, tabId: number): StoredConversationSnapshot {
   return {
+    selectionSession: {
+      id: 1,
+      activeConversationId: id,
+      createdAt: at,
+      updatedAt: at,
+    },
     conversation: {
       id,
+      selectionSessionId: 1,
       selectionKey: 1,
       tabId,
       toolId: 1,

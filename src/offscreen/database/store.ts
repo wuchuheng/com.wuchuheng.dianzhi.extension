@@ -1,5 +1,10 @@
 import { DianzhiError } from '@/dianzhi/domain/errors'
-import type { ConversationRecord, MessageRecord, MessageStatus } from '@/dianzhi/domain/protocol'
+import type {
+  ConversationRecord,
+  MessageRecord,
+  MessageStatus,
+  SelectionSessionRecord,
+} from '@/dianzhi/domain/protocol'
 import type { ToolDefinition } from '@/dianzhi/domain/types'
 
 export type SqlValue = null | number | string | boolean | bigint | Uint8Array | ArrayBuffer
@@ -17,23 +22,27 @@ export interface DatabaseConnection extends DatabaseExecutor {
   transaction<T>(callback: (tx: DatabaseExecutor) => Promise<T>): Promise<T>
 }
 
+/** Restorable selection-session state with its active conversation and tool history. */
 export interface StoredConversationSnapshot {
+  readonly selectionSession: Readonly<SelectionSessionRecord>
   readonly conversation: Readonly<ConversationRecord>
   readonly messages: readonly Readonly<MessageRecord>[]
   readonly conversations: readonly Readonly<ConversationRecord>[]
 }
 
-export interface CreateSelectionInput {
+/** Data required to create a session and its first tool conversation. */
+export interface CreateSelectionSessionInput {
   tabId: number
-  replaceSelectionKey?: number
+  replaceSelectionSessionId?: number
   tool: ToolDefinition
   selectedText: string
   contextText: string
   promptSnapshot: string
 }
 
+/** Data required to restore or create one tool conversation in a session. */
 export interface EnsureToolConversationInput {
-  selectionKey: number
+  selectionSessionId: number
   tool: ToolDefinition
   promptSnapshot: string
 }
@@ -49,7 +58,8 @@ export interface FinalizeAssistantInput {
 
 const CONVERSATION_COLUMNS = `
   id,
-  selection_key AS selectionKey,
+  selection_session_id AS selectionSessionId,
+  selection_session_id AS selectionKey,
   tab_id AS tabId,
   tool_id AS toolId,
   tool_name AS toolName,
@@ -59,6 +69,19 @@ const CONVERSATION_COLUMNS = `
   prompt_snapshot AS promptSnapshot,
   created_at AS createdAt,
   updated_at AS updatedAt`
+
+const SELECTION_SESSION_COLUMNS = `
+  id,
+  active_conversation_id AS activeConversationId,
+  created_at AS createdAt,
+  updated_at AS updatedAt`
+
+interface RawSelectionSessionRecord {
+  id: number
+  activeConversationId: number | null
+  createdAt: string
+  updatedAt: string
+}
 
 const MESSAGE_COLUMNS = `
   id,
@@ -92,16 +115,18 @@ function titleFor(selectedText: string): string {
 }
 
 function freezeSnapshot(snapshot: {
+  selectionSession: SelectionSessionRecord
   conversation: ConversationRecord
   messages: MessageRecord[]
   conversations: ConversationRecord[]
 }): StoredConversationSnapshot {
+  const selectionSession = Object.freeze({ ...snapshot.selectionSession })
   const conversation = Object.freeze({ ...snapshot.conversation })
   const messages = Object.freeze(snapshot.messages.map((message) => Object.freeze({ ...message })))
   const conversations = Object.freeze(
     snapshot.conversations.map((item) => Object.freeze({ ...item }))
   )
-  return Object.freeze({ conversation, messages, conversations })
+  return Object.freeze({ selectionSession, conversation, messages, conversations })
 }
 
 function messageRecord(
@@ -146,43 +171,130 @@ async function readMessage(db: DatabaseExecutor, messageId: number): Promise<Mes
 }
 
 export function createConversationStore(db: DatabaseConnection, clock: () => string) {
+  async function snapshotForSession(
+    selectionSessionId: number,
+    requestedConversationId?: number
+  ): Promise<StoredConversationSnapshot | null> {
+    // 1. Load the aggregate root and its session conversations.
+    const sessions = await db.query<RawSelectionSessionRecord>(
+      `SELECT ${SELECTION_SESSION_COLUMNS} FROM selection_sessions WHERE id = ?`,
+      [selectionSessionId]
+    )
+    const rawSelectionSession = sessions[0]
+    if (!rawSelectionSession) return null
+
+    const conversations = await db.query<ConversationRecord>(
+      `SELECT ${CONVERSATION_COLUMNS} FROM conversations
+       WHERE selection_session_id = ? ORDER BY id ASC`,
+      [selectionSessionId]
+    )
+    if (conversations.length === 0) {
+      throw new DianzhiError({
+        code: 'DB_UNAVAILABLE',
+        message: 'The selection session has no conversations to restore.',
+        context: { selectionSessionId },
+      })
+    }
+
+    // 2. Repair a nullable or stale active pointer before exposing the session.
+    let activeConversation = conversations.find(
+      (conversation) => conversation.id === rawSelectionSession.activeConversationId
+    )
+    let updatedAt = rawSelectionSession.updatedAt
+    if (!activeConversation) {
+      activeConversation = conversations[0]
+      const now = clock()
+      await db.exec(
+        'UPDATE selection_sessions SET active_conversation_id = ?, updated_at = ? WHERE id = ?',
+        [activeConversation.id, now, selectionSessionId]
+      )
+      updatedAt = now
+    }
+
+    const conversation =
+      requestedConversationId === undefined
+        ? activeConversation
+        : conversations.find((item) => item.id === requestedConversationId)
+    if (!conversation) return null
+    const messages = await db.query<MessageRecord>(
+      `SELECT ${MESSAGE_COLUMNS} FROM messages WHERE conversation_id = ? ORDER BY sequence ASC`,
+      [conversation.id]
+    )
+
+    // 3. Return an immutable session-aware snapshot.
+    return freezeSnapshot({
+      selectionSession: {
+        id: rawSelectionSession.id,
+        activeConversationId: activeConversation.id,
+        createdAt: rawSelectionSession.createdAt,
+        updatedAt,
+      },
+      conversation,
+      messages,
+      conversations,
+    })
+  }
+
+  async function getSelectionSession(id: number): Promise<StoredConversationSnapshot | null> {
+    return snapshotForSession(id)
+  }
+
   async function getConversation(id: number): Promise<StoredConversationSnapshot | null> {
-    const rows = await db.query<ConversationRecord>(
+    const conversations = await db.query<ConversationRecord>(
       `SELECT ${CONVERSATION_COLUMNS} FROM conversations WHERE id = ?`,
       [id]
     )
-    const conversation = rows[0]
+    const conversation = conversations[0]
     if (!conversation) return null
-
-    const [messages, conversations] = await Promise.all([
-      db.query<MessageRecord>(
-        `SELECT ${MESSAGE_COLUMNS} FROM messages WHERE conversation_id = ? ORDER BY sequence ASC`,
-        [id]
-      ),
-      db.query<ConversationRecord>(
-        `SELECT ${CONVERSATION_COLUMNS} FROM conversations WHERE selection_key = ? ORDER BY id ASC`,
-        [conversation.selectionKey]
-      ),
-    ])
-    return freezeSnapshot({ conversation, messages, conversations })
+    return snapshotForSession(conversation.selectionSessionId, id)
   }
 
-  async function createSelection(input: CreateSelectionInput): Promise<StoredConversationSnapshot> {
+  async function updateActiveConversation(
+    tx: DatabaseExecutor,
+    selectionSessionId: number,
+    conversationId: number,
+    now: string
+  ): Promise<void> {
+    const result = await tx.exec(
+      `UPDATE selection_sessions
+       SET active_conversation_id = ?, updated_at = ?
+       WHERE id = ?
+         AND EXISTS (
+           SELECT 1 FROM conversations
+           WHERE id = ? AND selection_session_id = selection_sessions.id
+         )`,
+      [conversationId, now, selectionSessionId, conversationId]
+    )
+    if (Number(result.changes ?? 0) !== 1) {
+      throw new DianzhiError({
+        code: 'INVALID_EVENT',
+        message: 'The active conversation must belong to the selection session.',
+        context: { selectionSessionId, conversationId },
+      })
+    }
+  }
+
+  async function createSelectionSession(
+    input: CreateSelectionSessionInput
+  ): Promise<StoredConversationSnapshot> {
     const now = clock()
-    const result = await db.transaction(async (tx) => {
-      if (input.replaceSelectionKey !== undefined) {
-        await tx.exec('DELETE FROM conversations WHERE tab_id = ? AND selection_key = ?', [
-          input.tabId,
-          input.replaceSelectionKey,
-        ])
+    const selectionSessionId = await db.transaction(async (tx) => {
+      if (input.replaceSelectionSessionId !== undefined) {
+        await tx.exec('DELETE FROM selection_sessions WHERE id = ?', [input.replaceSelectionSessionId])
       }
-      const inserted = await tx.exec(
+      const sessionInsert = await tx.exec(
+        `INSERT INTO selection_sessions (active_conversation_id, created_at, updated_at)
+         VALUES (NULL, ?, ?)`,
+        [now, now]
+      )
+      const sessionId = integerId(sessionInsert.lastInsertRowid, 'createSelectionSession')
+      const conversationInsert = await tx.exec(
         `INSERT INTO conversations (
-          selection_key, tab_id, tool_id, tool_name, title, selected_text,
+          selection_session_id, tab_id, tool_id, tool_name, title, selected_text,
           context_text, prompt_snapshot, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          0,
+          sessionId,
           input.tabId,
           input.tool.id,
           input.tool.name,
@@ -194,90 +306,76 @@ export function createConversationStore(db: DatabaseConnection, clock: () => str
           now,
         ]
       )
-      const conversationId = integerId(inserted.lastInsertRowid, 'createSelection')
-      await tx.exec('UPDATE conversations SET selection_key = ?, updated_at = ? WHERE id = ?', [
-        conversationId,
-        now,
-        conversationId,
-      ])
-      const messageInsert = await tx.exec(
+      const conversationId = integerId(conversationInsert.lastInsertRowid, 'createSelectionSession')
+      await tx.exec(
         `INSERT INTO messages (
           conversation_id, sequence, role, content, reasoning_content, status,
           error_code, error_message, created_at, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [conversationId, 1, 'user', input.promptSnapshot, '', 'completed', null, null, now, now]
       )
-      return {
-        conversationId,
-        messageId: integerId(messageInsert.lastInsertRowid, 'createSelectionMessage'),
-      }
+      await updateActiveConversation(tx, sessionId, conversationId, now)
+      return sessionId
     })
+    const snapshot = await getSelectionSession(selectionSessionId)
+    if (snapshot) return snapshot
+    throw new DianzhiError({
+      code: 'DB_UNAVAILABLE',
+      message: 'The selection session was created but could not be loaded.',
+      context: { selectionSessionId },
+    })
+  }
 
-    const conversation: ConversationRecord = {
-      id: result.conversationId,
-      selectionKey: result.conversationId,
-      tabId: input.tabId,
-      toolId: input.tool.id,
-      toolName: input.tool.name,
-      title: titleFor(input.selectedText),
-      selectedText: input.selectedText,
-      contextText: input.contextText,
-      promptSnapshot: input.promptSnapshot,
-      createdAt: now,
-      updatedAt: now,
-    }
-    return freezeSnapshot({
-      conversation,
-      messages: [
-        messageRecord(
-          result.messageId,
-          result.conversationId,
-          1,
-          'user',
-          input.promptSnapshot,
-          'completed',
-          now
-        ),
-      ],
-      conversations: [conversation],
+  async function setActiveConversation(
+    selectionSessionId: number,
+    conversationId: number
+  ): Promise<StoredConversationSnapshot> {
+    await db.transaction((tx) => updateActiveConversation(tx, selectionSessionId, conversationId, clock()))
+    const snapshot = await getSelectionSession(selectionSessionId)
+    if (snapshot) return snapshot
+    throw new DianzhiError({
+      code: 'CONVERSATION_NOT_FOUND',
+      message: 'The selection session no longer exists.',
+      context: { selectionSessionId },
     })
   }
 
   async function ensureToolConversation(
     input: EnsureToolConversationInput
   ): Promise<StoredConversationSnapshot> {
-    const existing = await db.query<ConversationRecord>(
-      `SELECT ${CONVERSATION_COLUMNS} FROM conversations WHERE selection_key = ? AND tool_id = ?`,
-      [input.selectionKey, input.tool.id]
-    )
-    if (existing[0]) {
-      const snapshot = await getConversation(existing[0].id)
-      if (snapshot) return snapshot
-    }
-
-    const roots = await db.query<ConversationRecord>(
-      `SELECT ${CONVERSATION_COLUMNS} FROM conversations WHERE selection_key = ? ORDER BY id ASC LIMIT 1`,
-      [input.selectionKey]
-    )
-    const root = roots[0]
-    if (!root) {
-      throw new DianzhiError({
-        code: 'CONVERSATION_NOT_FOUND',
-        message: 'The selected-text conversation no longer exists.',
-        context: { selectionKey: input.selectionKey },
-      })
-    }
-
     const now = clock()
+    let conversationId: number
     try {
-      const ids = await db.transaction(async (tx) => {
+      conversationId = await db.transaction(async (tx) => {
+        const existing = await tx.query<ConversationRecord>(
+          `SELECT ${CONVERSATION_COLUMNS} FROM conversations
+           WHERE selection_session_id = ? AND tool_id = ?`,
+          [input.selectionSessionId, input.tool.id]
+        )
+        if (existing[0]) {
+          await updateActiveConversation(tx, input.selectionSessionId, existing[0].id, now)
+          return existing[0].id
+        }
+        const roots = await tx.query<ConversationRecord>(
+          `SELECT ${CONVERSATION_COLUMNS} FROM conversations
+           WHERE selection_session_id = ? ORDER BY id ASC LIMIT 1`,
+          [input.selectionSessionId]
+        )
+        const root = roots[0]
+        if (!root) {
+          throw new DianzhiError({
+            code: 'CONVERSATION_NOT_FOUND',
+            message: 'The selected-text session no longer exists.',
+            context: { selectionSessionId: input.selectionSessionId },
+          })
+        }
         const conversationInsert = await tx.exec(
           `INSERT INTO conversations (
-          selection_key, tab_id, tool_id, tool_name, title, selected_text,
-          context_text, prompt_snapshot, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            selection_session_id, tab_id, tool_id, tool_name, title, selected_text,
+            context_text, prompt_snapshot, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           [
-            root.selectionKey,
+            input.selectionSessionId,
             root.tabId,
             input.tool.id,
             input.tool.name,
@@ -289,39 +387,33 @@ export function createConversationStore(db: DatabaseConnection, clock: () => str
             now,
           ]
         )
-        const conversationId = integerId(
-          conversationInsert.lastInsertRowid,
-          'ensureToolConversation'
-        )
-        const messageInsert = await tx.exec(
+        const id = integerId(conversationInsert.lastInsertRowid, 'ensureToolConversation')
+        await tx.exec(
           `INSERT INTO messages (
-          conversation_id, sequence, role, content, reasoning_content, status,
-          error_code, error_message, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [conversationId, 1, 'user', input.promptSnapshot, '', 'completed', null, null, now, now]
+            conversation_id, sequence, role, content, reasoning_content, status,
+            error_code, error_message, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [id, 1, 'user', input.promptSnapshot, '', 'completed', null, null, now, now]
         )
-        integerId(messageInsert.lastInsertRowid, 'ensureToolMessage')
-        return conversationId
+        await updateActiveConversation(tx, input.selectionSessionId, id, now)
+        return id
       })
-
-      const snapshot = await getConversation(ids)
-      if (snapshot) return snapshot
     } catch (error) {
       const raced = await db.query<ConversationRecord>(
-        `SELECT ${CONVERSATION_COLUMNS} FROM conversations WHERE selection_key = ? AND tool_id = ?`,
-        [input.selectionKey, input.tool.id]
+        `SELECT ${CONVERSATION_COLUMNS} FROM conversations
+         WHERE selection_session_id = ? AND tool_id = ?`,
+        [input.selectionSessionId, input.tool.id]
       )
-      if (raced[0]) {
-        const snapshot = await getConversation(raced[0].id)
-        if (snapshot) return snapshot
-      }
-      throw error
+      if (!raced[0]) throw error
+      conversationId = raced[0].id
+      await setActiveConversation(input.selectionSessionId, conversationId)
     }
-
+    const snapshot = await getConversation(conversationId)
+    if (snapshot) return snapshot
     throw new DianzhiError({
       code: 'DB_UNAVAILABLE',
       message: 'The tool conversation was created but could not be loaded.',
-      context: { selectionKey: input.selectionKey, toolId: input.tool.id },
+      context: { selectionSessionId: input.selectionSessionId, toolId: input.tool.id },
     })
   }
 
@@ -465,22 +557,40 @@ export function createConversationStore(db: DatabaseConnection, clock: () => str
     return readMessage(db, messageId)
   }
 
-  async function deleteSelection(tabId: number, selectionKey: number): Promise<void> {
-    await db.exec('DELETE FROM conversations WHERE tab_id = ? AND selection_key = ?', [
-      tabId,
-      selectionKey,
-    ])
+  async function deleteSelectionSession(id: number): Promise<void> {
+    await db.exec('DELETE FROM selection_sessions WHERE id = ?', [id])
+  }
+
+  async function deleteOrphanSelectionSessions(retainedIds: number[]): Promise<void> {
+    if (
+      !retainedIds.every((id) => Number.isSafeInteger(id) && id > 0) ||
+      new Set(retainedIds).size !== retainedIds.length
+    ) {
+      throw new DianzhiError({
+        code: 'INVALID_EVENT',
+        message: 'Retained selection-session IDs must be unique positive integers.',
+      })
+    }
+    if (retainedIds.length === 0) {
+      await db.exec('DELETE FROM selection_sessions')
+      return
+    }
+    const placeholders = retainedIds.map(() => '?').join(', ')
+    await db.exec(`DELETE FROM selection_sessions WHERE id NOT IN (${placeholders})`, retainedIds)
   }
 
   return {
-    createSelection,
+    createSelectionSession,
     ensureToolConversation,
+    getSelectionSession,
     getConversation,
+    setActiveConversation,
     appendAssistant,
     appendTurn,
     checkpointAssistant,
     finalizeAssistant,
-    deleteSelection,
+    deleteSelectionSession,
+    deleteOrphanSelectionSessions,
   }
 }
 

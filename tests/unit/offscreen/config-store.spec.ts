@@ -5,6 +5,17 @@ import { createNodeDatabase } from './sqlite-helper'
 
 const clock = () => '2026-08-26T00:00:00.000Z'
 
+function createSelectionSession(db: ReturnType<typeof createNodeDatabase>['db'], now: string): number {
+  return Number(
+    db
+      .prepare(
+        `INSERT INTO selection_sessions (active_conversation_id, created_at, updated_at)
+         VALUES (NULL, ?, ?)`
+      )
+      .run(now, now).lastInsertRowid
+  )
+}
+
 describe('ConfigStore customer-tool ID allocation', () => {
   it('allocates customer tool ids starting at 1025', async () => {
     const { connection } = createNodeDatabase()
@@ -38,12 +49,12 @@ describe('ConfigStore customer-tool ID allocation', () => {
   })
 
   it('maps legacy custom tools onto ids >= 1025 and rewires conversations', async () => {
-    const { connection, db } = createNodeDatabase()
+    const { connection, db } = createNodeDatabase({ includeSelectionSessionRelease: false })
     const now = clock()
     db.prepare(
       `INSERT INTO conversations (selection_key, tab_id, tool_id, tool_id_legacy, tool_name, title, selected_text, context_text, prompt_snapshot, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(0, 1, 0, 'myCustom', '我的工具', 't', 's', 'c', 'p', now, now)
+    ).run(1, 1, 0, 'myCustom', '我的工具', 't', 's', 'c', 'p', now, now)
     const config = createConfigStore(connection, clock)
     const mapping = await config.migrateLegacy({
       legacySettings: {
@@ -70,6 +81,21 @@ describe('ConfigStore customer-tool ID allocation', () => {
       .get() as { toolId: number; toolIdLegacy: string | null }
     expect(conv.toolId).toBe(mapping.myCustom)
     expect(conv.toolIdLegacy).toBeNull()
+  })
+
+  it('migrates legacy tool settings after the selection-session schema release', async () => {
+    const { connection } = createNodeDatabase()
+    const config = createConfigStore(connection, clock)
+
+    await expect(
+      config.migrateLegacy({
+        legacySettings: {
+          version: 1,
+          ui: { defaultToolId: 'context' },
+          tools: [],
+        },
+      })
+    ).resolves.toMatchObject({ context: 1 })
   })
 
   it('does not reuse ids after soft removal', async () => {
@@ -142,10 +168,11 @@ describe('ConfigStore permanent deletion', () => {
   it('keeps conversations when a tool is permanently deleted', async () => {
     const { connection, db } = createNodeDatabase()
     const now = clock()
+    const selectionSessionId = createSelectionSession(db, now)
     db.prepare(
-      `INSERT INTO conversations (selection_key, tab_id, tool_id, tool_name, title, selected_text, context_text, prompt_snapshot, created_at, updated_at)
+      `INSERT INTO conversations (selection_session_id, tab_id, tool_id, tool_name, title, selected_text, context_text, prompt_snapshot, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(0, 1, 1050, '旧工具', 't', 's', 'c', 'p', now, now)
+    ).run(selectionSessionId, 1, 1050, '旧工具', 't', 's', 'c', 'p', now, now)
     db.prepare(
       `INSERT INTO tools (id, name, prompt, is_preset, is_default, enabled, sort_order, deleted_at, created_at, updated_at)
        VALUES (?, ?, ?, 0, 0, 1, 1, ?, ?, ?)`

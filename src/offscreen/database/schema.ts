@@ -179,3 +179,101 @@ ALTER TABLE messages
   CHECK (estimated_throughput_tps IS NULL OR estimated_throughput_tps >= 0);
 `,
 } as const
+
+/**
+ * Schema release 2.3.0: replaces implicit selection-key conversation groups
+ * with explicit selection-session aggregate roots.
+ */
+export const SELECTION_SESSION_RELEASE = {
+  version: '2.3.0',
+  migrationSQL: `
+PRAGMA foreign_keys = ON;
+
+CREATE TEMP TABLE selection_session_roots AS
+SELECT selection_key AS session_id, selection_key AS active_conversation_id
+FROM conversations
+GROUP BY selection_key;
+
+CREATE TABLE selection_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  active_conversation_id INTEGER
+    REFERENCES conversations(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+INSERT INTO selection_sessions (id, active_conversation_id, created_at, updated_at)
+SELECT selection_key, NULL, MIN(created_at), MAX(updated_at)
+FROM conversations
+GROUP BY selection_key;
+
+CREATE TABLE conversations_new (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  selection_session_id INTEGER NOT NULL
+    REFERENCES selection_sessions(id) ON DELETE CASCADE,
+  tab_id INTEGER NOT NULL,
+  tool_id INTEGER NOT NULL,
+  tool_name TEXT NOT NULL,
+  title TEXT NOT NULL,
+  selected_text TEXT NOT NULL,
+  context_text TEXT NOT NULL,
+  prompt_snapshot TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(selection_session_id, tool_id)
+);
+
+INSERT INTO conversations_new (
+  id, selection_session_id, tab_id, tool_id, tool_name, title, selected_text,
+  context_text, prompt_snapshot, created_at, updated_at
+)
+SELECT id, selection_key, tab_id, tool_id, tool_name, title, selected_text,
+  context_text, prompt_snapshot, created_at, updated_at
+FROM conversations;
+
+CREATE TABLE messages_new (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  conversation_id   INTEGER NOT NULL REFERENCES conversations_new(id) ON DELETE CASCADE,
+  sequence           INTEGER NOT NULL,
+  role               TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
+  content            TEXT NOT NULL DEFAULT '',
+  reasoning_content  TEXT NOT NULL DEFAULT '',
+  status             TEXT NOT NULL CHECK(status IN ('pending', 'streaming', 'completed', 'error', 'stopped')),
+  error_code          TEXT,
+  error_message       TEXT,
+  created_at          TEXT NOT NULL,
+  updated_at          TEXT NOT NULL,
+  estimated_throughput_tps INTEGER
+    CHECK (estimated_throughput_tps IS NULL OR estimated_throughput_tps >= 0),
+  UNIQUE(conversation_id, sequence)
+);
+
+INSERT INTO messages_new (
+  id, conversation_id, sequence, role, content, reasoning_content, status,
+  error_code, error_message, created_at, updated_at, estimated_throughput_tps
+)
+SELECT id, conversation_id, sequence, role, content, reasoning_content, status,
+  error_code, error_message, created_at, updated_at, estimated_throughput_tps
+FROM messages;
+
+DROP TABLE messages;
+DROP TABLE conversations;
+
+ALTER TABLE conversations_new RENAME TO conversations;
+ALTER TABLE messages_new RENAME TO messages;
+
+UPDATE selection_sessions
+SET active_conversation_id = (
+  SELECT active_conversation_id
+  FROM selection_session_roots
+  WHERE session_id = selection_sessions.id
+);
+
+DROP TABLE selection_session_roots;
+
+CREATE INDEX idx_conversations_tab_session
+  ON conversations(tab_id, selection_session_id);
+CREATE INDEX idx_messages_conversation_sequence
+  ON messages(conversation_id, sequence);
+`,
+} as const

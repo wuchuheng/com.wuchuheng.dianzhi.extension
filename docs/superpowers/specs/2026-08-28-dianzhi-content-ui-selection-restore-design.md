@@ -42,12 +42,12 @@ CS restore case.
 
 `latestUI` remains the authority for the next `Ctrl + [` action:
 
-| Current state | Action | Result |
-| --- | --- | --- |
-| CS UI appeared | `Ctrl + [` | Render Side Panel; `latestUI = sidePanel` |
-| Side Panel appeared | `Ctrl + [` | Close Side Panel; `latestUI` stays `sidePanel` |
-| Neither appeared; `latestUI = contentScript` | `Ctrl + [` | Restore CS UI |
-| Neither appeared; `latestUI = sidePanel` | `Ctrl + [` | Open Side Panel |
+| Current state                                | Action     | Result                                         |
+| -------------------------------------------- | ---------- | ---------------------------------------------- |
+| CS UI appeared                               | `Ctrl + [` | Render Side Panel; `latestUI = sidePanel`      |
+| Side Panel appeared                          | `Ctrl + [` | Close Side Panel; `latestUI` stays `sidePanel` |
+| Neither appeared; `latestUI = contentScript` | `Ctrl + [` | Restore CS UI                                  |
+| Neither appeared; `latestUI = sidePanel`     | `Ctrl + [` | Open Side Panel                                |
 
 Closing a surface changes only its presence. It does not change `latestUI`.
 Thus, closing CS preserves a CS restore candidate, whereas closing Side Panel

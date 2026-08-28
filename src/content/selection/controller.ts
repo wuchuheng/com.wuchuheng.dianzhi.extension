@@ -7,10 +7,12 @@ import {
 import { isEnglishSelection } from './english'
 import { expandRangeToWords } from './words'
 import type { AnchorRect } from '../popover/placement'
+import { createSelectionBookmark, restoreSelectionRange, type SelectionBookmark } from './restore'
 
 export interface CapturedSelection {
   context: SelectionContext
   rect: AnchorRect
+  bookmark: SelectionBookmark
 }
 
 export interface SelectionControllerOptions {
@@ -68,7 +70,11 @@ export function createSelectionController(options: SelectionControllerOptions) {
     const context = assembleSelectionContext(selection, options.limits)
     if (!context) return
     currentRange = range
-    options.onSelection({ context, rect: anchorRect(range) })
+    options.onSelection({
+      context,
+      rect: anchorRect(range),
+      bookmark: createSelectionBookmark(options.document, range),
+    })
   }
 
   const reposition = () => {
@@ -95,6 +101,18 @@ export function createSelectionController(options: SelectionControllerOptions) {
     keepAlive(value: boolean) {
       keepAlive = value
       if (value) restoreRange()
+    },
+    bookmark() {
+      return currentRange ? createSelectionBookmark(options.document, currentRange) : null
+    },
+    restore(bookmark: SelectionBookmark) {
+      const range = restoreSelectionRange(options.document, bookmark)
+      if (!range) return null
+      currentRange = range
+      const selection = options.document.getSelection()
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+      return anchorRect(range)
     },
   }
 }

@@ -2,6 +2,7 @@ import { DianzhiError } from '@/dianzhi/domain/errors'
 import type { ConversationSnapshot, ConversationUpdate } from '@/dianzhi/domain/protocol'
 import type {
   CycleToolShortcutRequest,
+  ContentRestore,
   PanelToggleRequest,
   PanelToggleResult,
   SelectToolShortcutRequest,
@@ -13,6 +14,8 @@ import type {
   ToolShortcutResult,
   UiSurface,
 } from '@/dianzhi/domain/ui-session-protocol'
+import { isSelectionBookmark } from '@/content/selection/restore'
+import type { AnchorRect } from '@/content/popover/placement'
 import type { DianzhiSettings } from '@/dianzhi/domain/types'
 import { log, logError, Scope } from '@/events/logger'
 import type { UiConversationGateway } from './conversation-manager'
@@ -25,6 +28,7 @@ export interface TabSessionState {
   sidePanelAppeared: boolean
   latestUI: UiSurface
   selectionSessionId: number | null
+  contentRestore?: ContentRestore
 }
 
 export interface UiEventSource {
@@ -97,7 +101,20 @@ function isValidStoredState(value: TabSessionState): boolean {
     typeof value.contentUIAppeared === 'boolean' &&
     typeof value.sidePanelAppeared === 'boolean' &&
     (value.latestUI === 'contentScript' || value.latestUI === 'sidePanel') &&
-    (value.selectionSessionId === null || isPositiveInteger(value.selectionSessionId))
+    (value.selectionSessionId === null || isPositiveInteger(value.selectionSessionId)) &&
+    (value.contentRestore === undefined || isValidContentRestore(value.contentRestore, value))
+  )
+}
+
+function isValidContentRestore(value: ContentRestore, state: TabSessionState): boolean {
+  return (
+    isPositiveInteger(value.selectionSessionId) &&
+    value.selectionSessionId === state.selectionSessionId &&
+    isSelectionBookmark(value.bookmark) &&
+    ['left', 'right', 'top', 'bottom'].every((key) => {
+      const number = value.anchorRect[key as keyof AnchorRect]
+      return typeof number === 'number' && Number.isFinite(number)
+    })
   )
 }
 
@@ -228,6 +245,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     }
     state.pageUrl = pageUrl
     state.selectionSessionId = null
+    delete state.contentRestore
     state.contentUIAppeared = false
     state.sidePanelAppeared = panelWindows.has(state.windowId)
     state.latestUI = 'contentScript'
@@ -384,19 +402,25 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     state.contentUIAppeared = false
     state.latestUI = 'sidePanel'
     state.selectionSessionId = snapshot?.selectionSession.id ?? state.selectionSessionId
+    delete state.contentRestore
     await persist()
   }
 
   async function markContentOwner(
     state: TabSessionState,
     snapshot: ConversationSnapshot | null,
-    expectedUrl: string
+    expectedUrl: string,
+    contentRestore?: ContentRestore
   ): Promise<void> {
     assertPage(state.tabId, expectedUrl)
     state.contentUIAppeared = true
     state.sidePanelAppeared = false
     state.latestUI = 'contentScript'
     state.selectionSessionId = snapshot?.selectionSession.id ?? state.selectionSessionId
+    delete state.contentRestore
+    if (contentRestore && contentRestore.selectionSessionId === state.selectionSessionId) {
+      state.contentRestore = contentRestore
+    }
     await persist()
   }
 
@@ -667,12 +691,34 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
           panelWindows.delete(state.windowId)
           panelActiveTab.delete(state.windowId)
           assertSourceFresh(source)
-          await markContentOwner(state, snapshot, expectedUrl)
+          await markContentOwner(
+            state,
+            snapshot,
+            expectedUrl,
+            request.payload.bookmark && request.payload.anchorRect
+              ? {
+                  selectionSessionId: snapshot.selectionSession.id,
+                  bookmark: request.payload.bookmark,
+                  anchorRect: request.payload.anchorRect,
+                }
+              : undefined
+          )
           return { target: 'contentScript', display: true, snapshot: cloneSnapshot(snapshot) }
         }
       }
 
-      await markContentOwner(state, snapshot, expectedUrl)
+      await markContentOwner(
+        state,
+        snapshot,
+        expectedUrl,
+        request.payload.bookmark && request.payload.anchorRect
+          ? {
+              selectionSessionId: snapshot.selectionSession.id,
+              bookmark: request.payload.bookmark,
+              anchorRect: request.payload.anchorRect,
+            }
+          : undefined
+      )
       return { target: 'contentScript', display: true, snapshot: cloneSnapshot(snapshot) }
     })
   }
@@ -718,16 +764,19 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
           latestUI: state.latestUI,
           action: 'restore',
           snapshot: snapshot ? cloneSnapshot(snapshot) : null,
+          contentRestore: undefined,
         }
       }
 
       await deliverContent(state, snapshot, request.requestId, 'shortcut.panelToggle', expectedUrl)
-      await markContentOwner(state, snapshot, expectedUrl)
+      const contentRestore = state.contentRestore
+      await markContentOwner(state, snapshot, expectedUrl, contentRestore)
       return {
         currentUI: 'contentScript',
         latestUI: state.latestUI,
         action: 'restore',
         snapshot: snapshot ? cloneSnapshot(snapshot) : null,
+        contentRestore: state.contentRestore,
       }
     })
   }

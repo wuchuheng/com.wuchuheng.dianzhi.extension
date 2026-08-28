@@ -1,4 +1,6 @@
 import type { ConversationSnapshot, ParseResult } from './protocol'
+import type { AnchorRect } from '@/content/popover/placement'
+import type { SelectionBookmark } from '@/content/selection/restore'
 
 export type UiSurface = 'contentScript' | 'sidePanel'
 
@@ -23,6 +25,8 @@ export type SelectionRouteRequest = {
   payload: {
     selectedText: string
     contextText: string
+    bookmark?: SelectionBookmark
+    anchorRect?: AnchorRect
   }
 }
 
@@ -41,6 +45,13 @@ export type PanelToggleResult = {
   latestUI: UiSurface
   action: 'destroy' | 'restore' | 'none'
   snapshot: ConversationSnapshot | null
+  contentRestore?: ContentRestore
+}
+
+export type ContentRestore = {
+  selectionSessionId: number
+  bookmark: SelectionBookmark
+  anchorRect: AnchorRect
 }
 
 export type SelectToolShortcutRequest = {
@@ -140,15 +151,57 @@ export function parseSelectionRoute(value: unknown): ParseResult<SelectionRouteR
   ) {
     return invalid('Selection route payload is invalid.')
   }
+  if (payload.bookmark !== undefined && !isSelectionBookmarkPayload(payload.bookmark)) {
+    return invalid('Selection bookmark payload is invalid.')
+  }
+  if (payload.anchorRect !== undefined && !isAnchorRectPayload(payload.anchorRect)) {
+    return invalid('Selection anchor payload is invalid.')
+  }
 
   return {
     ok: true,
     value: {
       requestId: parsed.value.requestId,
       type: 'selection.route',
-      payload: { selectedText: payload.selectedText, contextText: payload.contextText },
+      payload: {
+        selectedText: payload.selectedText,
+        contextText: payload.contextText,
+        ...(payload.bookmark !== undefined
+          ? { bookmark: payload.bookmark as SelectionBookmark }
+          : {}),
+        ...(payload.anchorRect !== undefined
+          ? { anchorRect: payload.anchorRect as AnchorRect }
+          : {}),
+      },
     },
   }
+}
+
+function isSelectionBookmarkPayload(value: unknown): value is SelectionBookmark {
+  if (!isRecord(value)) return false
+  const paths = [value.startPath, value.endPath]
+  return (
+    paths.every(
+      (path) => Array.isArray(path) && path.every((item) => Number.isInteger(item) && item >= 0)
+    ) &&
+    typeof value.startOffset === 'number' &&
+    Number.isInteger(value.startOffset) &&
+    value.startOffset >= 0 &&
+    typeof value.endOffset === 'number' &&
+    Number.isInteger(value.endOffset) &&
+    value.endOffset >= 0 &&
+    typeof value.selectedText === 'string' &&
+    value.selectedText.length > 0 &&
+    typeof value.prefix === 'string' &&
+    typeof value.suffix === 'string'
+  )
+}
+
+function isAnchorRectPayload(value: unknown): value is AnchorRect {
+  if (!isRecord(value)) return false
+  return ['left', 'right', 'top', 'bottom'].every(
+    (key) => typeof value[key] === 'number' && Number.isFinite(value[key])
+  )
 }
 
 export function parsePanelToggle(value: unknown): ParseResult<PanelToggleRequest> {

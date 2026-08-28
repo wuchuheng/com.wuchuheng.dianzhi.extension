@@ -447,7 +447,10 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
           result.currentUI === 'contentScript' &&
           result.snapshot
         ) {
-          setAnchor(fallbackAnchor())
+          const restoredAnchor = result.contentRestore
+            ? selectionControllerRef.current?.restore(result.contentRestore.bookmark)
+            : null
+          setAnchor(restoredAnchor ?? fallbackAnchor())
           dispatch({ type: 'view.restored', snapshot: result.snapshot })
           void contentSurfaceStatus.dispatch({
             type: 'ui.surfaceStatus',
@@ -528,13 +531,18 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
         maxWords: settings.ui.contextMaxWords,
         maxBlocks: settings.ui.contextMaxBlocks,
       },
-      onSelection: ({ context, rect }) => {
+      onSelection: ({ context, rect, bookmark }) => {
         setAnchor(rect)
         void selectionRoute
           .dispatch({
             type: 'selection.route',
             requestId: requestId('selection'),
-            payload: { selectedText: context.selectedText, contextText: context.contextText },
+            payload: {
+              selectedText: context.selectedText,
+              contextText: context.contextText,
+              bookmark,
+              anchorRect: rect,
+            },
           })
           .then((result) => {
             if (result.target === 'contentScript' && result.display && result.snapshot) {
@@ -579,7 +587,8 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       document.activeElement.blur()
     }
     dispatch({ type: 'view.closed' })
-  }, [extensionHost])
+    reportSurface('destroyed', state.snapshot?.selectionSession.id ?? null)
+  }, [extensionHost, reportSurface, state.snapshot?.selectionSession.id])
 
   // Re-focus the textarea on `streaming` flips so that after send the input is
   // focused again and the user can type the next draft while the reply streams.

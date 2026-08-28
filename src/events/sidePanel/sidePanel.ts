@@ -9,17 +9,20 @@ export interface TargetedSidePanelEvent<Args, Return> {
   waitForWindow(windowId: number, timeoutMs?: number): Promise<void>
   /** Window IDs with an active panel port binding, used to disambiguate panel senders. */
   connectedWindows(): ReadonlySet<number>
+  /** Resolves a live opaque panel capability to its trusted port binding. */
+  bindingFor(panelInstanceId: string): { tabId: number; windowId: number } | null
   accept(port: chrome.runtime.Port): boolean
   handle(
     binding: { tabId: number; windowId: number },
     callback: (args: Args) => Promise<Return>
-  ): Cancel
+  ): { cancel: Cancel; panelInstanceId: string }
 }
 
 /** Matches the pre-coordinator Side Panel ready timeout. */
 export const DEFAULT_SIDE_PANEL_READY_TIMEOUT_MS = 5_000
 
 type Binding = { tabId: number; windowId: number }
+type BindingMessage = Binding & { panelInstanceId: string }
 type RequestMessage<Args> = { messageId: string; args: Args }
 type ResponseMessage<Return> = { messageId: string; data?: Return; error?: ErrorResponse }
 type PendingRequest<Return> = {
@@ -28,7 +31,7 @@ type PendingRequest<Return> = {
   resolve: (value: Return) => void
 }
 
-function isBinding(value: unknown): value is Binding {
+function isBinding(value: unknown): value is BindingMessage {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const binding = value as Record<string, unknown>
   return (
@@ -37,7 +40,9 @@ function isBinding(value: unknown): value is Binding {
     binding.tabId >= 0 &&
     typeof binding.windowId === 'number' &&
     Number.isSafeInteger(binding.windowId) &&
-    binding.windowId >= 0
+    binding.windowId >= 0 &&
+    typeof binding.panelInstanceId === 'string' &&
+    binding.panelInstanceId.trim().length > 0
   )
 }
 
@@ -65,6 +70,11 @@ export function bg2sp<Args, Return>(name: string): TargetedSidePanelEvent<Args, 
   const eventName = buildEventName('bg2sp', name)
   const portsByWindow = new Map<number, chrome.runtime.Port>()
   const windowByPort = new Map<chrome.runtime.Port, number>()
+  const bindingByPanelInstanceId = new Map<
+    string,
+    { binding: Binding; port: chrome.runtime.Port }
+  >()
+  const panelInstanceIdByPort = new Map<chrome.runtime.Port, string>()
   const pendingByMessageId = new Map<string, PendingRequest<Return>>()
   type WindowWaiter = {
     resolve: () => void
@@ -80,6 +90,14 @@ export function bg2sp<Args, Return>(name: string): TargetedSidePanelEvent<Args, 
       pendingByMessageId.delete(messageId)
       pending.reject(error)
     }
+  }
+
+  const removePortBinding = (port: chrome.runtime.Port) => {
+    const panelInstanceId = panelInstanceIdByPort.get(port)
+    if (panelInstanceId && bindingByPanelInstanceId.get(panelInstanceId)?.port === port) {
+      bindingByPanelInstanceId.delete(panelInstanceId)
+    }
+    panelInstanceIdByPort.delete(port)
   }
 
   const resolveWaiters = (windowId: number) => {
@@ -141,6 +159,10 @@ export function bg2sp<Args, Return>(name: string): TargetedSidePanelEvent<Args, 
     connectedWindows() {
       return new Set(portsByWindow.keys())
     },
+    bindingFor(panelInstanceId) {
+      const entry = bindingByPanelInstanceId.get(panelInstanceId)
+      return entry ? { ...entry.binding } : null
+    },
     accept(port) {
       if (port.name !== eventName) return false
 
@@ -152,10 +174,18 @@ export function bg2sp<Args, Return>(name: string): TargetedSidePanelEvent<Args, 
               existingPort,
               deliveryError('SIDE_PANEL_READY_TIMEOUT', message.windowId)
             )
+            removePortBinding(existingPort)
             windowByPort.delete(existingPort)
           }
           portsByWindow.set(message.windowId, port)
           windowByPort.set(port, message.windowId)
+          const previousPanelInstanceId = panelInstanceIdByPort.get(port)
+          if (previousPanelInstanceId) bindingByPanelInstanceId.delete(previousPanelInstanceId)
+          bindingByPanelInstanceId.set(message.panelInstanceId, {
+            binding: { tabId: message.tabId, windowId: message.windowId },
+            port,
+          })
+          panelInstanceIdByPort.set(port, message.panelInstanceId)
           resolveWaiters(message.windowId)
           return
         }
@@ -177,6 +207,7 @@ export function bg2sp<Args, Return>(name: string): TargetedSidePanelEvent<Args, 
         if (portsByWindow.get(windowId) === port) portsByWindow.delete(windowId)
         rejectPendingForPort(port, deliveryError('SIDE_PANEL_READY_TIMEOUT', windowId))
         rejectWaiters(windowId, deliveryError('SIDE_PANEL_READY_TIMEOUT', windowId))
+        removePortBinding(port)
         windowByPort.delete(port)
       })
 
@@ -184,6 +215,7 @@ export function bg2sp<Args, Return>(name: string): TargetedSidePanelEvent<Args, 
     },
     handle(binding, callback) {
       const port = chrome.runtime.connect({ name: eventName })
+      const panelInstanceId = crypto.randomUUID()
       const listener = async (message: unknown) => {
         if (!message || typeof message !== 'object' || Array.isArray(message)) return
         const request = message as Partial<RequestMessage<Args>>
@@ -198,10 +230,13 @@ export function bg2sp<Args, Return>(name: string): TargetedSidePanelEvent<Args, 
         port.postMessage(response)
       }
       port.onMessage.addListener(listener)
-      port.postMessage(binding)
-      return () => {
+      port.postMessage({ ...binding, panelInstanceId } satisfies BindingMessage)
+      return {
+        panelInstanceId,
+        cancel: () => {
         port.onMessage.removeListener(listener)
         port.disconnect()
+        },
       }
     },
   }

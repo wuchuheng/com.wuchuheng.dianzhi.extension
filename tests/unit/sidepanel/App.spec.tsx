@@ -14,13 +14,13 @@ const hoisted = vi.hoisted(() => {
   const sidePanelCommandHandle = vi.fn(
     (_binding: unknown, callback: (value: unknown) => Promise<unknown>) => {
       commandConsumer.capture = callback
-      return vi.fn()
+      return { cancel: vi.fn(), panelInstanceId: 'panel-instance-19' }
     }
   )
   const sidePanelConversationUpdateHandle = vi.fn(
     (_binding: unknown, callback: (value: unknown) => Promise<unknown>) => {
       updateConsumer.capture = callback
-      return vi.fn()
+      return { cancel: vi.fn(), panelInstanceId: 'panel-update-instance-19' }
     }
   )
   return {
@@ -175,7 +175,10 @@ describe('Side Panel dock shortcut', () => {
     })
 
     expect(panelToggleDispatch).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'shortcut.panelToggle' })
+      expect.objectContaining({
+        type: 'shortcut.panelToggle',
+        payload: { origin: 'sidePanel', panelInstanceId: 'panel-instance-19' },
+      })
     )
   })
 

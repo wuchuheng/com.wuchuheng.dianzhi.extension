@@ -3,6 +3,7 @@ import { parseConversationCommand, parseToolsCommand } from '@/dianzhi/domain/pr
 import {
   parsePanelToggle,
   parseSelectionRoute,
+  parseSurfaceStatus,
   parseToolShortcut,
 } from '@/dianzhi/domain/ui-session-protocol'
 
@@ -99,19 +100,50 @@ describe('UI session request parsers', () => {
     expect(parseToolShortcut(toolIndexRequest(0)).ok).toBe(false)
   })
 
-  it('accepts the Content UI visibility observation only for panel toggles', () => {
+  it('accepts explicit Content and Side Panel origins for panel toggles', () => {
     expect(
       parsePanelToggle({
         requestId: 'toggle-visible',
         type: 'shortcut.panelToggle',
-        payload: { contentUIAppeared: false },
+        payload: { origin: 'contentScript', contentUIAppeared: false },
       }).ok
     ).toBe(true)
     expect(
       parsePanelToggle({
-        requestId: 'toggle-invalid',
+        requestId: 'toggle-panel',
         type: 'shortcut.panelToggle',
-        payload: { contentUIAppeared: 'false' },
+        payload: { origin: 'sidePanel', panelInstanceId: 'panel-instance-1' },
+      }).ok
+    ).toBe(true)
+  })
+
+  it('rejects panel toggles without a valid origin-specific payload', () => {
+    for (const payload of [
+      {},
+      { origin: 'sidePanel' },
+      { origin: 'sidePanel', panelInstanceId: '' },
+      { origin: 'contentScript', contentUIAppeared: false, panelInstanceId: 'panel-instance-1' },
+      { origin: 'sidePanel', panelInstanceId: 'panel-instance-1', windowId: 19 },
+    ]) {
+      expect(
+        parsePanelToggle({ requestId: 'toggle-invalid', type: 'shortcut.panelToggle', payload }).ok
+      ).toBe(false)
+    }
+  })
+
+  it('accepts Side Panel lifecycle reports only with a live-capability-shaped payload', () => {
+    expect(
+      parseSurfaceStatus({
+        requestId: 'status-panel',
+        type: 'ui.surfaceStatus',
+        payload: { status: 'appeared', selectionSessionId: null, origin: 'sidePanel', panelInstanceId: 'panel-instance-1' },
+      }).ok
+    ).toBe(true)
+    expect(
+      parseSurfaceStatus({
+        requestId: 'status-invalid',
+        type: 'ui.surfaceStatus',
+        payload: { status: 'appeared', selectionSessionId: null, origin: 'sidePanel' },
       }).ok
     ).toBe(false)
   })

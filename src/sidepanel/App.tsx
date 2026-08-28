@@ -171,6 +171,7 @@ export default function App() {
   const [settings, setSettings] = useState<DianzhiSettings>(DEFAULT_SETTINGS)
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const surfacesReported = useRef(false)
+  const panelInstanceId = useRef<string | null>(null)
 
   const command = useCallback(async (value: ConversationCommand) => {
     const result = await extensionConversationCommand.dispatch(value)
@@ -184,17 +185,25 @@ export default function App() {
     }
   }, [])
 
-  const reportSurface = useCallback((status: 'appeared' | 'destroyed') => {
+  const reportSurface = useCallback(
+    (status: 'appeared' | 'destroyed', instanceId: string) => {
     void panelSurfaceStatus
       .dispatch({
         type: 'ui.surfaceStatus',
         requestId: requestId('surface'),
-        payload: { status, selectionSessionId: null },
+        payload: {
+          origin: 'sidePanel',
+          status,
+          selectionSessionId: null,
+          panelInstanceId: instanceId,
+        },
       })
       .catch((error: unknown) =>
         logError(Scope.EXTENSION_PAGE, 'Panel surface status report failed.', error)
       )
-  }, [])
+    },
+    []
+  )
 
   useEffect(() => {
     let disposed = false
@@ -210,7 +219,7 @@ export default function App() {
         }
         const binding = { tabId: tab.id, windowId: tab.windowId }
         log(Scope.EXTENSION_PAGE, 'Side Panel binding typed events to active tab.', binding)
-        cancelCommandHandle = sidePanelCommand.handle(binding, async (commandValue) => {
+        const commandHandle = sidePanelCommand.handle(binding, async (commandValue) => {
           if (commandValue.type === 'render' || commandValue.type === 'selectTool') {
             dispatch({ type: 'panel.render', snapshot: commandValue.snapshot })
           } else {
@@ -218,13 +227,16 @@ export default function App() {
           }
           return true
         })
-        cancelUpdateHandle = sidePanelConversationUpdate.handle(binding, async (update) => {
+        cancelCommandHandle = commandHandle.cancel
+        panelInstanceId.current = commandHandle.panelInstanceId
+        const updateHandle = sidePanelConversationUpdate.handle(binding, async (update) => {
           dispatch(update)
           return true
         })
+        cancelUpdateHandle = updateHandle.cancel
         surfacesReported.current = true
         dispatch({ type: 'panel.connected' })
-        reportSurface('appeared')
+        reportSurface('appeared', commandHandle.panelInstanceId)
       })
       .catch((error: unknown) =>
         logError(Scope.EXTENSION_PAGE, 'Side Panel typed event binding failed.', error)
@@ -232,8 +244,10 @@ export default function App() {
 
     return () => {
       disposed = true
-      if (surfacesReported.current) reportSurface('destroyed')
+      const instanceId = panelInstanceId.current
+      if (surfacesReported.current && instanceId) reportSurface('destroyed', instanceId)
       surfacesReported.current = false
+      panelInstanceId.current = null
       cancelCommandHandle?.()
       cancelUpdateHandle?.()
     }
@@ -316,11 +330,13 @@ export default function App() {
           shortcut: matchesShortcut(event, settings.shortcuts.dock) ? 'dock' : 'close',
           hasConversation: state.snapshot !== null,
         })
+        const instanceId = panelInstanceId.current
+        if (!instanceId) return
         void panelPanelToggle
           .dispatch({
             type: 'shortcut.panelToggle',
             requestId: requestId('panel'),
-            payload: {},
+            payload: { origin: 'sidePanel', panelInstanceId: instanceId },
           })
           .then((result: PanelToggleResult) => {
             if (

@@ -752,7 +752,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
       }
 
       const contentUIAppeared =
-        source.surface === 'contentScript' && request.payload.contentUIAppeared !== undefined
+        source.surface === 'contentScript' && request.payload.origin === 'contentScript'
           ? request.payload.contentUIAppeared
           : state.contentUIAppeared
       state.contentUIAppeared = contentUIAppeared

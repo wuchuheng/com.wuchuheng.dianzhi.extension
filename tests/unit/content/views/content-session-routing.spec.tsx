@@ -166,7 +166,7 @@ describe('content session routing', () => {
     expect(contentSurfaceStatusDispatch).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'ui.surfaceStatus',
-        payload: { status: 'destroyed', selectionSessionId: null },
+        payload: { origin: 'contentScript', status: 'destroyed', selectionSessionId: null },
       })
     )
   })
@@ -197,7 +197,7 @@ describe('content session routing', () => {
     expect(contentSurfaceStatusDispatch).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'ui.surfaceStatus',
-        payload: { status: 'destroyed', selectionSessionId: null },
+        payload: { origin: 'contentScript', status: 'destroyed', selectionSessionId: null },
       })
     )
   })
@@ -226,7 +226,10 @@ describe('content session routing', () => {
       await Promise.resolve()
     })
     expect(contentPanelToggleDispatch).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'shortcut.panelToggle' })
+      expect.objectContaining({
+        type: 'shortcut.panelToggle',
+        payload: { origin: 'contentScript', contentUIAppeared: false },
+      })
     )
     expect(host?.querySelector('.dz-popover')).not.toBeNull()
     const popover = host?.querySelector<HTMLElement>('.dz-popover')

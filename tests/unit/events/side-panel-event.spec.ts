@@ -39,7 +39,8 @@ function fakePort(binding: { tabId: number; windowId: number }) {
   return {
     port,
     postMessage,
-    bind: () => messages.emit(binding),
+    bind: (panelInstanceId = `panel-${binding.windowId}`) =>
+      messages.emit({ ...binding, panelInstanceId }),
     acknowledge(data: true) {
       const message = postMessage.mock.calls.at(-1)?.[0] as { messageId: string } | undefined
       if (!message) throw new Error('No message is pending acknowledgement.')
@@ -53,6 +54,22 @@ function fakePort(binding: { tabId: number; windowId: number }) {
 }
 
 describe('bg2sp', () => {
+  it('resolves a live opaque capability to its bound panel window', () => {
+    const event = bg2sp<SidePanelCommand, true>('dianzhi:side-panel-command')
+    const panel = fakePort({ tabId: 9, windowId: 19 })
+    event.accept(panel.port)
+
+    ;(globalThis as typeof globalThis & { chrome?: unknown }).chrome = {
+      runtime: { connect: vi.fn(() => panel.port) },
+    }
+    const handle = event.handle({ tabId: 9, windowId: 19 }, async () => true)
+    panel.bind(handle.panelInstanceId)
+
+    expect(event.bindingFor(handle.panelInstanceId)).toEqual({ tabId: 9, windowId: 19 })
+    panel.disconnect()
+    expect(event.bindingFor(handle.panelInstanceId)).toBeNull()
+  })
+
   it('delivers only to the requested window and waits for acknowledgement', async () => {
     const event = bg2sp<SidePanelCommand, true>('dianzhi:side-panel-command')
     const left = fakePort({ tabId: 9, windowId: 19 })

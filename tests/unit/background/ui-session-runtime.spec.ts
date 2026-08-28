@@ -409,6 +409,36 @@ describe('ui-session-runtime: panel sender to window resolution', () => {
     ).rejects.toMatchObject({ code: 'INVALID_EVENT' })
   })
 
+  it('routes a Side Panel shortcut by its live capability when documentId is absent', async () => {
+    const { chrome } = fakeChromeRuntime({ panelContexts: twoWindows })
+    const coordinator = mockCoordinator()
+    const handlers = createUiSessionEventHandlers({
+      chromeApi: chrome,
+      coordinator,
+      panelBindingFor: (panelInstanceId) =>
+        panelInstanceId === 'panel-instance-a' ? { tabId: 9, windowId: 19 } : null,
+    })
+    const senderWithoutDocumentId = {
+      id: 'fake-id',
+      origin: 'chrome-extension://fake-id',
+      url: PANEL_URL,
+    } as chrome.runtime.MessageSender
+
+    await handlers.onPanelPanelToggle(
+      {
+        requestId: 'panel-toggle',
+        type: 'shortcut.panelToggle',
+        payload: { origin: 'sidePanel', panelInstanceId: 'panel-instance-a' },
+      },
+      senderWithoutDocumentId
+    )
+
+    expect(coordinator.togglePanel).toHaveBeenCalledWith(
+      expect.objectContaining({ requestId: 'panel-toggle' }),
+      expect.objectContaining({ surface: 'sidePanel', tabId: 9, windowId: 19 })
+    )
+  })
+
   it('resolves by document URL when exactly one panel context is open', async () => {
     const { chrome, tabs } = fakeChromeRuntime({
       panelContexts: [panelContext('doc-a', 19)],
@@ -448,7 +478,12 @@ describe('ui-session-runtime: typed request handlers', () => {
   it('parses content requests before calling content routes', async () => {
     const { chrome } = fakeChromeRuntime()
     const coordinator = mockCoordinator()
-    const handlers = createUiSessionEventHandlers({ chromeApi: chrome, coordinator })
+    const handlers = createUiSessionEventHandlers({
+      chromeApi: chrome,
+      coordinator,
+      panelBindingFor: (panelInstanceId) =>
+        panelInstanceId === 'panel-instance-a' ? { tabId: 9, windowId: 19 } : null,
+    })
     await handlers.onSelectionRoute(
       {
         requestId: 'route-1',
@@ -465,12 +500,22 @@ describe('ui-session-runtime: typed request handlers', () => {
       panelContexts: [panelContext('doc-a', 19)],
     })
     const coordinator = mockCoordinator()
-    const handlers = createUiSessionEventHandlers({ chromeApi: chrome, coordinator })
+    const handlers = createUiSessionEventHandlers({
+      chromeApi: chrome,
+      coordinator,
+      panelBindingFor: (panelInstanceId) =>
+        panelInstanceId === 'panel-instance-a' ? { tabId: 9, windowId: 19 } : null,
+    })
     await handlers.onPanelSurfaceStatus(
       {
         requestId: 'panel-status',
         type: 'ui.surfaceStatus',
-        payload: { status: 'appeared', selectionSessionId: null },
+        payload: {
+          status: 'appeared',
+          selectionSessionId: null,
+          origin: 'sidePanel',
+          panelInstanceId: 'panel-instance-a',
+        },
       },
       panelSender('doc-a')
     )
@@ -526,7 +571,7 @@ describe('ui-session-runtime: typed request handlers', () => {
       {
         requestId: 'toggle-g',
         type: 'shortcut.panelToggle',
-        payload: { contentUIAppeared: false },
+        payload: { origin: 'contentScript', contentUIAppeared: false },
       },
       sender()
     )
@@ -649,7 +694,7 @@ describe('ui-session-runtime: safe lifecycle logging', () => {
       {
         requestId: 'status-safe',
         type: 'ui.surfaceStatus',
-        payload: { status: 'destroyed', selectionSessionId: null },
+        payload: { status: 'destroyed', selectionSessionId: null, origin: 'contentScript' },
       },
       sender()
     )

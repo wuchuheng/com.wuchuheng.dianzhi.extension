@@ -439,7 +439,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       .dispatch({
         type: 'shortcut.panelToggle',
         requestId: requestId('panel'),
-        payload: { contentUIAppeared: state.visible },
+        payload: { origin: 'contentScript', contentUIAppeared: state.visible },
       })
       .then((result) => {
         if (
@@ -456,6 +456,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
             type: 'ui.surfaceStatus',
             requestId: requestId('surface'),
             payload: {
+              origin: 'contentScript',
               status: 'appeared',
               selectionSessionId: result.snapshot.selectionSession.id,
             },
@@ -476,7 +477,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
         .dispatch({
           type: 'ui.surfaceStatus',
           requestId: requestId('surface'),
-          payload: { status, selectionSessionId },
+          payload: { origin: 'contentScript', status, selectionSessionId },
         })
         .catch((error: unknown) =>
           logError(Scope.CONTENT_SCRIPT, 'Surface status report failed.', error)

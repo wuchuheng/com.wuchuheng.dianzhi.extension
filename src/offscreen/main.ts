@@ -10,7 +10,7 @@ import {
   SELECTION_SESSION_RELEASE,
   TOOL_ID_RELEASE,
 } from './database/schema'
-import { createConversationStore, type DatabaseConnection } from './database/store'
+import { createConversationStore } from './database/store'
 
 function assertRuntimeCapabilities(): void {
   if (!globalThis.crossOriginIsolated) {
@@ -26,8 +26,8 @@ function assertRuntimeCapabilities(): void {
 
 async function initialize(): Promise<void> {
   assertRuntimeCapabilities()
-  const db = (await openDB('dianzhi.sqlite3', {
-    debug: false,
+  const db = await openDB('dianzhi.sqlite3', {
+    debug: true,
     releases: [
       SCHEMA_RELEASE,
       CONFIG_RELEASE,
@@ -35,7 +35,7 @@ async function initialize(): Promise<void> {
       MESSAGE_THROUGHPUT_RELEASE,
       SELECTION_SESSION_RELEASE,
     ],
-  })) as DatabaseConnection
+  })
   await db.exec('PRAGMA foreign_keys = ON')
 
   const clock = () => new Date().toISOString()

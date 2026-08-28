@@ -191,6 +191,7 @@ const uiSessionHandlers = createUiSessionEventHandlers({
   chromeApi: chrome,
   coordinator,
   connectedPanelWindows: () => sidePanelCommand.connectedWindows(),
+  panelBindingFor: (panelInstanceId) => sidePanelCommand.bindingFor(panelInstanceId),
 })
 contentSurfaceStatus.handleWithSender(uiSessionHandlers.onContentSurfaceStatus)
 selectionRoute.handleWithSender(uiSessionHandlers.onSelectionRoute)

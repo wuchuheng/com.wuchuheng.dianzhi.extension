@@ -352,8 +352,19 @@ async function runPanelRequest<P extends { requestId: string }, R>(input: {
   execute: (request: P, source: UiEventSource) => Promise<R>
   commit?: (request: P, result: R) => LogContext
   panelWindows?: ReadonlySet<number>
+  bindingForRequest?: (request: P) => PanelBinding | null
 }): Promise<R> {
-  const { chromeApi, stage, value, sender, parse, execute, commit, panelWindows } = input
+  const {
+    chromeApi,
+    stage,
+    value,
+    sender,
+    parse,
+    execute,
+    commit,
+    panelWindows,
+    bindingForRequest,
+  } = input
   trace('ui panel request received', {
     requestId: extractRequestId(value) ?? null,
     stage,
@@ -366,7 +377,10 @@ async function runPanelRequest<P extends { requestId: string }, R>(input: {
   try {
     request = parseUiRequest<P>(value, parse)
     requestId = request.requestId
-    const binding = await resolvePanelBinding(chromeApi, sender, panelWindows)
+    const binding = bindingForRequest
+      ? bindingForRequest(request)
+      : await resolvePanelBinding(chromeApi, sender, panelWindows)
+    if (!binding) throw invalid('The Side Panel capability is not bound to a live panel.')
     source = await panelSourceFromBinding(chromeApi, binding, request.requestId)
     trace('ui panel request validated', {
       requestId: request.requestId,
@@ -423,8 +437,10 @@ export function createUiSessionEventHandlers(deps: {
   coordinator: UiSessionCoordinator
   /** Live panel windows from the bg2sp port bindings, used to disambiguate panel senders. */
   connectedPanelWindows?: () => ReadonlySet<number>
+  /** Trusted Side Panel binding from a live opaque port capability. */
+  panelBindingFor?: (panelInstanceId: string) => PanelBinding | null
 }): UiSessionEventHandlers {
-  const { chromeApi, coordinator, connectedPanelWindows } = deps
+  const { chromeApi, coordinator, connectedPanelWindows, panelBindingFor } = deps
 
   function snapshotIds(result: {
     snapshot?: { selectionSession?: { id?: number }; conversation?: { id?: number } } | null
@@ -457,7 +473,10 @@ export function createUiSessionEventHandlers(deps: {
         value,
         sender,
         parse: parseSurfaceStatus,
-        panelWindows: connectedPanelWindows?.(),
+        bindingForRequest: (request) =>
+          request.payload.origin === 'sidePanel'
+            ? (panelBindingFor?.(request.payload.panelInstanceId) ?? null)
+            : null,
         execute: (request, source) =>
           coordinator.reportPanelStatus(request, {
             tabId: source.tabId,
@@ -492,12 +511,16 @@ export function createUiSessionEventHandlers(deps: {
         // Start the panel open inside the user-gesture window (synchronously
         // after source resolution, before the coordinator's async pipeline);
         // `deliverPanel` then skips its own `sidePanel.open` for this tab.
-        onSource: (request, source) =>
+        onSource: (request, source) => {
+          if (request.payload.origin !== 'contentScript') {
+            throw invalid('A Content Script panel toggle must declare contentScript origin.')
+          }
           coordinator.openPanelForGesture(
             source.tabId,
             source.windowId,
             request.payload.contentUIAppeared
-          ),
+          )
+        },
         execute: (request, source) => coordinator.togglePanel(request, source),
         commit: (_request, result) => ({
           currentUI: result.currentUI,
@@ -513,7 +536,10 @@ export function createUiSessionEventHandlers(deps: {
         value,
         sender,
         parse: parsePanelToggle,
-        panelWindows: connectedPanelWindows?.(),
+        bindingForRequest: (request) =>
+          request.payload.origin === 'sidePanel'
+            ? (panelBindingFor?.(request.payload.panelInstanceId) ?? null)
+            : null,
         execute: (request, source) => coordinator.togglePanel(request, source),
         commit: (_request, result) => ({
           currentUI: result.currentUI,

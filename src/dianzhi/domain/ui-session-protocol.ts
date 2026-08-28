@@ -3,14 +3,23 @@ import type { AnchorRect } from '@/content/popover/placement'
 import type { SelectionBookmark } from '@/content/selection/restore'
 
 export type UiSurface = 'contentScript' | 'sidePanel'
+export type PanelOrigin = UiSurface
 
 export type SurfaceStatusRequest = {
   requestId: string
   type: 'ui.surfaceStatus'
-  payload: {
-    status: 'appeared' | 'destroyed'
-    selectionSessionId: number | null
-  }
+  payload:
+    | {
+        origin: 'contentScript'
+        status: 'appeared' | 'destroyed'
+        selectionSessionId: number | null
+      }
+    | {
+        origin: 'sidePanel'
+        status: 'appeared' | 'destroyed'
+        selectionSessionId: number | null
+        panelInstanceId: string
+      }
 }
 
 export type SurfaceStatusResponse = {
@@ -37,7 +46,9 @@ export type SelectionRouteResult =
 export type PanelToggleRequest = {
   requestId: string
   type: 'shortcut.panelToggle'
-  payload: { contentUIAppeared?: boolean }
+  payload:
+    | { origin: 'contentScript'; contentUIAppeared: boolean }
+    | { origin: 'sidePanel'; panelInstanceId: string }
 }
 
 export type PanelToggleResult = {
@@ -122,21 +133,59 @@ export function parseSurfaceStatus(value: unknown): ParseResult<SurfaceStatusReq
   const parsed = parseEnvelope(value, 'ui.surfaceStatus')
   if (!parsed.ok) return parsed
   const { payload } = parsed.value
-  if (
-    (payload.status !== 'appeared' && payload.status !== 'destroyed') ||
-    (payload.selectionSessionId !== null && !isPositiveInteger(payload.selectionSessionId))
-  ) {
+  const validStatus = payload.status === 'appeared' || payload.status === 'destroyed'
+  const validSelectionSession =
+    payload.selectionSessionId === null || isPositiveInteger(payload.selectionSessionId)
+  if (!validStatus || !validSelectionSession) {
     return invalid('UI surface status payload is invalid.')
   }
+  const status = payload.status as 'appeared' | 'destroyed'
+  const selectionSessionId = payload.selectionSessionId as number | null
 
-  return {
-    ok: true,
-    value: {
-      requestId: parsed.value.requestId,
-      type: 'ui.surfaceStatus',
-      payload: { status: payload.status, selectionSessionId: payload.selectionSessionId },
-    },
+  if (
+    payload.origin === 'contentScript' &&
+    Object.keys(payload).every((key) =>
+      ['origin', 'status', 'selectionSessionId'].includes(key)
+    )
+  ) {
+    return {
+      ok: true,
+      value: {
+        requestId: parsed.value.requestId,
+        type: 'ui.surfaceStatus',
+        payload: {
+          origin: 'contentScript',
+          status,
+          selectionSessionId,
+        },
+      },
+    }
   }
+
+  if (
+    payload.origin === 'sidePanel' &&
+    typeof payload.panelInstanceId === 'string' &&
+    payload.panelInstanceId.trim().length > 0 &&
+    Object.keys(payload).every((key) =>
+      ['origin', 'status', 'selectionSessionId', 'panelInstanceId'].includes(key)
+    )
+  ) {
+    return {
+      ok: true,
+      value: {
+        requestId: parsed.value.requestId,
+        type: 'ui.surfaceStatus',
+        payload: {
+          origin: 'sidePanel',
+          status,
+          selectionSessionId,
+          panelInstanceId: payload.panelInstanceId,
+        },
+      },
+    }
+  }
+
+  return invalid('UI surface status payload is invalid.')
 }
 
 export function parseSelectionRoute(value: unknown): ParseResult<SelectionRouteRequest> {
@@ -209,23 +258,35 @@ export function parsePanelToggle(value: unknown): ParseResult<PanelToggleRequest
   if (!parsed.ok) return parsed
   const { payload } = parsed.value
   if (
-    Object.keys(payload).some((key) => key !== 'contentUIAppeared') ||
-    (payload.contentUIAppeared !== undefined && typeof payload.contentUIAppeared !== 'boolean')
+    payload.origin === 'contentScript' &&
+    typeof payload.contentUIAppeared === 'boolean' &&
+    Object.keys(payload).every((key) => ['origin', 'contentUIAppeared'].includes(key))
   ) {
-    return invalid('Panel toggle payload is invalid.')
+    return {
+      ok: true,
+      value: {
+        requestId: parsed.value.requestId,
+        type: 'shortcut.panelToggle',
+        payload: { origin: 'contentScript', contentUIAppeared: payload.contentUIAppeared },
+      },
+    }
   }
-
-  return {
-    ok: true,
-    value: {
-      requestId: parsed.value.requestId,
-      type: 'shortcut.panelToggle',
-      payload:
-        payload.contentUIAppeared === undefined
-          ? {}
-          : { contentUIAppeared: payload.contentUIAppeared },
-    },
+  if (
+    payload.origin === 'sidePanel' &&
+    typeof payload.panelInstanceId === 'string' &&
+    payload.panelInstanceId.trim().length > 0 &&
+    Object.keys(payload).every((key) => ['origin', 'panelInstanceId'].includes(key))
+  ) {
+    return {
+      ok: true,
+      value: {
+        requestId: parsed.value.requestId,
+        type: 'shortcut.panelToggle',
+        payload: { origin: 'sidePanel', panelInstanceId: payload.panelInstanceId },
+      },
+    }
   }
+  return invalid('Panel toggle payload is invalid.')
 }
 
 export function parseToolShortcut(

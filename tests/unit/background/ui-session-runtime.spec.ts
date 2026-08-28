@@ -517,18 +517,22 @@ describe('ui-session-runtime: typed request handlers', () => {
     expect(coordinator.routeSelection).not.toHaveBeenCalled()
   })
 
-  it('starts the panel open inside the gesture frame before routed toggle executes', async () => {
+  it('passes the Content visibility observation into the gesture-opening decision', async () => {
     const { chrome } = fakeChromeRuntime()
     const coordinator = mockCoordinator()
     const handlers = createUiSessionEventHandlers({ chromeApi: chrome, coordinator })
 
     await handlers.onContentPanelToggle(
-      { requestId: 'toggle-g', type: 'shortcut.panelToggle', payload: {} },
+      {
+        requestId: 'toggle-g',
+        type: 'shortcut.panelToggle',
+        payload: { contentUIAppeared: false },
+      },
       sender()
     )
 
     expect(coordinator.openPanelForGesture).toHaveBeenCalledBefore(coordinator.togglePanel)
-    expect(coordinator.openPanelForGesture).toHaveBeenCalledWith(9, 19)
+    expect(coordinator.openPanelForGesture).toHaveBeenCalledWith(9, 19, false)
   })
 })
 

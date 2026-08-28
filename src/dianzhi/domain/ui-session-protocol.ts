@@ -37,7 +37,7 @@ export type SelectionRouteResult =
 export type PanelToggleRequest = {
   requestId: string
   type: 'shortcut.panelToggle'
-  payload: Record<string, never>
+  payload: { contentUIAppeared?: boolean }
 }
 
 export type PanelToggleResult = {
@@ -207,13 +207,24 @@ function isAnchorRectPayload(value: unknown): value is AnchorRect {
 export function parsePanelToggle(value: unknown): ParseResult<PanelToggleRequest> {
   const parsed = parseEnvelope(value, 'shortcut.panelToggle')
   if (!parsed.ok) return parsed
-  if (Object.keys(parsed.value.payload).length > 0) {
-    return invalid('Panel toggle payload must be empty.')
+  const { payload } = parsed.value
+  if (
+    Object.keys(payload).some((key) => key !== 'contentUIAppeared') ||
+    (payload.contentUIAppeared !== undefined && typeof payload.contentUIAppeared !== 'boolean')
+  ) {
+    return invalid('Panel toggle payload is invalid.')
   }
 
   return {
     ok: true,
-    value: { requestId: parsed.value.requestId, type: 'shortcut.panelToggle', payload: {} },
+    value: {
+      requestId: parsed.value.requestId,
+      type: 'shortcut.panelToggle',
+      payload:
+        payload.contentUIAppeared === undefined
+          ? {}
+          : { contentUIAppeared: payload.contentUIAppeared },
+    },
   }
 }
 

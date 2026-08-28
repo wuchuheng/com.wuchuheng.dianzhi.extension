@@ -313,6 +313,24 @@ describe('UiSessionCoordinator panel toggle', () => {
     })
   })
 
+  it('does not open the panel for a hidden Content UI whose latest owner is Content', async () => {
+    const { coordinator, sidePanel } = coordinatorWith(noneState('contentScript'))
+    await coordinator.initialize()
+
+    coordinator.openPanelForGesture(9, 19, false)
+    const result = await coordinator.togglePanel(
+      {
+        requestId: 'toggle-content-restore',
+        type: 'shortcut.panelToggle',
+        payload: { contentUIAppeared: false },
+      },
+      contentSource()
+    )
+
+    expect(sidePanel.open).not.toHaveBeenCalled()
+    expect(result.currentUI).toBe('contentScript')
+  })
+
   it('waits for the panel port before dispatching the toggle-open command', async () => {
     const { coordinator, sidePanel } = coordinatorWith(contentState())
     await coordinator.initialize()

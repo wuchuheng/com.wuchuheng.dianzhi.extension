@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { parseConversationCommand, parseToolsCommand } from '@/dianzhi/domain/protocol'
-import { parseSelectionRoute, parseToolShortcut } from '@/dianzhi/domain/ui-session-protocol'
+import {
+  parsePanelToggle,
+  parseSelectionRoute,
+  parseToolShortcut,
+} from '@/dianzhi/domain/ui-session-protocol'
 
 function selectionRequest(selectedText: string, contextText: string) {
   return {
@@ -93,5 +97,22 @@ describe('UI session request parsers', () => {
   it('accepts a positive tool shortcut index and rejects zero', () => {
     expect(parseToolShortcut(toolIndexRequest(2)).ok).toBe(true)
     expect(parseToolShortcut(toolIndexRequest(0)).ok).toBe(false)
+  })
+
+  it('accepts the Content UI visibility observation only for panel toggles', () => {
+    expect(
+      parsePanelToggle({
+        requestId: 'toggle-visible',
+        type: 'shortcut.panelToggle',
+        payload: { contentUIAppeared: false },
+      }).ok
+    ).toBe(true)
+    expect(
+      parsePanelToggle({
+        requestId: 'toggle-invalid',
+        type: 'shortcut.panelToggle',
+        payload: { contentUIAppeared: 'false' },
+      }).ok
+    ).toBe(false)
   })
 })

@@ -751,7 +751,12 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
         }
       }
 
-      if (state.contentUIAppeared || state.latestUI === 'sidePanel') {
+      const contentUIAppeared =
+        source.surface === 'contentScript' && request.payload.contentUIAppeared !== undefined
+          ? request.payload.contentUIAppeared
+          : state.contentUIAppeared
+      state.contentUIAppeared = contentUIAppeared
+      if (contentUIAppeared || state.latestUI === 'sidePanel') {
         await openPanelWithSnapshot(
           state,
           snapshot,
@@ -802,10 +807,11 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
    * own open (see `gestureOpenedTabs`). Safe to call when the panel is already
    * open or the tab is unknown.
    */
-  function openPanelForGesture(tabId: number, windowId: number): void {
+  function openPanelForGesture(tabId: number, windowId: number, contentUIAppeared?: boolean): void {
     if (!isPositiveInteger(tabId) || !isPositiveInteger(windowId)) return
     const state = tabStates.get(tabId)
     if (!state || windowHasPanel(state.windowId)) return
+    if (contentUIAppeared === false && state.latestUI === 'contentScript') return
     gestureOpenedTabs.add(tabId)
     void dependencies.sidePanel
       .open(tabId)

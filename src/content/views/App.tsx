@@ -439,7 +439,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       .dispatch({
         type: 'shortcut.panelToggle',
         requestId: requestId('panel'),
-        payload: {},
+        payload: { contentUIAppeared: state.visible },
       })
       .then((result) => {
         if (
@@ -467,7 +467,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
         })
       })
       .catch((error: unknown) => logError(Scope.CONTENT_SCRIPT, 'Side Panel toggle failed.', error))
-  }, [requestId])
+  }, [requestId, state.visible])
 
   /** Reports surface appearance/destruction to the Background coordinator. */
   const reportSurface = useCallback(

@@ -205,7 +205,7 @@ export function ContentApp({
     <div className="dz-layer" data-dianzhi-popover="true" data-motion-phase={motionPhase}>
       <div
         className={`dz-arrow is-${placement.direction}`}
-        style={{ left: placement.x + placement.arrowX - 6, top: arrowTop }}
+        style={{ left: placement.x + placement.arrowX - 6, top: arrowTop, ...motionStyle }}
       />
       <div
         ref={panelRef}
@@ -350,6 +350,13 @@ function fallbackAnchor(): AnchorRect {
   }
 }
 
+type PopoverRelocation = {
+  x: number
+  y: number
+  durationMs: number
+  sequence: number
+}
+
 export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
   const [state, dispatch] = useReducer(reduceConversationView, INITIAL_CONVERSATION_VIEW)
   const [settings, setSettings] = useState<DianzhiSettings>(DEFAULT_SETTINGS)
@@ -362,18 +369,57 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
     width: 380,
   })
   const [panelHeight, setPanelHeight] = useState(280)
+  const [relocation, setRelocation] = useState<PopoverRelocation | null>(null)
   const [composer, setComposer] = useState('')
   const panelRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLTextAreaElement | null>(null)
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const selectionControllerRef = useRef<ReturnType<typeof createSelectionController> | null>(null)
+  const placementRef = useRef(placement)
+  const relocationSequenceRef = useRef(0)
   const requestNumber = useRef(0)
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   const {
     phase: popoverMotionPhase,
     open: openPopoverMotion,
     close: closePopoverMotion,
+    relocate: relocatePopoverMotion,
   } = usePopoverMotion(reducedMotion)
+
+  const commitPlacement = useCallback((next: Placement) => {
+    placementRef.current = next
+    setPlacement((current) =>
+      current.direction === next.direction &&
+      current.x === next.x &&
+      current.y === next.y &&
+      current.arrowX === next.arrowX &&
+      current.width === next.width
+        ? current
+        : next
+    )
+  }, [])
+
+  const beginRelocation = useCallback(
+    (next: Placement) => {
+      const current = placementRef.current
+      if (reducedMotion) {
+        setRelocation(null)
+        commitPlacement(next)
+        relocatePopoverMotion(0)
+        return
+      }
+      const rendered = panelRef.current?.getBoundingClientRect()
+      const x = (rendered?.left ?? current.x) - next.x
+      const y = (rendered?.top ?? current.y) - next.y
+      const distance = Math.hypot(x, y)
+      const durationMs = Math.round(Math.min(300, Math.max(220, 180 + distance * 0.18)))
+      const sequence = ++relocationSequenceRef.current
+      commitPlacement(next)
+      setRelocation({ x, y, durationMs, sequence })
+      relocatePopoverMotion(durationMs)
+    },
+    [commitPlacement, reducedMotion, relocatePopoverMotion]
+  )
 
   const requestId = useCallback(
     (prefix: string) => `${prefix}-${Date.now()}-${++requestNumber.current}`,
@@ -647,16 +693,36 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
   useLayoutEffect(() => {
     if (!anchor) return
     const frame = window.requestAnimationFrame(() => {
-      setPlacement(
-        computePlacement(
-          anchor,
-          { width: state.expanded ? 544 : 380, height: panelHeight },
-          { width: window.innerWidth, height: window.innerHeight }
-        )
+      const next = computePlacement(
+        anchor,
+        { width: state.expanded ? 544 : 380, height: panelHeight },
+        { width: window.innerWidth, height: window.innerHeight }
       )
+      const current = placementRef.current
+
+      if (!state.visible || popoverMotionPhase === 'hidden' || popoverMotionPhase === 'opening') {
+        setRelocation(null)
+        commitPlacement(next)
+        return
+      }
+      if (popoverMotionPhase === 'closing') return
+      if (current.direction !== next.direction) {
+        beginRelocation(next)
+        return
+      }
+      if (popoverMotionPhase === 'relocating') return
+      commitPlacement(next)
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [anchor, panelHeight, state.expanded])
+  }, [
+    anchor,
+    beginRelocation,
+    commitPlacement,
+    panelHeight,
+    popoverMotionPhase,
+    state.expanded,
+    state.visible,
+  ])
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -729,7 +795,22 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       bodyScrollable={panelHeight >= maximumPanelHeight}
       panelRef={panelRef}
       motionPhase={popoverMotionPhase}
-      motionStyle={anchor ? computePopoverMotionStyle(anchor, placement, panelHeight) : undefined}
+      motionStyle={
+        anchor
+          ? {
+              ...computePopoverMotionStyle(anchor, placement, panelHeight),
+              ...(relocation
+                ? {
+                    '--dz-motion-relocate-x': `${relocation.x}px`,
+                    '--dz-motion-relocate-y': `${relocation.y}px`,
+                    '--dz-motion-relocate-duration': `${relocation.durationMs}ms`,
+                    '--dz-motion-relocate-name': `dz-popover-slide-${relocation.sequence % 2 ? 'a' : 'b'}`,
+                    '--dz-motion-relocate-arrow-name': `dz-popover-arrow-slide-${relocation.sequence % 2 ? 'a' : 'b'}`,
+                  }
+                : {}),
+            }
+          : undefined
+      }
       providerSettings={settings.provider}
       onSaveProvider={saveProvider}
       reasoningEnabled={settings.provider.reasoningEnabled}

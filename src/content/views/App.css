@@ -110,15 +110,27 @@ textarea {
 .dz-layer[data-motion-phase='closing'] {
   pointer-events: none;
 }
+.dz-layer[data-motion-phase='relocating'] {
+  pointer-events: none;
+}
 .dz-layer[data-motion-phase='closing'] .dz-popover {
   animation: dz-genie-popover 220ms cubic-bezier(0.4, 0, 1, 1) reverse both;
   will-change: transform, opacity, clip-path;
+}
+.dz-layer[data-motion-phase='relocating'] .dz-popover {
+  animation: var(--dz-motion-relocate-name) var(--dz-motion-relocate-duration)
+    cubic-bezier(0.4, 0, 0.2, 1) both;
+  will-change: transform;
 }
 .dz-layer[data-motion-phase='opening'] .dz-arrow {
   animation: dz-genie-arrow-in 140ms ease-out 80ms both;
 }
 .dz-layer[data-motion-phase='closing'] .dz-arrow {
   animation: dz-genie-arrow-out 100ms ease-in both;
+}
+.dz-layer[data-motion-phase='relocating'] .dz-arrow {
+  animation: var(--dz-motion-relocate-arrow-name) var(--dz-motion-relocate-duration) ease-in-out
+    both;
 }
 .dz-arrow {
   position: fixed;
@@ -608,6 +620,40 @@ textarea {
     clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
     opacity: 1;
     transform: translate3d(0, 0, 0) scale(1, 1);
+  }
+}
+@keyframes dz-popover-slide-a {
+  from {
+    transform: translate3d(var(--dz-motion-relocate-x), var(--dz-motion-relocate-y), 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+@keyframes dz-popover-slide-b {
+  from {
+    transform: translate3d(var(--dz-motion-relocate-x), var(--dz-motion-relocate-y), 0);
+  }
+  to {
+    transform: translate3d(0, 0, 0);
+  }
+}
+@keyframes dz-popover-arrow-slide-a {
+  0%,
+  68% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@keyframes dz-popover-arrow-slide-b {
+  0%,
+  68% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
   }
 }
 @keyframes dz-genie-arrow-in {

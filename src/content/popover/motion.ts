@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react'
 import type { AnchorRect, Placement } from './placement'
 
-export type PopoverMotionPhase = 'hidden' | 'opening' | 'open' | 'closing'
+export type PopoverMotionPhase = 'hidden' | 'opening' | 'open' | 'relocating' | 'closing'
 export type PopoverMotionStyle = CSSProperties & Record<`--dz-motion-${string}`, string>
 
 export const POPOVER_ENTER_MS = 260
@@ -84,6 +84,23 @@ export function usePopoverMotion(reducedMotion: boolean) {
     [clearTimer, moveTo, reducedMotion]
   )
 
+  const relocate = useCallback(
+    (durationMs: number) => {
+      clearTimer()
+      completionRef.current = null
+      if (reducedMotion) {
+        moveTo('open')
+        return
+      }
+      moveTo('relocating')
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null
+        if (phaseRef.current === 'relocating') moveTo('open')
+      }, durationMs)
+    },
+    [clearTimer, moveTo, reducedMotion]
+  )
+
   useEffect(
     () => () => {
       clearTimer()
@@ -92,5 +109,5 @@ export function usePopoverMotion(reducedMotion: boolean) {
     [clearTimer]
   )
 
-  return { phase, open, close }
+  return { phase, open, close, relocate }
 }

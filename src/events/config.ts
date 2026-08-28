@@ -15,16 +15,15 @@ import type {
 } from '@/dianzhi/domain/protocol'
 import type {
   ContentUiCommand,
-  CycleToolShortcutRequest,
   PanelToggleRequest,
   PanelToggleResult,
-  SelectToolShortcutRequest,
   SelectionRouteRequest,
   SelectionRouteResult,
   SidePanelCommand,
   SurfaceStatusRequest,
   SurfaceStatusResponse,
   ToolShortcutResult,
+  ToolShortcutRequest,
 } from '@/dianzhi/domain/ui-session-protocol'
 import type { DianzhiSettings } from '@/dianzhi/domain/types'
 import type { DatabaseRequest, DatabaseResult } from '@/offscreen/database/rpc'
@@ -72,21 +71,12 @@ export const panelPanelToggle = events.ep2bg<PanelToggleRequest, PanelToggleResu
   'dianzhi:shortcut-panel-toggle'
 )
 
-export const contentSelectToolShortcut = events.cs2bg<
-  SelectToolShortcutRequest,
-  ToolShortcutResult
->('dianzhi:shortcut-select-tool')
-
-export const panelSelectToolShortcut = events.ep2bg<SelectToolShortcutRequest, ToolShortcutResult>(
-  'dianzhi:shortcut-select-tool'
+export const contentToolShortcut = events.cs2bg<ToolShortcutRequest, ToolShortcutResult>(
+  'dianzhi:shortcut-tool'
 )
 
-export const contentCycleToolShortcut = events.cs2bg<CycleToolShortcutRequest, ToolShortcutResult>(
-  'dianzhi:shortcut-cycle-tool'
-)
-
-export const panelCycleToolShortcut = events.ep2bg<CycleToolShortcutRequest, ToolShortcutResult>(
-  'dianzhi:shortcut-cycle-tool'
+export const panelToolShortcut = events.ep2bg<ToolShortcutRequest, ToolShortcutResult>(
+  'dianzhi:shortcut-tool'
 )
 
 export const contentUiCommand = events.bg2cs<ContentUiCommand, void>('dianzhi:content-ui-command')

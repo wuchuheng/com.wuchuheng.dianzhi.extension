@@ -7,8 +7,7 @@ import type { ConversationSnapshot } from '@/dianzhi/domain/protocol'
 const contentSurfaceStatusDispatch = vi.fn()
 const selectionRouteDispatch = vi.fn()
 const contentPanelToggleDispatch = vi.fn()
-const contentSelectToolShortcutDispatch = vi.fn()
-const contentCycleToolShortcutDispatch = vi.fn()
+const contentToolShortcutDispatch = vi.fn()
 const contentSettingsCommandDispatch = vi.fn()
 const contentConversationCommandDispatch = vi.fn()
 const contentUiCommandHandle = vi.fn()
@@ -18,11 +17,8 @@ vi.mock('@/events/config', () => ({
   contentSurfaceStatus: { dispatch: (...args: unknown[]) => contentSurfaceStatusDispatch(...args) },
   selectionRoute: { dispatch: (...args: unknown[]) => selectionRouteDispatch(...args) },
   contentPanelToggle: { dispatch: (...args: unknown[]) => contentPanelToggleDispatch(...args) },
-  contentSelectToolShortcut: {
-    dispatch: (...args: unknown[]) => contentSelectToolShortcutDispatch(...args),
-  },
-  contentCycleToolShortcut: {
-    dispatch: (...args: unknown[]) => contentCycleToolShortcutDispatch(...args),
+  contentToolShortcut: {
+    dispatch: (...args: unknown[]) => contentToolShortcutDispatch(...args),
   },
   contentSettingsCommand: {
     dispatch: (...args: unknown[]) => contentSettingsCommandDispatch(...args),
@@ -98,8 +94,7 @@ beforeEach(() => {
   contentSurfaceStatusDispatch.mockReset()
   selectionRouteDispatch.mockReset()
   contentPanelToggleDispatch.mockReset()
-  contentSelectToolShortcutDispatch.mockReset()
-  contentCycleToolShortcutDispatch.mockReset()
+  contentToolShortcutDispatch.mockReset()
   contentSettingsCommandDispatch.mockReset()
   contentConversationCommandDispatch.mockReset()
   contentUiCommandHandle.mockReset()
@@ -117,11 +112,7 @@ beforeEach(() => {
     action: 'none',
     snapshot: null,
   })
-  contentSelectToolShortcutDispatch.mockResolvedValue({
-    handled: false,
-    reason: 'NO_APPEARED_UI',
-  })
-  contentCycleToolShortcutDispatch.mockResolvedValue({
+  contentToolShortcutDispatch.mockResolvedValue({
     handled: false,
     reason: 'NO_APPEARED_UI',
   })
@@ -243,8 +234,8 @@ describe('content session routing', () => {
       pressKey({ key: '1', code: 'Digit1', ctrlKey: true, shiftKey: true })
       await Promise.resolve()
     })
-    expect(contentSelectToolShortcutDispatch).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'shortcut.selectTool' })
+    expect(contentToolShortcutDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'shortcut.tool' })
     )
     expect(host?.querySelector('.dz-popover')).toBeNull()
   })

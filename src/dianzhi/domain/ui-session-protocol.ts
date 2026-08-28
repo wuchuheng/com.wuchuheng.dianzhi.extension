@@ -77,6 +77,16 @@ export type CycleToolShortcutRequest = {
   payload: { direction: 'left' | 'right' }
 }
 
+export type ToolShortcutRequest = {
+  requestId: string
+  type: 'shortcut.tool'
+  payload:
+    | { origin: 'contentScript'; action: 'select'; value: number }
+    | { origin: 'contentScript'; action: 'cycle'; value: 'left' | 'right' }
+    | { origin: 'sidePanel'; panelInstanceId: string; action: 'select'; value: number }
+    | { origin: 'sidePanel'; panelInstanceId: string; action: 'cycle'; value: 'left' | 'right' }
+}
+
 export type ToolShortcutResult =
   | { handled: false; reason: 'NO_APPEARED_UI' | 'TOOL_UNAVAILABLE' }
   | { handled: true; target: UiSurface; snapshot: ConversationSnapshot | null }
@@ -325,4 +335,22 @@ export function parseToolShortcut(
       payload: { direction: payload.direction },
     },
   }
+}
+
+export function parseToolShortcutRequest(value: unknown): ParseResult<ToolShortcutRequest> {
+  const parsed = parseEnvelope(value, 'shortcut.tool')
+  if (!parsed.ok) return parsed
+  const { payload } = parsed.value
+  const origin = payload.origin
+  const action = payload.action
+  const validOrigin = origin === 'contentScript' || origin === 'sidePanel'
+  const validAction = action === 'select' || action === 'cycle'
+  if (!validOrigin || !validAction) return invalid('Tool shortcut request is invalid.')
+  const expected = origin === 'sidePanel' ? ['origin', 'panelInstanceId', 'action', 'value'] : ['origin', 'action', 'value']
+  if (!Object.keys(payload).every((key) => expected.includes(key))) return invalid('Tool shortcut request is invalid.')
+  if (origin === 'sidePanel' && (typeof payload.panelInstanceId !== 'string' || !payload.panelInstanceId.trim())) return invalid('Tool shortcut request is invalid.')
+  if (action === 'select' && !isPositiveInteger(payload.value)) return invalid('Tool shortcut index is invalid.')
+  if (action === 'cycle' && payload.value !== 'left' && payload.value !== 'right') return invalid('Tool shortcut direction is invalid.')
+  const caller = origin === 'sidePanel' ? { origin, panelInstanceId: payload.panelInstanceId as string } : { origin }
+  return { ok: true, value: { requestId: parsed.value.requestId, type: 'shortcut.tool', payload: action === 'select' ? { ...caller, action, value: payload.value as number } : { ...caller, action, value: payload.value as 'left' | 'right' } } as ToolShortcutRequest }
 }

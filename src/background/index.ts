@@ -22,17 +22,15 @@ import { streamChat } from '@/dianzhi/provider/client'
 import type { ToolRecord } from '@/offscreen/database/config-store'
 import {
   contentConversationCommand,
-  contentCycleToolShortcut,
+  contentToolShortcut,
   contentPanelToggle,
-  contentSelectToolShortcut,
   contentSettingsCommand,
   contentSurfaceStatus,
   contentUiCommand,
   conversationUpdateToContent,
   extensionConversationCommand,
-  panelCycleToolShortcut,
+  panelToolShortcut,
   panelPanelToggle,
-  panelSelectToolShortcut,
   panelSurfaceStatus,
   selectionRoute,
   settingsCommand,
@@ -196,12 +194,10 @@ const uiSessionHandlers = createUiSessionEventHandlers({
 contentSurfaceStatus.handleWithSender(uiSessionHandlers.onContentSurfaceStatus)
 selectionRoute.handleWithSender(uiSessionHandlers.onSelectionRoute)
 contentPanelToggle.handleWithSender(uiSessionHandlers.onContentPanelToggle)
-contentSelectToolShortcut.handleWithSender(uiSessionHandlers.onContentSelectToolShortcut)
-contentCycleToolShortcut.handleWithSender(uiSessionHandlers.onContentCycleToolShortcut)
+contentToolShortcut.handleWithSender(uiSessionHandlers.onContentToolShortcut)
 panelSurfaceStatus.handleWithSender(uiSessionHandlers.onPanelSurfaceStatus)
 panelPanelToggle.handleWithSender(uiSessionHandlers.onPanelPanelToggle)
-panelSelectToolShortcut.handleWithSender(uiSessionHandlers.onPanelSelectToolShortcut)
-panelCycleToolShortcut.handleWithSender(uiSessionHandlers.onPanelCycleToolShortcut)
+panelToolShortcut.handleWithSender(uiSessionHandlers.onPanelToolShortcut)
 const optionsTestRunner = createOptionsToolTestRunner()
 
 function handleConversationCommand(

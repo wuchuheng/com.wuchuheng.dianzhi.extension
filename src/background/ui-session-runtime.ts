@@ -11,6 +11,7 @@ import type {
   SidePanelCommand,
   SurfaceStatusRequest,
   SurfaceStatusResponse,
+  ToolShortcutRequest,
   ToolShortcutResult,
 } from '@/dianzhi/domain/ui-session-protocol'
 import { log, logError, Scope } from '@/events/logger'
@@ -26,6 +27,7 @@ import {
   parseSelectionRoute,
   parseSurfaceStatus,
   parseToolShortcut,
+  parseToolShortcutRequest,
 } from '@/dianzhi/domain/ui-session-protocol'
 
 /** The packaged Side Panel page; native open/closed events and panel senders are filtered to this path. */
@@ -92,6 +94,14 @@ export interface UiSessionEventHandlers {
     value: unknown,
     sender: chrome.runtime.MessageSender
   ): Promise<PanelToggleResult>
+  onContentToolShortcut(
+    value: unknown,
+    sender: chrome.runtime.MessageSender
+  ): Promise<ToolShortcutResult>
+  onPanelToolShortcut(
+    value: unknown,
+    sender: chrome.runtime.MessageSender
+  ): Promise<ToolShortcutResult>
   onContentSelectToolShortcut(
     value: unknown,
     sender: chrome.runtime.MessageSender
@@ -116,6 +126,23 @@ function isPositiveInteger(value: unknown): value is number {
 
 function invalid(message: string): DianzhiError {
   return new DianzhiError({ code: 'INVALID_EVENT', message })
+}
+
+function executeToolShortcut(
+  coordinator: UiSessionCoordinator,
+  request: ToolShortcutRequest,
+  source: UiEventSource
+): Promise<ToolShortcutResult> {
+  if (request.payload.action === 'select') {
+    return coordinator.selectTool(
+      { requestId: request.requestId, type: 'shortcut.selectTool', payload: { index: request.payload.value } },
+      source
+    )
+  }
+  return coordinator.cycleTool(
+    { requestId: request.requestId, type: 'shortcut.cycleTool', payload: { direction: request.payload.value } },
+    source
+  )
 }
 
 function extractRequestId(value: unknown): string | null {
@@ -546,6 +573,22 @@ export function createUiSessionEventHandlers(deps: {
           action: result.action,
           ...snapshotIds(result),
         }),
+      })
+    },
+    onContentToolShortcut(value, sender) {
+      return runContentRequest({
+        stage: 'shortcut.tool', value, sender, parse: parseToolShortcutRequest,
+        execute: (request, source) => executeToolShortcut(coordinator, request, source),
+        commit: (_request, result) => toolResultContext(result),
+      })
+    },
+    onPanelToolShortcut(value, sender) {
+      return runPanelRequest({
+        chromeApi, stage: 'shortcut.tool', value, sender, parse: parseToolShortcutRequest,
+        bindingForRequest: (request) => request.payload.origin === 'sidePanel'
+          ? (panelBindingFor?.(request.payload.panelInstanceId) ?? null) : null,
+        execute: (request, source) => executeToolShortcut(coordinator, request, source),
+        commit: (_request, result) => toolResultContext(result),
       })
     },
     onContentSelectToolShortcut(value, sender) {

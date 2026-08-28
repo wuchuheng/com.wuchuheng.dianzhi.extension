@@ -9,9 +9,8 @@ import type { DianzhiSettings, ProviderSettings } from '@/dianzhi/domain/types'
 import type { ConversationCommand } from '@/dianzhi/domain/protocol'
 import {
   extensionConversationCommand,
-  panelCycleToolShortcut,
+  panelToolShortcut,
   panelPanelToggle,
-  panelSelectToolShortcut,
   panelSurfaceStatus,
   settingsCommand,
   sidePanelCommand,
@@ -265,11 +264,13 @@ export default function App() {
   )
   const selectToolByIndex = useCallback(
     (index: number) => {
-      void panelSelectToolShortcut
+      const panelInstance = panelInstanceId.current
+      if (!panelInstance) return
+      void panelToolShortcut
         .dispatch({
-          type: 'shortcut.selectTool',
+          type: 'shortcut.tool',
           requestId: requestId('tool'),
-          payload: { index },
+          payload: { origin: 'sidePanel', panelInstanceId: panelInstance, action: 'select', value: index },
         })
         .then(applyToolResult)
         .catch((error: unknown) => logError(Scope.EXTENSION_PAGE, 'Tool select failed.', error))
@@ -278,11 +279,13 @@ export default function App() {
   )
   const cycleTool = useCallback(
     (direction: 'left' | 'right') => {
-      void panelCycleToolShortcut
+      const panelInstance = panelInstanceId.current
+      if (!panelInstance) return
+      void panelToolShortcut
         .dispatch({
-          type: 'shortcut.cycleTool',
+          type: 'shortcut.tool',
           requestId: requestId('cycle'),
-          payload: { direction },
+          payload: { origin: 'sidePanel', panelInstanceId: panelInstance, action: 'cycle', value: direction },
         })
         .then(applyToolResult)
         .catch((error: unknown) => logError(Scope.EXTENSION_PAGE, 'Tool cycle failed.', error))

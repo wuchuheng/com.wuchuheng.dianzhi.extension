@@ -17,9 +17,8 @@ import { useStreamingHeight } from '@/dianzhi/ui/use-streaming-height'
 import { markdownToPlainText } from '@/dianzhi/ui/markdown-text'
 import {
   contentConversationCommand,
-  contentCycleToolShortcut,
+  contentToolShortcut,
   contentPanelToggle,
-  contentSelectToolShortcut,
   contentSettingsCommand,
   contentSurfaceStatus,
   contentUiCommand,
@@ -27,8 +26,7 @@ import {
   selectionRoute,
 } from '@/events/config'
 import type {
-  CycleToolShortcutRequest,
-  SelectToolShortcutRequest,
+  ToolShortcutRequest,
   ToolShortcutResult,
 } from '@/dianzhi/domain/ui-session-protocol'
 
@@ -376,12 +374,10 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
   }, [])
 
   const dispatchToolShortcut = useCallback(
-    async (request: SelectToolShortcutRequest | CycleToolShortcutRequest) => {
+    async (request: ToolShortcutRequest) => {
       try {
         const result =
-          request.type === 'shortcut.selectTool'
-            ? await contentSelectToolShortcut.dispatch(request)
-            : await contentCycleToolShortcut.dispatch(request)
+          await contentToolShortcut.dispatch(request)
         applyToolResult(result)
       } catch (error: unknown) {
         dispatch({ type: 'view.error', error: errorShape(error) })
@@ -393,9 +389,9 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
   const selectTool = useCallback(
     (index: number) => {
       void dispatchToolShortcut({
-        type: 'shortcut.selectTool',
+        type: 'shortcut.tool',
         requestId: requestId('tool'),
-        payload: { index },
+        payload: { origin: 'contentScript', action: 'select', value: index },
       })
     },
     [dispatchToolShortcut, requestId]
@@ -404,9 +400,9 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
   const cycleTool = useCallback(
     (direction: 'left' | 'right') => {
       void dispatchToolShortcut({
-        type: 'shortcut.cycleTool',
+        type: 'shortcut.tool',
         requestId: requestId('cycle'),
-        payload: { direction },
+        payload: { origin: 'contentScript', action: 'cycle', value: direction },
       })
     },
     [dispatchToolShortcut, requestId]

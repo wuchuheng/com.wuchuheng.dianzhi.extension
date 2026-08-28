@@ -148,6 +148,49 @@ describe('ContentApp title actions', () => {
   })
 })
 
+describe('ContentApp selection-origin motion', () => {
+  it('keeps a closing popover mounted with its selection-origin transform', async () => {
+    host = document.createElement('div')
+    document.body.appendChild(host)
+    root = createRoot(host)
+    await act(async () => {
+      root?.render(
+        <ContentApp
+          state={{ ...visibleState(), visible: false }}
+          placement={placement}
+          panelHeight={280}
+          motionPhase="closing"
+          motionStyle={{
+            '--dz-motion-x': '-120px',
+            '--dz-motion-y': '-80px',
+            '--dz-motion-scale-x': '0.25',
+            '--dz-motion-scale-y': '0.07',
+          }}
+          reasoningEnabled={false}
+          shortcuts={DEFAULT_SETTINGS.shortcuts}
+          onToolSelect={() => undefined}
+          onModeChange={() => undefined}
+          onExpand={() => undefined}
+          onClose={() => undefined}
+          onDock={() => undefined}
+          onSend={() => undefined}
+          onStop={() => undefined}
+          onRetry={() => undefined}
+          onOpenSettings={() => undefined}
+          providerSettings={DEFAULT_SETTINGS.provider}
+          onSaveProvider={async () => undefined}
+        />
+      )
+    })
+
+    const layer = host.querySelector<HTMLElement>('.dz-layer')
+    const popover = host.querySelector<HTMLElement>('.dz-popover')
+    expect(layer?.dataset.motionPhase).toBe('closing')
+    expect(popover?.style.getPropertyValue('--dz-motion-x')).toBe('-120px')
+    expect(popover?.style.getPropertyValue('--dz-motion-scale-y')).toBe('0.07')
+  })
+})
+
 describe('ContentApp composer while streaming', () => {
   it('keeps the chat input editable while a reply is streaming', async () => {
     const streamingState: ConversationViewState = {

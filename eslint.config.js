@@ -77,6 +77,7 @@ export default tseslint.config(
             'tests/unit/content/selection/words.spec.ts',
             'tests/unit/content/selection/context.spec.ts',
             'tests/unit/content/selection/restore.spec.ts',
+            'tests/unit/content/popover/motion.spec.ts',
             'tests/unit/content/views/scroll-guard.spec.ts',
             'tests/unit/content/views/useScrollGuard.spec.tsx',
             'tests/unit/content/views/App.spec.tsx',

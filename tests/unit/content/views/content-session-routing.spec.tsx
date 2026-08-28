@@ -138,6 +138,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.clearAllMocks()
   act(() => root?.unmount())
@@ -224,8 +225,123 @@ describe('content session routing', () => {
     )
     expect(host?.querySelector('.dz-popover')).not.toBeNull()
     const popover = host?.querySelector<HTMLElement>('.dz-popover')
+    expect(host?.querySelector<HTMLElement>('.dz-layer')?.dataset.motionPhase).toBe('opening')
     expect(popover?.style.left).toBeTruthy()
     expect(popover?.style.top).toBeTruthy()
+    expect(popover?.style.getPropertyValue('--dz-motion-x')).toMatch(/px$/)
+    expect(popover?.style.getPropertyValue('--dz-motion-y')).toMatch(/px$/)
+  })
+
+  it('keeps the popover mounted until the close animation reports destruction', async () => {
+    vi.useFakeTimers()
+    const restorable = snapshot(10)
+    contentPanelToggleDispatch.mockResolvedValue({
+      currentUI: 'contentScript',
+      latestUI: 'contentScript',
+      action: 'restore',
+      snapshot: restorable,
+    })
+    await renderApp()
+    await act(async () => {
+      pressKey({ key: '[', code: 'BracketLeft', ctrlKey: true })
+      await Promise.resolve()
+    })
+
+    contentSurfaceStatusDispatch.mockClear()
+    act(() => pressKey({ key: 'Escape', code: 'Escape' }))
+
+    expect(host?.querySelector<HTMLElement>('.dz-layer')?.dataset.motionPhase).toBe('closing')
+    expect(contentSurfaceStatusDispatch).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300)
+    })
+    expect(host?.querySelector('.dz-popover')).toBeNull()
+    expect(contentSurfaceStatusDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'ui.surfaceStatus',
+        payload: { origin: 'contentScript', status: 'destroyed', selectionSessionId: 10 },
+      })
+    )
+  })
+
+  it('starts closing while dispatching a Side Panel switch in the user gesture', async () => {
+    vi.useFakeTimers()
+    const restorable = snapshot(10)
+    contentPanelToggleDispatch
+      .mockResolvedValueOnce({
+        currentUI: 'contentScript',
+        latestUI: 'contentScript',
+        action: 'restore',
+        snapshot: restorable,
+      })
+      .mockResolvedValueOnce({
+        currentUI: 'sidePanel',
+        latestUI: 'sidePanel',
+        action: 'restore',
+        snapshot: restorable,
+      })
+    await renderApp()
+    await act(async () => {
+      pressKey({ key: '[', code: 'BracketLeft', ctrlKey: true })
+      await Promise.resolve()
+    })
+
+    act(() => pressKey({ key: '[', code: 'BracketLeft', ctrlKey: true }))
+
+    expect(contentPanelToggleDispatch).toHaveBeenCalledTimes(2)
+    expect(host?.querySelector<HTMLElement>('.dz-layer')?.dataset.motionPhase).toBe('closing')
+  })
+
+  it('animates a visible popover before honoring a Background destroy command', async () => {
+    vi.useFakeTimers()
+    const restorable = snapshot(10)
+    contentPanelToggleDispatch.mockResolvedValue({
+      currentUI: 'contentScript',
+      latestUI: 'contentScript',
+      action: 'restore',
+      snapshot: restorable,
+    })
+    await renderApp()
+    await act(async () => {
+      pressKey({ key: '[', code: 'BracketLeft', ctrlKey: true })
+      await Promise.resolve()
+    })
+    const handler = contentUiCommandHandle.mock.calls[0][0] as (command: {
+      type: string
+    }) => Promise<void>
+
+    await act(async () => handler({ type: 'destroy' }))
+    expect(host?.querySelector<HTMLElement>('.dz-layer')?.dataset.motionPhase).toBe('closing')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300)
+    })
+    expect(host?.querySelector('.dz-popover')).toBeNull()
+  })
+
+  it('skips deformation when the user prefers reduced motion', async () => {
+    vi.mocked(window.matchMedia).mockReturnValue({
+      matches: true,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    } as unknown as MediaQueryList)
+    const restorable = snapshot(10)
+    contentPanelToggleDispatch.mockResolvedValue({
+      currentUI: 'contentScript',
+      latestUI: 'contentScript',
+      action: 'restore',
+      snapshot: restorable,
+    })
+    await renderApp()
+    await act(async () => {
+      pressKey({ key: '[', code: 'BracketLeft', ctrlKey: true })
+      await Promise.resolve()
+    })
+    expect(host?.querySelector<HTMLElement>('.dz-layer')?.dataset.motionPhase).toBe('open')
+
+    act(() => pressKey({ key: 'Escape', code: 'Escape' }))
+    expect(host?.querySelector('.dz-popover')).toBeNull()
   })
 
   it('ignores tool shortcuts when Background reports no apparent UI', async () => {

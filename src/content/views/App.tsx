@@ -25,13 +25,16 @@ import {
   conversationUpdateToContent,
   selectionRoute,
 } from '@/events/config'
-import type {
-  ToolShortcutRequest,
-  ToolShortcutResult,
-} from '@/dianzhi/domain/ui-session-protocol'
+import type { ToolShortcutRequest, ToolShortcutResult } from '@/dianzhi/domain/ui-session-protocol'
 
 import { createSelectionController } from '../selection/controller'
 import { computePlacement, type AnchorRect, type Placement } from '../popover/placement'
+import {
+  computePopoverMotionStyle,
+  usePopoverMotion,
+  type PopoverMotionPhase,
+  type PopoverMotionStyle,
+} from '../popover/motion'
 import { formatShortcut, matchesShortcut, toolShortcutNumber } from './shortcuts'
 import { log, logError, Scope } from '@/events/logger'
 import { openOptionsPageFromContent } from './open-options-page'
@@ -139,6 +142,8 @@ export interface ContentAppProps {
   providerSettings: ProviderSettings
   onSaveProvider(provider: ProviderSettings): Promise<void>
   panelRef?: React.RefObject<HTMLDivElement | null>
+  motionPhase?: PopoverMotionPhase
+  motionStyle?: PopoverMotionStyle
 }
 
 export function ContentApp({
@@ -165,6 +170,8 @@ export function ContentApp({
   providerSettings,
   onSaveProvider,
   panelRef,
+  motionPhase = state.visible ? 'open' : 'hidden',
+  motionStyle,
 }: ContentAppProps) {
   const snapshot = state.snapshot
   const latestAssistant =
@@ -180,7 +187,7 @@ export function ContentApp({
     if (!needsSettings) setSetupDismissed(false)
   }
   const showSetup = needsSettings && !setupDismissed
-  if (!state.visible) return null
+  if (motionPhase === 'hidden') return null
   const streaming = latestAssistant?.status === 'streaming'
   const canRetry = latestAssistant?.status === 'error' || latestAssistant?.status === 'stopped'
   const arrowTop = placement.direction === 'below' ? placement.y - 6 : placement.y + panelHeight - 6
@@ -195,15 +202,21 @@ export function ContentApp({
     }
   }
   return (
-    <div className="dz-layer" data-dianzhi-popover="true">
+    <div className="dz-layer" data-dianzhi-popover="true" data-motion-phase={motionPhase}>
       <div
         className={`dz-arrow is-${placement.direction}`}
         style={{ left: placement.x + placement.arrowX - 6, top: arrowTop }}
       />
       <div
         ref={panelRef}
-        className={`dz-popover${state.expanded ? ' is-expanded' : ''}`}
-        style={{ left: placement.x, top: placement.y, width: placement.width, height: panelHeight }}
+        className={`dz-popover is-${placement.direction}${state.expanded ? ' is-expanded' : ''}`}
+        style={{
+          left: placement.x,
+          top: placement.y,
+          width: placement.width,
+          height: panelHeight,
+          ...motionStyle,
+        }}
         role="dialog"
         aria-label="点知查询"
       >
@@ -355,6 +368,12 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const selectionControllerRef = useRef<ReturnType<typeof createSelectionController> | null>(null)
   const requestNumber = useRef(0)
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const {
+    phase: popoverMotionPhase,
+    open: openPopoverMotion,
+    close: closePopoverMotion,
+  } = usePopoverMotion(reducedMotion)
 
   const requestId = useCallback(
     (prefix: string) => `${prefix}-${Date.now()}-${++requestNumber.current}`,
@@ -376,8 +395,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
   const dispatchToolShortcut = useCallback(
     async (request: ToolShortcutRequest) => {
       try {
-        const result =
-          await contentToolShortcut.dispatch(request)
+        const result = await contentToolShortcut.dispatch(request)
         applyToolResult(result)
       } catch (error: unknown) {
         dispatch({ type: 'view.error', error: errorShape(error) })
@@ -448,6 +466,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
             : null
           setAnchor(restoredAnchor ?? fallbackAnchor())
           dispatch({ type: 'view.restored', snapshot: result.snapshot })
+          openPopoverMotion()
           void contentSurfaceStatus.dispatch({
             type: 'ui.surfaceStatus',
             requestId: requestId('surface'),
@@ -464,7 +483,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
         })
       })
       .catch((error: unknown) => logError(Scope.CONTENT_SCRIPT, 'Side Panel toggle failed.', error))
-  }, [requestId, state.visible])
+  }, [openPopoverMotion, requestId, state.visible])
 
   /** Reports surface appearance/destruction to the Background coordinator. */
   const reportSurface = useCallback(
@@ -480,6 +499,23 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
         )
     },
     [requestId]
+  )
+
+  const requestClose = useCallback(
+    (event: 'view.closed' | 'view.destroyed') => {
+      if (
+        document.activeElement instanceof HTMLElement &&
+        extensionHost.contains(document.activeElement)
+      ) {
+        document.activeElement.blur()
+      }
+      const selectionSessionId = state.snapshot?.selectionSession.id ?? null
+      closePopoverMotion(() => {
+        dispatch({ type: event })
+        reportSurface('destroyed', selectionSessionId)
+      })
+    },
+    [closePopoverMotion, extensionHost, reportSurface, state.snapshot?.selectionSession.id]
   )
 
   useEffect(() => {
@@ -506,16 +542,9 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
     () =>
       contentUiCommand.handle(async (command) => {
         if (command.type !== 'destroy') return
-        if (
-          document.activeElement instanceof HTMLElement &&
-          extensionHost.contains(document.activeElement)
-        ) {
-          document.activeElement.blur()
-        }
-        dispatch({ type: 'view.destroyed' })
-        reportSurface('destroyed', null)
+        requestClose('view.destroyed')
       }),
-    [extensionHost, reportSurface]
+    [requestClose]
   )
 
   useEffect(() => {
@@ -544,12 +573,14 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
           .then((result) => {
             if (result.target === 'contentScript' && result.display && result.snapshot) {
               dispatch({ type: 'view.restored', snapshot: result.snapshot })
+              openPopoverMotion()
               reportSurface('appeared', result.snapshot.selectionSession.id)
             }
           })
           .catch((error: unknown) => {
             console.error('[dianzhi] selection.route failed:', error)
             dispatch({ type: 'view.error', error: errorShape(error) })
+            openPopoverMotion()
           })
       },
       onAnchorChange: setAnchor,
@@ -560,7 +591,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       selectionControllerRef.current = null
       controller.stop()
     }
-  }, [extensionHost, requestId, reportSurface, settings])
+  }, [extensionHost, openPopoverMotion, requestId, reportSurface, settings])
 
   useEffect(() => {
     // While the popover is open, keep the captured word highlighted on the
@@ -577,15 +608,13 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
   // Closing the popover returns focus to the page instead of leaving it
   // stuck on a removed node (WCAG focus management).
   const closePopover = useCallback(() => {
-    if (
-      document.activeElement instanceof HTMLElement &&
-      extensionHost.contains(document.activeElement)
-    ) {
-      document.activeElement.blur()
-    }
-    dispatch({ type: 'view.closed' })
-    reportSurface('destroyed', state.snapshot?.selectionSession.id ?? null)
-  }, [extensionHost, reportSurface, state.snapshot?.selectionSession.id])
+    requestClose('view.closed')
+  }, [requestClose])
+
+  const dockPopover = useCallback(() => {
+    if (state.visible) closePopover()
+    togglePanel()
+  }, [closePopover, state.visible, togglePanel])
 
   // Re-focus the textarea on `streaming` flips so that after send the input is
   // focused again and the user can type the next draft while the reply streams.
@@ -611,12 +640,12 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
     targetVersion: [state.snapshot, state.expanded, state.mode],
     minimumHeight: 280,
     maximumHeight: maximumPanelHeight,
-    reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    reducedMotion,
     onHeightChange: setPanelHeight,
   })
 
   useLayoutEffect(() => {
-    if (!state.visible || !anchor) return
+    if (!anchor) return
     const frame = window.requestAnimationFrame(() => {
       setPlacement(
         computePlacement(
@@ -627,7 +656,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       )
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [anchor, panelHeight, state.visible, state.expanded])
+  }, [anchor, panelHeight, state.expanded])
 
   useEffect(() => {
     const onPointerDown = (event: PointerEvent) => {
@@ -636,6 +665,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       }
     }
     const onKeyDown = (event: KeyboardEvent) => {
+      if (popoverMotionPhase === 'closing') return
       if (matchesShortcut(event, settings.shortcuts.close)) {
         event.preventDefault()
         closePopover()
@@ -644,7 +674,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       if (matchesShortcut(event, settings.shortcuts.dock)) {
         event.preventDefault()
         log(Scope.CONTENT_SCRIPT, 'Page received Side Panel toggle shortcut.')
-        togglePanel()
+        dockPopover()
         return
       }
       // Tool shortcuts always dispatch; the coordinator decides the target and
@@ -680,7 +710,16 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       document.removeEventListener('pointerdown', onPointerDown)
       document.removeEventListener('keydown', onKeyDown, true)
     }
-  }, [closePopover, cycleTool, extensionHost, selectTool, settings.shortcuts, state, togglePanel])
+  }, [
+    closePopover,
+    cycleTool,
+    dockPopover,
+    extensionHost,
+    popoverMotionPhase,
+    selectTool,
+    settings.shortcuts,
+    state,
+  ])
 
   return (
     <ContentApp
@@ -689,6 +728,8 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       panelHeight={panelHeight}
       bodyScrollable={panelHeight >= maximumPanelHeight}
       panelRef={panelRef}
+      motionPhase={popoverMotionPhase}
+      motionStyle={anchor ? computePopoverMotionStyle(anchor, placement, panelHeight) : undefined}
       providerSettings={settings.provider}
       onSaveProvider={saveProvider}
       reasoningEnabled={settings.provider.reasoningEnabled}
@@ -705,7 +746,7 @@ export default function App({ extensionHost }: { extensionHost: HTMLElement }) {
       onModeChange={(mode) => dispatch({ type: 'view.mode', mode })}
       onExpand={() => dispatch({ type: 'view.expanded', expanded: !state.expanded })}
       onClose={closePopover}
-      onDock={togglePanel}
+      onDock={dockPopover}
       onSend={() => {
         const content = composer.trim()
         if (!content) return

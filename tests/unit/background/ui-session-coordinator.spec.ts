@@ -24,6 +24,16 @@ const PAGE_NORMALIZED = 'https://example.com/docs/rust?chapter=1'
 const OTHER_PAGE = 'https://example.com/docs/rust?chapter=2'
 const at = '2026-08-27T00:00:00.000Z'
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((onResolve, onReject) => {
+    resolve = onResolve
+    reject = onReject
+  })
+  return { promise, resolve, reject }
+}
+
 function message(id: number, conversationId: number): MessageRecord {
   return {
     id,
@@ -179,6 +189,25 @@ function cycleTool(
   return { requestId: `cycle-${direction}`, type: 'shortcut.cycleTool', payload: { direction } }
 }
 
+const streamDelta: ConversationUpdate = {
+  type: 'stream.delta',
+  conversationId: 22,
+  messageId: 122,
+  content: 'next',
+}
+
+const streamDone: ConversationUpdate = {
+  type: 'stream.done',
+  conversationId: 22,
+  message: {
+    ...message(122, 22),
+    sequence: 2,
+    role: 'assistant',
+    content: 'finished',
+    status: 'completed',
+  },
+}
+
 function coordinatorWith(
   initial: TabSessionState | Record<string, TabSessionState> | null = null,
   extras: Partial<UiSessionCoordinatorDependencies> = {}
@@ -271,6 +300,224 @@ function coordinatorWith(
 }
 
 describe('UiSessionCoordinator panel toggle', () => {
+  it('routes a live stream by to without losing its terminal event during handoff', async () => {
+    const ready = deferred<void>()
+    const synchronized = deferred<void>()
+    const panelEvents: string[] = []
+    const { coordinator, content, saved, sidePanel } = coordinatorWith(contentState(), {
+      sidePanel: {
+        ready: vi.fn(() => ready.promise),
+        publish: vi.fn(async (_windowId, update) => {
+          panelEvents.push(update.type)
+          if (update.type === 'conversation.sync') await synchronized.promise
+        }),
+      },
+    })
+    await coordinator.initialize()
+
+    coordinator.openPanelForGesture(9, 19)
+    const switching = coordinator.togglePanel(toggleRequest(), contentSource())
+    await vi.waitFor(() => expect(sidePanel.ready).toHaveBeenCalledWith(19))
+
+    await coordinator.publish(9, streamDelta)
+    expect(content.publish).toHaveBeenCalledWith(9, streamDelta)
+    expect(content.destroy).not.toHaveBeenCalled()
+
+    ready.resolve(undefined)
+    await vi.waitFor(() =>
+      expect(sidePanel.publish).toHaveBeenCalledWith(
+        19,
+        expect.objectContaining({ type: 'conversation.sync' })
+      )
+    )
+    await coordinator.publish(9, streamDone)
+    expect(panelEvents).toEqual(['conversation.sync', 'stream.done'])
+    expect(content.destroy).not.toHaveBeenCalled()
+
+    synchronized.resolve(undefined)
+    const result = await switching
+    expect(content.destroy).toHaveBeenCalledWith(9)
+    expect(result).toMatchObject({ currentUI: 'sidePanel', latestUI: 'sidePanel' })
+    expect(saved()['9']).toMatchObject({
+      contentUIAppeared: false,
+      sidePanelAppeared: true,
+      latestUI: 'sidePanel',
+    })
+    expect(saved()['9'].contentRestore).toBeUndefined()
+
+    content.publish.mockClear()
+    sidePanel.publish.mockClear()
+    await coordinator.publish(9, streamDone)
+    expect(sidePanel.publish).toHaveBeenCalledWith(19, streamDone)
+    expect(content.publish).not.toHaveBeenCalled()
+  })
+
+  it('restores the current live snapshot to Content when panel synchronization fails', async () => {
+    const live = snapshot(10, 22)
+    live.messages.push({
+      ...message(122, 22),
+      sequence: 2,
+      role: 'assistant',
+      content: 'still streaming',
+      status: 'streaming',
+    })
+    const { coordinator, content, saved, sidePanel } = coordinatorWith(contentState(), {
+      conversations: {
+        loadSelectionSession: vi.fn(async () => live),
+      },
+      sidePanel: {
+        publish: vi.fn(async (_windowId, update) => {
+          if (update.type === 'conversation.sync') throw new Error('sync rejected')
+        }),
+      },
+    })
+    await coordinator.initialize()
+
+    coordinator.openPanelForGesture(9, 19)
+    await expect(coordinator.togglePanel(toggleRequest(), contentSource())).rejects.toMatchObject({
+      code: 'SIDE_PANEL_DELIVERY_FAILED',
+    })
+
+    expect(content.destroy).not.toHaveBeenCalled()
+    expect(content.publish).toHaveBeenCalledWith(9, {
+      type: 'conversation.sync',
+      snapshot: live,
+    })
+    expect(saved()['9']).toMatchObject({
+      contentUIAppeared: true,
+      sidePanelAppeared: false,
+      latestUI: 'contentScript',
+    })
+    expect(sidePanel.publish).toHaveBeenCalledWith(19, {
+      type: 'conversation.sync',
+      snapshot: live,
+    })
+  })
+
+  it('invalidates a pending handoff when the panel closes and ignores its late acknowledgement', async () => {
+    const synchronized = deferred<void>()
+    const { coordinator, content, saved, sidePanel } = coordinatorWith(contentState(), {
+      sidePanel: {
+        publish: vi.fn(async (_windowId, update) => {
+          if (update.type === 'conversation.sync') await synchronized.promise
+        }),
+      },
+    })
+    await coordinator.initialize()
+
+    coordinator.openPanelForGesture(9, 19)
+    const switching = coordinator.togglePanel(toggleRequest(), contentSource())
+    void switching.catch(() => undefined)
+    await vi.waitFor(() =>
+      expect(sidePanel.publish).toHaveBeenCalledWith(
+        19,
+        expect.objectContaining({ type: 'conversation.sync' })
+      )
+    )
+
+    await coordinator.onPanelClosed(19)
+    await coordinator.publish(9, streamDone)
+    expect(content.publish).toHaveBeenCalledWith(9, streamDone)
+    expect(content.destroy).not.toHaveBeenCalled()
+
+    synchronized.resolve(undefined)
+    await expect(switching).rejects.toMatchObject({ code: 'SIDE_PANEL_DELIVERY_FAILED' })
+    expect(saved()['9']).toMatchObject({
+      contentUIAppeared: true,
+      sidePanelAppeared: false,
+      latestUI: 'contentScript',
+    })
+  })
+
+  it('keeps Content as owner when its teardown fails after panel synchronization', async () => {
+    const live = snapshot(10, 22)
+    const { coordinator, content, saved } = coordinatorWith(contentState(), {
+      content: {
+        destroy: vi.fn(async () => {
+          throw new Error('content teardown failed')
+        }),
+      },
+      conversations: {
+        loadSelectionSession: vi.fn(async () => live),
+      },
+    })
+    await coordinator.initialize()
+
+    coordinator.openPanelForGesture(9, 19)
+    await expect(coordinator.togglePanel(toggleRequest(), contentSource())).rejects.toMatchObject({
+      code: 'SIDE_PANEL_DELIVERY_FAILED',
+    })
+
+    expect(content.publish).toHaveBeenCalledWith(9, {
+      type: 'conversation.sync',
+      snapshot: live,
+    })
+    expect(saved()['9']).toMatchObject({
+      contentUIAppeared: true,
+      sidePanelAppeared: false,
+      latestUI: 'contentScript',
+    })
+  })
+
+  it('invalidates a pending handoff immediately when the tab navigates', async () => {
+    const synchronized = deferred<void>()
+    const { coordinator, content, sidePanel } = coordinatorWith(contentState(), {
+      sidePanel: {
+        publish: vi.fn(async (_windowId, update) => {
+          if (update.type === 'conversation.sync') await synchronized.promise
+        }),
+      },
+    })
+    await coordinator.initialize()
+
+    coordinator.openPanelForGesture(9, 19)
+    const switching = coordinator.togglePanel(toggleRequest(), contentSource())
+    void switching.catch(() => undefined)
+    await vi.waitFor(() =>
+      expect(sidePanel.publish).toHaveBeenCalledWith(
+        19,
+        expect.objectContaining({ type: 'conversation.sync' })
+      )
+    )
+
+    const navigation = coordinator.onTabUpdated(9, 19, OTHER_PAGE)
+    void navigation.catch(() => undefined)
+    synchronized.resolve(undefined)
+
+    await expect(switching).rejects.toMatchObject({ code: 'UI_SESSION_STALE' })
+    expect(content.destroy).not.toHaveBeenCalled()
+    await navigation
+  })
+
+  it('invalidates a pending handoff when the tab is removed', async () => {
+    const synchronized = deferred<void>()
+    const { coordinator, content, saved, sidePanel } = coordinatorWith(contentState(), {
+      sidePanel: {
+        publish: vi.fn(async (_windowId, update) => {
+          if (update.type === 'conversation.sync') await synchronized.promise
+        }),
+      },
+    })
+    await coordinator.initialize()
+
+    coordinator.openPanelForGesture(9, 19)
+    const switching = coordinator.togglePanel(toggleRequest(), contentSource())
+    void switching.catch(() => undefined)
+    await vi.waitFor(() =>
+      expect(sidePanel.publish).toHaveBeenCalledWith(
+        19,
+        expect.objectContaining({ type: 'conversation.sync' })
+      )
+    )
+
+    await coordinator.onTabRemoved(9, 19)
+    synchronized.resolve(undefined)
+
+    await expect(switching).rejects.toMatchObject({ code: 'UI_SESSION_STALE' })
+    expect(content.destroy).not.toHaveBeenCalled()
+    expect(saved()['9']).toBeUndefined()
+  })
+
   it.each([
     ['content appeared', contentState(), 'sidePanel'],
     ['panel appeared', panelState(), 'none'],
@@ -306,9 +553,9 @@ describe('UiSessionCoordinator panel toggle', () => {
     expect(sidePanel.open).toHaveBeenCalledTimes(1)
     expect(sidePanel.open).toHaveBeenCalledWith(9)
     expect(sidePanel.ready).toHaveBeenCalledWith(19)
-    expect(sidePanel.ready).toHaveBeenCalledBefore(sidePanel.command)
-    expect(sidePanel.command).toHaveBeenCalledWith(19, {
-      type: 'render',
+    expect(sidePanel.ready).toHaveBeenCalledBefore(sidePanel.publish)
+    expect(sidePanel.publish).toHaveBeenCalledWith(19, {
+      type: 'conversation.sync',
       snapshot: expect.anything(),
     })
   })
@@ -339,15 +586,14 @@ describe('UiSessionCoordinator panel toggle', () => {
     sidePanel.ready.mockImplementation(async () => {
       calls.push('ready')
     })
-    sidePanel.command.mockImplementation(async () => {
-      calls.push('command')
-      return true as const
+    sidePanel.publish.mockImplementation(async () => {
+      calls.push('publish')
     })
 
     coordinator.openPanelForGesture(9, 19)
     await coordinator.togglePanel(toggleRequest(), contentSource())
 
-    expect(calls).toEqual(['ready', 'command'])
+    expect(calls).toEqual(['ready', 'publish'])
   })
 
   it('does not open when the panel is already open and the toggle closes it', async () => {
@@ -373,7 +619,10 @@ describe('UiSessionCoordinator routing and ownership', () => {
     expect(conversations.createSelection).toHaveBeenCalledTimes(1)
     expect(sidePanel.open).not.toHaveBeenCalled()
     expect(sidePanel.ready).not.toHaveBeenCalled()
-    expect(sidePanel.command).toHaveBeenCalledWith(19, expect.objectContaining({ type: 'render' }))
+    expect(sidePanel.publish).toHaveBeenCalledWith(
+      19,
+      expect.objectContaining({ type: 'conversation.sync' })
+    )
     expect(result).toEqual({ target: 'sidePanel', display: false, snapshot: null })
   })
 
@@ -397,7 +646,7 @@ describe('UiSessionCoordinator routing and ownership', () => {
       panelState(),
       {
         sidePanel: {
-          command: vi.fn(async () => {
+          publish: vi.fn(async () => {
             throw new Error('delivery failed')
           }),
         },
@@ -411,6 +660,7 @@ describe('UiSessionCoordinator routing and ownership', () => {
     expect(conversations.createSelection).toHaveBeenCalledTimes(1)
     expect(result).toEqual({ target: 'contentScript', display: true, snapshot: created })
     expect(saved()['9'].sidePanelAppeared).toBe(false)
+    sidePanel.publish.mockClear()
     const update: ConversationUpdate = { type: 'conversation.sync', snapshot: snapshot(10, 22) }
     await coordinator.publish(9, update)
     expect(content.publish).toHaveBeenCalledWith(9, update)
@@ -484,7 +734,10 @@ describe('UiSessionCoordinator routing and ownership', () => {
     await coordinator.initialize()
 
     await coordinator.onTabActivated(9, 19)
-    expect(sidePanel.command).toHaveBeenCalledWith(19, expect.objectContaining({ type: 'render' }))
+    expect(sidePanel.publish).toHaveBeenCalledWith(
+      19,
+      expect.objectContaining({ type: 'conversation.sync' })
+    )
 
     await coordinator.onTabActivated(10, 19)
     expect(sidePanel.command).toHaveBeenCalledWith(19, { type: 'clear' })
@@ -819,11 +1072,11 @@ describe('UiSessionCoordinator active-tab panel ownership', () => {
       target: 'contentScript',
       snapshot: expect.any(Object),
     })
-    expect(sidePanel.command).toHaveBeenCalledWith(
+    expect(sidePanel.publish).toHaveBeenCalledWith(
       19,
-      expect.objectContaining({ type: 'selectTool' })
+      expect.objectContaining({ type: 'conversation.toolChanged' })
     )
-    expect(sidePanel.command).toHaveBeenCalledTimes(1)
+    expect(sidePanel.publish).toHaveBeenCalledTimes(1)
     expect(content.publish).toHaveBeenCalledTimes(1)
     expect(content.publish).toHaveBeenCalledWith(
       10,

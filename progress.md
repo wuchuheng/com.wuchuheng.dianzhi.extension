@@ -86,3 +86,42 @@
   finish-reason completion, terminal fallback publication, and lifecycle logging.
 - Full verification passed: lint/typecheck, 34 Vitest files with 172 tests,
   formatting, and the production extension build.
+
+## 2026-08-29
+
+### CS-to-Side-Panel live-stream handoff regression
+
+- **Status:** investigation in progress.
+- Classified the diagnosis as an approved spike and the eventual repair as a bounded change
+  requiring a short fix-design approval before product-code edits.
+- Preserved unrelated `manifest.config.ts` and Chrome Web Store listing worktree changes.
+- Confirmed the system boundary: background owns the run and handoff; the Content Script and
+  Side Panel consume authoritative snapshots and live events.
+- Mapped the initial publication path and found separate Side Panel command/update ports; next
+  step is to inspect coordinator ownership timing and the exact ready dependency.
+- Confirmed that the ready handshake covers only the command port, while live updates use a
+  second port and failed owner delivery is intentionally swallowed upstream.
+- Ruled out the Side Panel reducer: its delta and terminal transitions are correct when events
+  arrive.
+- Ran the current focused baseline: 4 test files and 89 tests passed. The suite has no concurrent
+  midstream handoff case, so green status does not cover the reported regression.
+- Compared the previous subscriber/handoff implementation and approved product contract. Both
+  require an ordered registration/snapshot/live-update channel and render acknowledgement before
+  hiding Content; the current coordinator no longer preserves that invariant.
+- Upgraded the repair to architectural brainstorming before product-code edits.
+- Wrote and self-reviewed the lossless handoff design and a three-task TDD implementation plan.
+- The plan unifies Side Panel delivery, adds the transient handoff barrier, preserves Content on
+  readiness/render failure, and requires focused, full-suite, build, and real Chrome verification.
+- Audited all 35 project Markdown documents plus five preset-prompt Markdown files, then read all
+  handoff-relevant contracts and plans in full. The original approved design requires Side Panel
+  render acknowledgement before Content closes; the later coordinator implementation plan
+  inverted that ordering and created the loss window.
+- Clarified the repair's mandatory final state in the design and TDD plan: the temporary overlap
+  ends by destroying Content, persisting Side Panel as the sole visible UI, and clearing the
+  CS-only restore bookmark.
+- **Status:** planning complete; no product code changed.
+
+### Planning error log
+
+- A combined self-review patch mixed design-file and plan-file contexts and was rejected before
+  any partial edit. Reapplied the corrections as small file-specific patches.

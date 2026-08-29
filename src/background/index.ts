@@ -174,7 +174,7 @@ const coordinator = createUiSessionCoordinator({
     publish: async (windowId, update) => {
       await sidePanelConversationUpdate.dispatch(update, windowId)
     },
-    ready: async (windowId) => sidePanelCommand.waitForWindow(windowId),
+    ready: async (windowId) => sidePanelConversationUpdate.waitForWindow(windowId),
   },
 })
 coordinatorRef.current = coordinator

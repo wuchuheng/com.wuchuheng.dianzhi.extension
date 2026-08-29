@@ -263,6 +263,8 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       })
     }
     const snapshot = await snapshotFromStored(stored, settings)
+    const live = liveSnapshots.get(snapshot.conversation.id)
+    if (live) return cloneSnapshot(live)
     liveSnapshots.set(snapshot.conversation.id, cloneSnapshot(snapshot))
     return cloneSnapshot(snapshot)
   }

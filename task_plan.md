@@ -1,12 +1,12 @@
-# Task Plan: Provider settings UX refinement
+# Task Plan: Dianzhi extension improvement work
 
 ## Goal
 
-Make the AI provider settings easy to configure: separate connection, response behavior, and advanced JSON; keep connection feedback next to the test action; and preserve accessible, correctly associated field errors.
+Track completed provider/settings work and restore lossless live-message delivery when a conversation moves from the Content UI to the Side Panel.
 
 ## Current Phase
 
-Phase 8 — complete
+Phase 10 — complete
 
 ## Phases
 
@@ -66,19 +66,45 @@ Phase 8 — complete
 - [x] Verify focused tests, full quality gates, and the production build.
 - **Status:** complete
 
+### Phase 9: Diagnose CS-to-Side-Panel live-stream handoff regression
+
+- [x] Trace one active request from provider publication through UI-session routing and Side Panel state reduction.
+- [x] Compare snapshot synchronization with live delta and terminal-event subscription during the handoff.
+- [x] Confirm the existing focused suites pass while omitting concurrent midstream handoff coverage.
+- [x] Identify the root cause and upgrade the repair from bounded to architectural scope.
+- **Status:** complete
+
+### Phase 10: Design a lossless ordered handoff repair
+
+- [x] Confirm the required behavior: current message, later tokens, and terminal status must survive the switch.
+- [x] Compare ordered single-channel restoration with timing-only and versioned-reconciliation alternatives.
+- [x] Select one ordered panel channel plus a transient background handoff barrier.
+- [x] Write and self-review the design specification and executable TDD implementation plan.
+- **Status:** complete
+
+### Phase 11: Audit project documentation and resolve handoff semantics
+
+- [x] Inventory every project Markdown document and classify its relevance to UI ownership.
+- [x] Read every relevant product contract, design, implementation plan, and follow-up repair.
+- [x] Locate the destroy-before-render contradiction in the coordinator implementation plan.
+- [x] Amend the repair design and tests with the mandatory final state: Side Panel owns and CS is closed.
+- **Status:** complete
+
 ## Decisions Made
 
-| Decision                                                        | Rationale                                                                          |
-| --------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Keep one provider page                                          | The user wants compatibility hidden, not a provider-specific setup wizard.         |
-| Use Connection, Response behavior, and Advanced settings groups | Matches the user’s task flow and removes advanced JSON from the default scan path. |
-| Keep reasoning strength after the reasoning switch              | It is useful, but should be shown only when it can be acted upon.                  |
-| Use inline test status                                          | A connection result must be distinguishable from automatic save status.            |
-| Render Side Panel stream content at natural height              | Text must paint immediately; smooth scrolling must not gate visibility.            |
-| Show throughput only after a terminal state                     | Avoid a noisy live estimate and preserve one stable result.                        |
-| Retry only the latest failed assistant message                  | Matches the approved recovery affordance and avoids branching old history.         |
-| Implement directly on `main`                                    | Explicit user instruction after worktree isolation was offered.                    |
-| Log terminal lifecycle metadata without generated text          | Gives actionable diagnostics without leaking prompts, responses, or credentials.   |
+| Decision                                                        | Rationale                                                                            |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Keep one provider page                                          | The user wants compatibility hidden, not a provider-specific setup wizard.           |
+| Use Connection, Response behavior, and Advanced settings groups | Matches the user’s task flow and removes advanced JSON from the default scan path.   |
+| Keep reasoning strength after the reasoning switch              | It is useful, but should be shown only when it can be acted upon.                    |
+| Use inline test status                                          | A connection result must be distinguishable from automatic save status.              |
+| Render Side Panel stream content at natural height              | Text must paint immediately; smooth scrolling must not gate visibility.              |
+| Show throughput only after a terminal state                     | Avoid a noisy live estimate and preserve one stable result.                          |
+| Retry only the latest failed assistant message                  | Matches the approved recovery affordance and avoids branching old history.           |
+| Implement directly on `main`                                    | Explicit user instruction after worktree isolation was offered.                      |
+| Log terminal lifecycle metadata without generated text          | Gives actionable diagnostics without leaking prompts, responses, or credentials.     |
+| Use one ordered Side Panel delivery channel                     | Snapshot render and later deltas need one FIFO boundary to avoid gaps or duplicates. |
+| Keep Content until panel render acknowledgement                 | A failed open or render must leave the active conversation usable.                   |
 
 ## Errors Encountered
 
@@ -89,3 +115,4 @@ Phase 8 — complete
 | Large plan self-review patch missed formatted context           |       1 | Split the correction into small, line-local patches after inspecting exact text.       |
 | Combined provider-plan correction assumed duplicated sed output |       2 | Inspect numbered source lines and patch the test and implementation blocks separately. |
 | Plan audit shell pattern contained a raw backtick               |       1 | Remove the backtick from the regex and rerun the read-only audit.                      |
+| Combined self-review patch mixed design and plan contexts       |       1 | Split corrections into small file-specific patches; no partial edit occurred.          |

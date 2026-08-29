@@ -3,11 +3,12 @@ import pkg from './package.json'
 
 const crxManifest = defineManifest({
   manifest_version: 3,
-  name: '点知 Dianzhi',
+  name: '点知 - 划词即懂｜AI 结合上下文，精准解释你选中的英文',
+  short_name: '点知',
   version: pkg.version,
   minimum_chrome_version: '141',
   description:
-    '网页选词 AI 阅读助手:选中英文即得基于语境的精准释义、词典卡片、同义词辨析与翻译,并可继续对话。',
+    '基于上下文的 AI 英文划词阅读助手。选中网页中的英文，即可获得贴合当前语境的释义、词典、同义词与翻译，并在 Chrome 侧边栏继续追问。',
   icons: {
     16: 'public/logo-16.png',
     32: 'public/logo-32.png',

@@ -71,6 +71,8 @@ export interface UiSessionCoordinatorDependencies {
 
 type StoredStates = Record<string, TabSessionState>
 
+type DeliveryRoute = { to: 'contentScript' } | { to: 'sidePanel'; windowId: number }
+
 export function normalizePageUrl(input: string): string {
   const url = new URL(input)
   return `${url.origin}${url.pathname}${url.search}`
@@ -141,7 +143,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   const queues = new Map<number, Promise<unknown>>()
   const closedTabs = new Set<number>()
   // Tabs whose panel open was already started inside the user-gesture window
-  // (synchronously at the message boundary). `deliverPanel` must not call
+  // (synchronously at the message boundary). The handoff must not call
   // `sidePanel.open()` again for these, since the second call is no longer
   // gesture-bound and Chrome rejects it.
   const gestureOpenedTabs = new Set<number>()
@@ -151,6 +153,11 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   const currentPages = new Map<number, string>()
   // The panel owns only each window's current active tab; this gates panelOwnsTab.
   const panelActiveTab = new Map<number, number>()
+  // Streaming delivery is independent from persisted UI ownership while a
+  // surface handoff is in progress. This route changes only after the panel's
+  // ordered conversation port has accepted the authoritative sync.
+  const deliveryRoutes = new Map<number, DeliveryRoute>()
+  const handoffEpochs = new Map<number, number>()
 
   function stateRecord(): StoredStates {
     return Object.fromEntries(
@@ -192,6 +199,38 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
 
   function assertSourceFresh(source: UiEventSource): void {
     assertPage(source.tabId, normalizePageUrl(source.pageUrl))
+  }
+
+  function deliveryFailed(state: TabSessionState, error: unknown): DianzhiError {
+    if (error instanceof DianzhiError && error.code === 'UI_SESSION_STALE') return error
+    const reason = error instanceof Error ? error.message : String(error)
+    return new DianzhiError({
+      code: 'SIDE_PANEL_DELIVERY_FAILED',
+      message: `The conversation could not be handed to the Side Panel: ${reason}`,
+      context: { tabId: state.tabId, windowId: state.windowId },
+    })
+  }
+
+  function nextHandoffEpoch(tabId: number): number {
+    const epoch = (handoffEpochs.get(tabId) ?? 0) + 1
+    handoffEpochs.set(tabId, epoch)
+    return epoch
+  }
+
+  function invalidateHandoff(tabId: number): void {
+    nextHandoffEpoch(tabId)
+  }
+
+  function assertHandoffCurrent(state: TabSessionState, expectedUrl: string, epoch: number): void {
+    assertPage(state.tabId, expectedUrl)
+    const route = deliveryRoutes.get(state.tabId)
+    if (
+      handoffEpochs.get(state.tabId) !== epoch ||
+      route?.to !== 'sidePanel' ||
+      route.windowId !== state.windowId
+    ) {
+      throw deliveryFailed(state, new Error('The Side Panel closed before synchronization.'))
+    }
   }
 
   async function commitPage(source: UiEventSource): Promise<void> {
@@ -334,9 +373,14 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     await dependencies.content.publish(state.tabId, { type: 'conversation.sync', snapshot })
   }
 
-  async function destroyContentInWindow(windowId: number): Promise<void> {
+  async function destroyContentInWindow(windowId: number, requiredTabId: number): Promise<void> {
     const tabs = await dependencies.tabs.query(windowId)
-    for (const tab of tabs) {
+    const orderedTabs = [...tabs].sort((left, right) => {
+      if (left.id === requiredTabId) return -1
+      if (right.id === requiredTabId) return 1
+      return 0
+    })
+    for (const tab of orderedTabs) {
       if (!isPositiveInteger(tab.id)) continue
       const state = tabStates.get(tab.id)
       if (!state?.contentUIAppeared || state.windowId !== windowId) continue
@@ -352,29 +396,19 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
           selectionSessionId: state.selectionSessionId,
           outcome: 'delivery-failed',
         })
+        if (tab.id === requiredTabId) throw error
+        continue
       }
       state.contentUIAppeared = false
-      await persist()
     }
   }
 
   async function deliverPanel(
     state: TabSessionState,
     command: SidePanelCommand,
-    input: { requestId?: string; stage: string; open?: boolean; expectedUrl: string }
+    input: { requestId?: string; stage: string; expectedUrl: string }
   ): Promise<void> {
     assertPage(state.tabId, input.expectedUrl)
-    if (input.open && !gestureOpenedTabs.delete(state.tabId)) {
-      await dependencies.sidePanel.open(state.tabId)
-    }
-    assertPage(state.tabId, input.expectedUrl)
-    await destroyContentInWindow(state.windowId)
-    assertPage(state.tabId, input.expectedUrl)
-    // A freshly opened panel page has not bound its typed-event port yet; wait for
-    // it (like the legacy `await ready` handshake) before delivering the command.
-    if (input.open) {
-      await dependencies.sidePanel.ready(state.windowId)
-    }
     const snapshot = 'snapshot' in command ? command.snapshot : null
     trace('delivering side panel command', {
       requestId: input.requestId ?? null,
@@ -403,6 +437,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     state.latestUI = 'sidePanel'
     state.selectionSessionId = snapshot?.selectionSession.id ?? state.selectionSessionId
     delete state.contentRestore
+    deliveryRoutes.set(state.tabId, { to: 'sidePanel', windowId: state.windowId })
     await persist()
   }
 
@@ -421,33 +456,96 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     if (contentRestore && contentRestore.selectionSessionId === state.selectionSessionId) {
       state.contentRestore = contentRestore
     }
+    deliveryRoutes.set(state.tabId, { to: 'contentScript' })
+    await persist()
+  }
+
+  async function restoreContentAfterFailedHandoff(
+    state: TabSessionState,
+    expectedUrl: string,
+    requestId: string | undefined,
+    stage: string
+  ): Promise<void> {
+    if (tabStates.get(state.tabId) !== state || !state.contentUIAppeared) {
+      deliveryRoutes.delete(state.tabId)
+      return
+    }
+    deliveryRoutes.set(state.tabId, { to: 'contentScript' })
+    state.sidePanelAppeared = false
+    state.latestUI = 'contentScript'
+    panelWindows.delete(state.windowId)
+    panelActiveTab.delete(state.windowId)
+    const snapshot = await loadSnapshot(state)
+    await deliverContent(state, snapshot, requestId, `${stage}.recover`, expectedUrl)
     await persist()
   }
 
   async function openPanelWithSnapshot(
     state: TabSessionState,
-    snapshot: ConversationSnapshot | null,
     requestId: string | undefined,
     stage: string,
     expectedUrl: string
-  ): Promise<void> {
-    await deliverPanel(state, snapshot ? { type: 'render', snapshot } : { type: 'clear' }, {
-      requestId,
-      stage,
-      open: true,
-      expectedUrl,
-    })
-    await markPanelOwner(state, snapshot, expectedUrl)
+  ): Promise<ConversationSnapshot | null> {
+    // 1. Prepare a uniquely identifiable handoff while the user gesture is valid.
+    const epoch = nextHandoffEpoch(state.tabId)
+    try {
+      if (!gestureOpenedTabs.delete(state.tabId)) await dependencies.sidePanel.open(state.tabId)
+      assertPage(state.tabId, expectedUrl)
+      await dependencies.sidePanel.ready(state.windowId)
+      assertPage(state.tabId, expectedUrl)
+
+      // 2.1 Load after readiness so the sync includes every delta received while
+      // the new panel page was starting.
+      const snapshot = await loadSnapshot(state)
+      assertPage(state.tabId, expectedUrl)
+      const synchronized = snapshot
+        ? dependencies.sidePanel.publish(state.windowId, {
+            type: 'conversation.sync',
+            snapshot,
+          })
+        : dependencies.sidePanel.command(state.windowId, { type: 'clear' }).then(() => undefined)
+
+      // 2.2 `publish` posts synchronously. Later stream events therefore join the
+      // same FIFO port behind the sync while its render acknowledgement is pending.
+      deliveryRoutes.set(state.tabId, { to: 'sidePanel', windowId: state.windowId })
+      await synchronized
+      assertHandoffCurrent(state, expectedUrl, epoch)
+
+      // 2.3 Remove Content only after the panel committed the synchronized state.
+      await destroyContentInWindow(state.windowId, state.tabId)
+      assertHandoffCurrent(state, expectedUrl, epoch)
+      await markPanelOwner(state, snapshot, expectedUrl)
+
+      // 3. Return the authoritative snapshot used for the successful handoff.
+      return snapshot
+    } catch (error) {
+      invalidateHandoff(state.tabId)
+      await dependencies.sidePanel.close(state.windowId).catch(() => undefined)
+      await restoreContentAfterFailedHandoff(state, expectedUrl, requestId, stage).catch(
+        (recoveryError) =>
+          traceError('content recovery failed after panel handoff', recoveryError, {
+            requestId: requestId ?? null,
+            stage,
+            tabId: state.tabId,
+            windowId: state.windowId,
+            pageUrl: state.pageUrl,
+            outcome: 'recovery-failed',
+          })
+      )
+      throw deliveryFailed(state, error)
+    }
   }
 
   async function commandAppearedPanel(
     state: TabSessionState,
     snapshot: ConversationSnapshot,
-    requestId: string | undefined,
-    stage: string,
     expectedUrl: string
   ): Promise<void> {
-    await deliverPanel(state, { type: 'render', snapshot }, { requestId, stage, expectedUrl })
+    assertPage(state.tabId, expectedUrl)
+    await dependencies.sidePanel.publish(state.windowId, {
+      type: 'conversation.sync',
+      snapshot,
+    })
     await markPanelOwner(state, snapshot, expectedUrl)
   }
 
@@ -483,7 +581,11 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     expectedUrl: string
   ): Promise<ToolShortcutResult> {
     if (target === 'sidePanel') {
-      await deliverPanel(state, { type: 'selectTool', snapshot }, { requestId, stage, expectedUrl })
+      assertPage(state.tabId, expectedUrl)
+      await dependencies.sidePanel.publish(state.windowId, {
+        type: 'conversation.toolChanged',
+        snapshot,
+      })
       await markPanelOwner(state, snapshot, expectedUrl)
       return { handled: true, target: 'sidePanel', snapshot: cloneSnapshot(snapshot) }
     }
@@ -537,6 +639,8 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     const stored = await dependencies.sessionStore.load()
     tabStates.clear()
     panelWindows.clear()
+    deliveryRoutes.clear()
+    handoffEpochs.clear()
     for (const [tabId, value] of Object.entries(stored)) {
       const numericTabId = Number(tabId)
       if (!isPositiveInteger(numericTabId) || value.tabId !== numericTabId) continue
@@ -545,6 +649,9 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
       tabStates.set(numericTabId, normalized)
       currentPages.set(numericTabId, normalized.pageUrl)
       if (normalized.sidePanelAppeared) panelWindows.add(normalized.windowId)
+      if (normalized.contentUIAppeared) {
+        deliveryRoutes.set(numericTabId, { to: 'contentScript' })
+      }
     }
     trace('initialized UI session coordinator', {
       stage: 'initialize',
@@ -566,11 +673,15 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
       const state = await getOrCreateState(source)
       if (request.payload.status === 'appeared') {
         state.contentUIAppeared = true
+        deliveryRoutes.set(state.tabId, { to: 'contentScript' })
         if (request.payload.selectionSessionId !== null) {
           state.selectionSessionId = request.payload.selectionSessionId
         }
       } else {
         state.contentUIAppeared = false
+        if (deliveryRoutes.get(state.tabId)?.to === 'contentScript') {
+          deliveryRoutes.delete(state.tabId)
+        }
       }
       await commitPage(source)
       return {
@@ -600,8 +711,17 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
         if (request.payload.selectionSessionId !== null) {
           state.selectionSessionId = request.payload.selectionSessionId
         }
+        if (!state.contentUIAppeared) {
+          deliveryRoutes.set(state.tabId, { to: 'sidePanel', windowId: state.windowId })
+        }
       } else {
         state.sidePanelAppeared = false
+        invalidateHandoff(state.tabId)
+        if (state.contentUIAppeared) {
+          deliveryRoutes.set(state.tabId, { to: 'contentScript' })
+        } else {
+          deliveryRoutes.delete(state.tabId)
+        }
         if (
           ![...tabStates.values()].some(
             (item) => item.windowId === state.windowId && item.sidePanelAppeared
@@ -666,13 +786,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
 
       if (target === 'sidePanel') {
         try {
-          await commandAppearedPanel(
-            state,
-            snapshot,
-            request.requestId,
-            'selection.route',
-            expectedUrl
-          )
+          await commandAppearedPanel(state, snapshot, expectedUrl)
           return { target: 'sidePanel', display: false, snapshot: null }
         } catch (error) {
           traceError('selection side panel delivery failed; falling back to content', error, {
@@ -731,8 +845,8 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
       assertSourceFresh(source)
       const state = await getOrCreateState(source)
       const expectedUrl = normalizePageUrl(source.pageUrl)
-      const snapshot = await loadSnapshot(state)
       if (windowHasPanel(state.windowId)) {
+        const snapshot = await loadSnapshot(state)
         // Reject before the close side effect when identity already turned stale.
         assertSourceFresh(source)
         await dependencies.sidePanel.close(state.windowId)
@@ -742,6 +856,15 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
         }
         panelWindows.delete(state.windowId)
         panelActiveTab.delete(state.windowId)
+        for (const item of tabStates.values()) {
+          if (item.windowId !== state.windowId) continue
+          invalidateHandoff(item.tabId)
+          if (item.contentUIAppeared) {
+            deliveryRoutes.set(item.tabId, { to: 'contentScript' })
+          } else {
+            deliveryRoutes.delete(item.tabId)
+          }
+        }
         await commitPage(source)
         return {
           currentUI: 'none',
@@ -757,9 +880,8 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
           : state.contentUIAppeared
       state.contentUIAppeared = contentUIAppeared
       if (contentUIAppeared || state.latestUI === 'sidePanel') {
-        await openPanelWithSnapshot(
+        const snapshot = await openPanelWithSnapshot(
           state,
-          snapshot,
           request.requestId,
           'shortcut.panelToggle',
           expectedUrl
@@ -773,6 +895,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
         }
       }
 
+      const snapshot = await loadSnapshot(state)
       await deliverContent(state, snapshot, request.requestId, 'shortcut.panelToggle', expectedUrl)
       const contentRestore = state.contentRestore
       await markContentOwner(state, snapshot, expectedUrl, contentRestore)
@@ -803,7 +926,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   /**
    * Starts opening the global Side Panel for `tabId` inside the caller's user
    * gesture frame. Called synchronously at the message boundary before any await,
-   * so Chrome accepts `sidePanel.open()`. The subsequent `deliverPanel` skips its
+   * so Chrome accepts `sidePanel.open()`. The subsequent handoff skips its
    * own open (see `gestureOpenedTabs`). Safe to call when the panel is already
    * open or the tab is unknown.
    */
@@ -832,6 +955,15 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   async function publish(tabId: number, update: ConversationUpdate): Promise<boolean> {
     const state = tabStates.get(tabId)
     if (!state) return false
+    const route = deliveryRoutes.get(tabId)
+    if (route?.to === 'sidePanel') {
+      await dependencies.sidePanel.publish(route.windowId, update)
+      return true
+    }
+    if (route?.to === 'contentScript') {
+      await dependencies.content.publish(tabId, update)
+      return true
+    }
     if (panelOwnsTab(state)) {
       await dependencies.sidePanel.publish(state.windowId, update)
       return true
@@ -863,34 +995,33 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
         return
       }
       const snapshot = await loadSnapshot(state)
-      if (state.contentUIAppeared) {
-        await dependencies.content.destroy(tabId).catch((error) =>
-          traceError('content destroy failed on active tab panel ownership', error, {
-            stage: 'tab-activated',
-            tabId,
-            windowId,
-            pageUrl: state.pageUrl,
-            target: 'contentScript',
-            selectionSessionId: state.selectionSessionId,
-            outcome: 'delivery-failed',
-          })
-        )
-        state.contentUIAppeared = false
-      }
       const expectedUrl = pageUrl || state.pageUrl
       if (snapshot) state.latestUI = 'sidePanel'
-      await deliverPanel(state, snapshot ? { type: 'render', snapshot } : { type: 'clear' }, {
-        stage: 'tab-activated',
-        expectedUrl,
-      })
+      if (snapshot) {
+        await dependencies.sidePanel.publish(windowId, {
+          type: 'conversation.sync',
+          snapshot,
+        })
+      } else {
+        await deliverPanel(state, { type: 'clear' }, { stage: 'tab-activated', expectedUrl })
+      }
+      deliveryRoutes.set(tabId, { to: 'sidePanel', windowId })
+      if (state.contentUIAppeared) {
+        await dependencies.content.destroy(tabId)
+        state.contentUIAppeared = false
+      }
       state.sidePanelAppeared = true
       await persist()
     })
   }
 
   async function onTabUpdated(tabId: number, windowId: number, url: string): Promise<void> {
+    // Invalidate an in-flight handoff before waiting for this tab's serialized work.
+    const pageUrl = normalizePageUrl(url)
+    currentPages.set(tabId, pageUrl)
+    invalidateHandoff(tabId)
+    deliveryRoutes.delete(tabId)
     await runForTab(tabId, async () => {
-      const pageUrl = normalizePageUrl(url)
       const state = tabStates.get(tabId) ?? freshState(tabId, windowId, pageUrl)
       state.windowId = windowId
       await resetForNavigation(state, pageUrl)
@@ -905,6 +1036,8 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   async function onTabRemoved(tabId: number, _windowId: number): Promise<void> {
     closedTabs.add(tabId)
     gestureOpenedTabs.delete(tabId)
+    deliveryRoutes.delete(tabId)
+    handoffEpochs.delete(tabId)
     currentPages.delete(tabId)
     for (const [windowId, activeTabId] of panelActiveTab) {
       if (activeTabId === tabId) panelActiveTab.delete(windowId)
@@ -930,7 +1063,14 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     panelWindows.delete(windowId)
     panelActiveTab.delete(windowId)
     for (const state of tabStates.values()) {
-      if (state.windowId === windowId) state.sidePanelAppeared = false
+      if (state.windowId !== windowId) continue
+      state.sidePanelAppeared = false
+      invalidateHandoff(state.tabId)
+      if (state.contentUIAppeared) {
+        deliveryRoutes.set(state.tabId, { to: 'contentScript' })
+      } else {
+        deliveryRoutes.delete(state.tabId)
+      }
     }
     await persist()
   }

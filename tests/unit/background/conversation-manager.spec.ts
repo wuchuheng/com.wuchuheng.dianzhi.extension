@@ -250,6 +250,54 @@ describe('ConversationManager session gateway', () => {
     })
   })
 
+  it('keeps a newer live stream when loading an older persisted selection snapshot', async () => {
+    const root = conversation(22, { selectionSessionId: 10, tabId: 9, toolId: 1 })
+    const user = message(101, 22, { sequence: 1, role: 'user' })
+    const assistant = {
+      ...message(102, 22, { sequence: 2, role: 'assistant' }),
+      content: 'stored',
+    }
+    const persisted = storedSnapshot({
+      selectionSessionId: 10,
+      activeConversationId: 22,
+      conversation: root,
+      messages: [user, assistant],
+    })
+    const database = {
+      request: vi.fn(async (operation: string) => {
+        if (operation === 'createSelectionSession' || operation === 'getSelectionSession') {
+          return persisted
+        }
+        if (operation === 'appendAssistant') return assistant
+        throw new Error(`Unexpected database operation: ${operation}`)
+      }),
+    } as unknown as OffscreenClient
+    const { manager } = createManager(database)
+
+    await manager.createSelection({
+      tabId: 9,
+      replaceSelectionSessionId: null,
+      selectedText: 'run',
+      contextText: 'run fast',
+    })
+    await manager.publish({
+      type: 'stream.delta',
+      conversationId: 22,
+      messageId: 102,
+      content: ' live',
+    })
+
+    const loaded = await manager.loadSelectionSession(10)
+    expect(loaded.messages.find(({ id }) => id === 102)).toMatchObject({
+      content: 'stored live',
+      status: 'streaming',
+    })
+
+    loaded.messages[1].content = 'mutated by caller'
+    const loadedAgain = await manager.loadSelectionSession(10)
+    expect(loadedAgain.messages[1].content).toBe('stored live')
+  })
+
   it('stops every live run in a selection session before deleting it', async () => {
     const root = conversation(22, { selectionSessionId: 10, tabId: 9, toolId: 1 })
     const toolConversation = conversation(23, { selectionSessionId: 10, tabId: 9, toolId: 2 })

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import { Composer } from '@/dianzhi/ui/Composer'
 import { MessageList } from '@/dianzhi/ui/MessageList'
 import { ToolTabs } from '@/dianzhi/ui/ToolTabs'
@@ -184,8 +185,7 @@ export default function App() {
     }
   }, [])
 
-  const reportSurface = useCallback(
-    (status: 'appeared' | 'destroyed', instanceId: string) => {
+  const reportSurface = useCallback((status: 'appeared' | 'destroyed', instanceId: string) => {
     void panelSurfaceStatus
       .dispatch({
         type: 'ui.surfaceStatus',
@@ -200,9 +200,7 @@ export default function App() {
       .catch((error: unknown) =>
         logError(Scope.EXTENSION_PAGE, 'Panel surface status report failed.', error)
       )
-    },
-    []
-  )
+  }, [])
 
   useEffect(() => {
     let disposed = false
@@ -229,7 +227,7 @@ export default function App() {
         cancelCommandHandle = commandHandle.cancel
         panelInstanceId.current = commandHandle.panelInstanceId
         const updateHandle = sidePanelConversationUpdate.handle(binding, async (update) => {
-          dispatch(update)
+          flushSync(() => dispatch(update))
           return true
         })
         cancelUpdateHandle = updateHandle.cancel
@@ -270,7 +268,12 @@ export default function App() {
         .dispatch({
           type: 'shortcut.tool',
           requestId: requestId('tool'),
-          payload: { origin: 'sidePanel', panelInstanceId: panelInstance, action: 'select', value: index },
+          payload: {
+            origin: 'sidePanel',
+            panelInstanceId: panelInstance,
+            action: 'select',
+            value: index,
+          },
         })
         .then(applyToolResult)
         .catch((error: unknown) => logError(Scope.EXTENSION_PAGE, 'Tool select failed.', error))
@@ -285,7 +288,12 @@ export default function App() {
         .dispatch({
           type: 'shortcut.tool',
           requestId: requestId('cycle'),
-          payload: { origin: 'sidePanel', panelInstanceId: panelInstance, action: 'cycle', value: direction },
+          payload: {
+            origin: 'sidePanel',
+            panelInstanceId: panelInstance,
+            action: 'cycle',
+            value: direction,
+          },
         })
         .then(applyToolResult)
         .catch((error: unknown) => logError(Scope.EXTENSION_PAGE, 'Tool cycle failed.', error))

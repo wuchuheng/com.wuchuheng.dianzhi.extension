@@ -271,6 +271,37 @@ describe('Side Panel message toolbar', () => {
     expect(host?.querySelector('.dz-message-meta')?.textContent).toContain('正在生成')
   })
 
+  it('acknowledges handoff sync after commit and applies later completion', async () => {
+    await renderApp()
+    const initial = snapshot()
+    initial.messages = [assistant()]
+    let textAtAcknowledgement = ''
+
+    await act(async () => {
+      await emitMessage({ type: 'conversation.sync', snapshot: initial })
+      textAtAcknowledgement = host?.textContent ?? ''
+    })
+    expect(textAtAcknowledgement).toContain('正在生成')
+
+    await act(async () => {
+      await emitMessage({
+        type: 'stream.delta',
+        conversationId: 22,
+        messageId: 1,
+        content: 'live text',
+      })
+      await emitMessage({
+        type: 'stream.done',
+        conversationId: 22,
+        message: assistant({ content: 'live text finished', status: 'completed' }),
+      })
+    })
+
+    expect(host?.textContent).toContain('live text finished')
+    expect(host?.querySelector('[aria-label="正在生成"]')).toBeNull()
+    expect(host?.querySelector('.dz-message-meta')?.textContent).not.toContain('正在生成')
+  })
+
   it('shows final speed and retries the latest failed message from its toolbar', async () => {
     await renderApp()
     const next = snapshot()

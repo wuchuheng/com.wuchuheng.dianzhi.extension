@@ -117,3 +117,92 @@
   lifecycle evidence.
 - Diagnostic output must include phase, conversation/message IDs, elapsed time, terminal
   status, byte counts, and safe error fields, but never API keys, prompts, or generated text.
+
+## 2026-08-29 CS-to-Side-Panel live-stream handoff investigation
+
+- User-observed symptom: after switching from the Content Script UI to the Side Panel while
+  generation continues, the Side Panel receives neither real-time message growth nor the
+  terminal transition from `streaming` to `completed`.
+- The repository contract assigns authoritative provider runs and Side Panel handoff to the
+  background; both UI surfaces render snapshots and live updates.
+- Initial hypothesis only: the Side Panel may receive a handoff snapshot but fail to join the
+  active live-event route, which would account for both missing deltas and the missing terminal
+  event. This must be proven by tracing the publisher, routing identity, port lifecycle, and
+  reducer before any product-code fix is proposed.
+- `conversation-manager.publish` first applies every update to its in-memory authoritative
+  snapshot, then resolves the conversation's tab and calls `publishToOwner`; delivery rejection
+  is swallowed. Therefore a later sync can be correct even when every live UI delivery failed.
+- Side Panel commands and conversation updates use separate long-lived typed-event ports. The
+  panel binds the command port first, then the update port, reports `appeared` using the command
+  port's capability, and applies update-port events directly to the conversation reducer.
+- `deliverPanel` waits for a Side Panel ready signal only while opening, sends the snapshot
+  command, and ownership is committed separately. Whether its readiness dependency covers both
+  ports, and whether publication begins before the update port is usable, remains to be checked.
+- Confirmed readiness mismatch: `src/background/index.ts` implements `sidePanel.ready` with
+  `sidePanelCommand.waitForWindow` only. The separate `sidePanelConversationUpdate` port can still
+  be absent when `openPanelWithSnapshot` marks the Side Panel as stream owner.
+- Once the panel is marked owner, coordinator publication targets only the update port. A missing
+  update port rejects delivery; `conversation-manager.publish` catches and discards that failure,
+  so neither the Content Script nor a later reconciliation receives the lost update.
+- Provider deltas call publication fire-and-forget, while terminal publication is awaited at the
+  provider runner but still appears successful because the manager swallows owner-delivery
+  failures. This explains why provider generation and persistence can complete while the panel
+  remains on its earlier `streaming` snapshot.
+- The reducer itself correctly appends streaming deltas and replaces the assistant row on
+  `stream.done`; no rendering-state defect is evident in that layer.
+- The handoff snapshot is loaded before panel opening/readiness. `deliverPanel` then destroys the
+  Content UI, waits for the command port, sends that stale snapshot, and only after its
+  acknowledgement calls `markPanelOwner`. Updates in this interval have no usable destination and
+  are not replayed; a terminal event in the interval leaves the panel's snapshot permanently
+  `streaming` even though background memory and SQLite are terminal.
+- The current focused coordinator/runtime/transport/panel suites all pass (4 files, 89 tests), but
+  they test static owner publication and command-port readiness independently; none exercises a
+  provider update racing with CS-to-panel handoff.
+- The approved product contract requires registration and live updates to share one ordered Side
+  Panel channel. The pre-coordinator implementation subscribed the panel before snapshot loading,
+  reconciled the current live snapshot, waited for render acknowledgement, and only then hid
+  Content. The coordinator refactor removed this ordered handoff barrier.
+- Because a correct repair must restore ordering across snapshot delivery, live updates, ownership,
+  and Content destruction, the task has upgraded from a bounded fix to an architectural repair.
+- Selected design: use one FIFO Side Panel delivery port for snapshot commands and live updates,
+  plus an in-memory per-tab handoff route. Content remains the durable owner while the panel opens;
+  after readiness, Background posts a fresh snapshot, installs the transient route without yielding,
+  waits for render acknowledgement, then removes Content and commits panel ownership.
+- Rejected a timing-only dual-port wait because it cannot prove snapshot/update order. Deferred a
+  versioned reconciliation protocol because the existing ordered Chrome port can satisfy the
+  requirement with less protocol and reducer complexity.
+- Design: `docs/superpowers/specs/2026-08-29-lossless-cs-side-panel-stream-handoff-design.md`.
+- Implementation plan: `docs/superpowers/plans/2026-08-29-lossless-cs-side-panel-stream-handoff.md`.
+
+## 2026-08-29 project-documentation audit
+
+- Inventory: 35 project Markdown documents plus five preset-prompt Markdown files. The preset
+  prompts define provider content, not UI lifecycle. Settings, tool-management, migration, and
+  visual-animation documents were scanned for handoff terms and classified as non-authoritative
+  for CS-to-Side-Panel ownership.
+- `README.md` says `Ctrl+[` hands the current live conversation to the native Side Panel;
+  Background owns authoritative state and handoff, while the Side Panel displays the current
+  selection's full history.
+- The top-level approved product contract (`2026-08-17-dianzhi-complete-extension-design.md`)
+  explicitly requires: panel connects and subscribes, loads/reconciles current state, acknowledges
+  its first render, and only then Content hides the popover. The provider request continues
+  unchanged. It also requires readiness and live updates to share one ordered port.
+- The native Side Panel design repeats the same order: subscribe before loading the snapshot;
+  persisted snapshot followed by current in-memory state; render acknowledgement; then Content
+  hides. Real Chrome acceptance requires no gaps or duplicate stream data.
+- The later Content restoration design does not reverse this rule. It says CS-to-Side-Panel
+  handoff completes panel rendering first, then atomically sets `latestUI = sidePanel` and clears
+  the CS-only restore bookmark. Closing the old CS surface is therefore part of successful
+  ownership transfer, not an optional persistent duplicate UI.
+- The 2026-08-28 ready-handshake document was deliberately narrower: it fixed command delivery
+  before command-port binding and declared streaming `publish` and close flows unchanged. It did
+  not validate or restore the original ordered streaming handoff contract.
+- The contradiction entered in the 2026-08-27 coordinator implementation plan: its task order
+  became open panel, destroy Content, then send the Side Panel render command. That sequence
+  conflicts with both the approved 2026-08-17 product contract and the coordinator design's
+  failure rule that render failure falls back to Content.
+- Documentation precedence for this repair is therefore: approved product behavior and explicit
+  ownership invariants first; implementation task ordering and narrow follow-up patches second.
+  The repaired success state is unambiguous: Side Panel rendered, Content destroyed,
+  `sidePanelAppeared = true`, `contentUIAppeared = false`, `latestUI = sidePanel`, and no
+  `contentRestore`. Content survives only during the pre-acknowledgement safety window.

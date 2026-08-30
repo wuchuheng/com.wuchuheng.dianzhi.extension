@@ -6,7 +6,7 @@ Track completed provider/settings work and restore lossless live-message deliver
 
 ## Current Phase
 
-Phase 10 — complete
+Phase 13 — complete
 
 ## Phases
 
@@ -90,6 +90,22 @@ Phase 10 — complete
 - [x] Amend the repair design and tests with the mandatory final state: Side Panel owns and CS is closed.
 - **Status:** complete
 
+### Phase 12: Revise five Chrome Web Store screenshots
+
+- [x] Capture or reconstruct the current extension UI from real product components.
+- [x] Recompose all five 1280x800 screenshots with the approved user-focused copy.
+- [x] Make custom-tool creation explicit and correct the English-immersion typography.
+- [x] Verify full-size files, 640x400 readability, color mode, alpha, and final ordering.
+- **Status:** complete
+
+### Phase 13: Align poster copy and toolbars with the approved product message
+
+- [x] Replace all five subtitles with the approved context-first learning benefits.
+- [x] Restore the full built-in tool labels and their compact index markers.
+- [x] Add the real copy, chat, expand, Side Panel, and close SVG controls to every product header.
+- [x] Re-export and inspect all five posters at 1280x800 and the 640x400 store-preview size.
+- **Status:** complete
+
 ## Decisions Made
 
 | Decision                                                        | Rationale                                                                            |
@@ -116,3 +132,8 @@ Phase 10 — complete
 | Combined provider-plan correction assumed duplicated sed output |       2 | Inspect numbered source lines and patch the test and implementation blocks separately. |
 | Plan audit shell pattern contained a raw backtick               |       1 | Remove the backtick from the regex and rerun the read-only audit.                      |
 | Combined self-review patch mixed design and plan contexts       |       1 | Split corrections into small file-specific patches; no partial edit occurred.          |
+| Sandboxed build blocked tsx IPC pipe with EPERM                 |       1 | Re-run the existing build outside the sandbox; no source failure was observed.         |
+| Renderer imported unavailable direct `playwright` package       |       1 | Use the installed `@playwright/test` package export instead.                           |
+| Playwright Chromium was terminated by the managed sandbox       |       1 | Re-run only the renderer outside the sandbox with its isolated temporary profile.      |
+| Final source-format check reported three unformatted files      |       1 | Apply project Prettier, re-render, and repeat image and source verification.           |
+| One combined HTML patch targeted the same file twice            |       1 | Split the no-op rejected patch into small CSS and markup patches.                      |

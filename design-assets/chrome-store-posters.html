@@ -1,0 +1,1188 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>点知 Chrome Web Store 海报</title>
+    <style>
+      :root {
+        --bg: #efe9df;
+        --surface: #fffdfa;
+        --paper: #ffffff;
+        --ink: #292622;
+        --muted: #6f675e;
+        --faint: #968d82;
+        --border: #d9d0c5;
+        --border-soft: #e9e1d7;
+        --brand: #c85f32;
+        --brand-dark: #963f1e;
+        --brand-soft: #f3ded1;
+        --brand-pale: #fff5ef;
+        --shadow: 0 20px 50px rgba(66, 47, 31, 0.15), 0 3px 10px rgba(66, 47, 31, 0.08);
+        font-family:
+          Inter, 'Noto Sans CJK SC', 'Noto Sans SC', 'Microsoft YaHei', system-ui, sans-serif;
+        color: var(--ink);
+        font-synthesis: none;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        background: #d7d0c7;
+      }
+      body {
+        display: grid;
+        gap: 32px;
+        padding: 32px;
+      }
+      .poster {
+        position: relative;
+        width: 1280px;
+        height: 800px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at 88% 8%, rgba(200, 95, 50, 0.075), transparent 24%),
+          linear-gradient(135deg, #f4f0e9 0%, var(--bg) 100%);
+      }
+      .poster::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        opacity: 0.22;
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.08'/%3E%3C/svg%3E");
+      }
+      .series {
+        position: absolute;
+        top: 38px;
+        right: 48px;
+        color: #9a8f84;
+        font:
+          700 15px/1 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        letter-spacing: 0.14em;
+      }
+      .headline {
+        position: absolute;
+        z-index: 2;
+        top: 40px;
+        left: 48px;
+        margin: 0;
+        font-size: 62px;
+        line-height: 1.06;
+        letter-spacing: -0.045em;
+        font-weight: 850;
+      }
+      .subhead {
+        position: absolute;
+        z-index: 2;
+        top: 118px;
+        left: 51px;
+        margin: 0;
+        color: #4f4942;
+        font-size: 27px;
+        line-height: 1.3;
+        font-weight: 680;
+        letter-spacing: -0.012em;
+      }
+      .signature {
+        position: absolute;
+        z-index: 3;
+        right: 42px;
+        bottom: 21px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #5c544d;
+        font-size: 15px;
+        font-weight: 720;
+        letter-spacing: 0.02em;
+      }
+      .signature img {
+        width: 24px;
+        height: 24px;
+        border-radius: 7px;
+      }
+      .browser {
+        position: absolute;
+        z-index: 1;
+        left: 48px;
+        top: 190px;
+        width: 1184px;
+        height: 536px;
+        overflow: hidden;
+        border: 1px solid rgba(157, 145, 132, 0.6);
+        border-radius: 20px;
+        background: #fff;
+        box-shadow: var(--shadow);
+      }
+      .browser-bar {
+        height: 52px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 18px;
+        border-bottom: 1px solid #ddd8d2;
+        background: linear-gradient(#fbfbfb, #f1f1f1);
+      }
+      .dots {
+        display: flex;
+        gap: 7px;
+      }
+      .dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #d9d5cf;
+      }
+      .dot:nth-child(1) {
+        background: #ef6b58;
+      }
+      .dot:nth-child(2) {
+        background: #e9b84a;
+      }
+      .dot:nth-child(3) {
+        background: #6dbd69;
+      }
+      .address {
+        flex: 1;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        border: 1px solid #e3e0dc;
+        border-radius: 9px;
+        padding: 0 12px;
+        color: #77716b;
+        background: rgba(255, 255, 255, 0.82);
+        font-size: 13px;
+      }
+      .lock {
+        width: 9px;
+        height: 11px;
+        border: 1.6px solid #8d8780;
+        border-radius: 2px;
+      }
+      .article {
+        position: absolute;
+        inset: 52px 0 0;
+        padding: 34px 42px;
+        background: #fff;
+      }
+      .article h2 {
+        margin: 0 0 19px;
+        font:
+          700 34px/1.15 Georgia,
+          serif;
+        color: #24211e;
+      }
+      .article p {
+        max-width: 590px;
+        margin: 0 0 18px;
+        color: #4a4642;
+        font-size: 19px;
+        line-height: 1.55;
+      }
+      .article .muted-line {
+        width: 520px;
+        height: 12px;
+        margin: 12px 0;
+        border-radius: 6px;
+        background: #eeeae5;
+      }
+      .article .muted-line.short {
+        width: 390px;
+      }
+      mark {
+        padding: 1px 3px 2px;
+        color: #302823;
+        background: #f6c7a9;
+      }
+      .anchor-line {
+        position: absolute;
+        height: 2px;
+        border-top: 2px dashed #e9956f;
+      }
+      .popover {
+        position: absolute;
+        overflow: hidden;
+        border: 1px solid #d8d0c7;
+        border-radius: 17px;
+        background: rgba(255, 255, 255, 0.98);
+        box-shadow:
+          0 18px 44px rgba(46, 34, 25, 0.2),
+          0 3px 8px rgba(46, 34, 25, 0.09);
+      }
+      .p-head {
+        height: 50px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 0 12px;
+        border-bottom: 1px solid #ded7cf;
+        background: #fffdfa;
+        white-space: nowrap;
+      }
+      .p-logo {
+        width: 28px;
+        height: 28px;
+        flex: none;
+        border-radius: 8px;
+      }
+      .tabs {
+        min-width: 0;
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        overflow: hidden;
+      }
+      .tab {
+        position: relative;
+        height: 32px;
+        display: inline-flex;
+        align-items: center;
+        border-radius: 8px;
+        padding: 0 8px;
+        color: #655e57;
+        font-size: 12px;
+        font-weight: 630;
+      }
+      .tab-index {
+        position: absolute;
+        right: 2px;
+        bottom: 1px;
+        color: #a3998f;
+        font-size: 8px;
+        font-weight: 650;
+        line-height: 1;
+      }
+      .tab.active {
+        color: var(--brand-dark);
+        background: var(--brand-soft);
+        font-weight: 760;
+      }
+      .actions {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        flex: none;
+      }
+      .action {
+        width: 28px;
+        height: 28px;
+        display: grid;
+        place-items: center;
+        border-radius: 7px;
+        color: #716a63;
+        font-size: 17px;
+        line-height: 1;
+      }
+      .action svg {
+        width: 16px;
+        height: 16px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .action.close {
+        margin-left: 3px;
+        padding-left: 5px;
+        border-left: 1px solid #ddd6cf;
+        border-radius: 0;
+      }
+      .icon-sprite {
+        position: absolute;
+        width: 0;
+        height: 0;
+        overflow: hidden;
+      }
+      .p-body {
+        padding: 17px 19px 18px;
+      }
+      .context-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 10px;
+        color: #3c3732;
+        font-size: 14px;
+        font-weight: 760;
+      }
+      .context-label::before {
+        content: '';
+        width: 4px;
+        height: 18px;
+        border-radius: 3px;
+        background: var(--brand);
+      }
+      .result {
+        margin-bottom: 11px;
+        border: 1px solid #edc6b2;
+        border-radius: 11px;
+        padding: 12px 14px;
+        color: var(--brand-dark);
+        background: linear-gradient(135deg, #fffaf7, #fff2ea);
+        font-size: 24px;
+        font-weight: 800;
+      }
+      .explain {
+        margin: 0;
+        color: #4f4943;
+        font-size: 14px;
+        line-height: 1.55;
+      }
+      .explain strong {
+        color: var(--brand-dark);
+      }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        border: 1px solid #ecc8b5;
+        border-radius: 999px;
+        padding: 6px 11px;
+        color: var(--brand-dark);
+        background: #fff7f2;
+        font-size: 13px;
+        font-weight: 720;
+      }
+      .proof-note {
+        position: absolute;
+        z-index: 4;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid #e3baa5;
+        border-radius: 999px;
+        padding: 9px 15px;
+        color: var(--brand-dark);
+        background: rgba(255, 250, 246, 0.96);
+        box-shadow: 0 8px 20px rgba(88, 56, 36, 0.1);
+        font-size: 14px;
+        font-weight: 760;
+      }
+
+      /* 01 */
+      #poster-01 .article {
+        padding-left: 52px;
+      }
+      #poster-01 .popover {
+        left: 585px;
+        top: 132px;
+        width: 548px;
+        height: 312px;
+      }
+      #poster-01 .anchor-line {
+        left: 345px;
+        top: 319px;
+        width: 250px;
+      }
+      #poster-01 .selection-tip {
+        position: absolute;
+        left: 52px;
+        top: 397px;
+        color: #8a8178;
+        font-size: 13px;
+      }
+
+      /* 02 */
+      #poster-02 .browser {
+        top: 197px;
+        height: 529px;
+      }
+      #poster-02 .split {
+        position: absolute;
+        inset: 52px 0 0;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        background: #fff;
+      }
+      #poster-02 .half {
+        position: relative;
+        padding: 34px 38px;
+      }
+      #poster-02 .half + .half {
+        border-left: 1px dashed #cfc5ba;
+      }
+      #poster-02 .sentence {
+        margin: 0;
+        color: #2e2925;
+        font:
+          700 28px/1.3 Georgia,
+          serif;
+      }
+      #poster-02 .mini-pop {
+        left: 38px;
+        top: 105px;
+        width: 516px;
+        height: 300px;
+      }
+      #poster-02 .p-head {
+        gap: 5px;
+        padding-inline: 8px;
+      }
+      #poster-02 .tab {
+        padding-inline: 5px;
+        font-size: 11px;
+      }
+      #poster-02 .action {
+        width: 25px;
+      }
+      #poster-02 .result {
+        margin-top: 1px;
+        font-size: 28px;
+      }
+      #poster-02 .proof-note {
+        left: 544px;
+        top: 170px;
+        transform: translateX(-50%);
+      }
+
+      /* 03 */
+      #poster-03 .browser {
+        top: 196px;
+        height: 530px;
+      }
+      #poster-03 .article {
+        right: 535px;
+      }
+      #poster-03 .article p {
+        max-width: 575px;
+        font-size: 18px;
+      }
+      #poster-03 .sidepanel {
+        position: absolute;
+        top: 52px;
+        right: 0;
+        bottom: 0;
+        width: 535px;
+        border-left: 1px solid #d9d1c8;
+        background: #faf8f4;
+      }
+      #poster-03 .p-head {
+        gap: 5px;
+        padding-inline: 9px;
+        border-bottom-color: #d9d1c8;
+      }
+      #poster-03 .tab {
+        padding-inline: 6px;
+        font-size: 11.5px;
+      }
+      #poster-03 .action {
+        width: 26px;
+      }
+      .chat {
+        height: 410px;
+        overflow: hidden;
+        padding: 16px 15px;
+      }
+      .assistant-card,
+      .user-card {
+        margin-bottom: 12px;
+        border-radius: 12px;
+        padding: 11px 13px;
+        font-size: 13.5px;
+        line-height: 1.48;
+      }
+      .assistant-card {
+        border: 1px solid #e3ddd5;
+        color: #403b36;
+        background: #fff;
+      }
+      .assistant-card strong {
+        display: block;
+        margin-bottom: 5px;
+        color: var(--brand-dark);
+        font-size: 16px;
+      }
+      .user-card {
+        margin-left: 48px;
+        color: #443c36;
+        background: #f5e2d7;
+      }
+      .composer {
+        position: absolute;
+        left: 14px;
+        right: 14px;
+        bottom: 14px;
+        height: 42px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        border: 1px solid #d8d1c9;
+        border-radius: 11px;
+        padding: 0 8px 0 13px;
+        color: #9a928a;
+        background: #fff;
+        font-size: 13px;
+      }
+      .send {
+        width: 29px;
+        height: 29px;
+        display: grid;
+        place-items: center;
+        border-radius: 8px;
+        color: #fff;
+        background: var(--brand);
+        font-size: 16px;
+      }
+      #poster-03 .proof-note {
+        left: 570px;
+        top: 452px;
+      }
+
+      /* 04 */
+      #poster-04 .headline {
+        font-size: 56px;
+      }
+      #poster-04 .browser {
+        top: 191px;
+        height: 535px;
+        background: #f7f3ed;
+      }
+      .option-rail {
+        position: absolute;
+        inset: 52px auto 0 0;
+        width: 170px;
+        padding: 23px 15px;
+        border-right: 1px solid #ddd5cc;
+        background: #f5f1eb;
+      }
+      .rail-brand {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-bottom: 25px;
+        font-size: 17px;
+        font-weight: 780;
+      }
+      .rail-brand img {
+        width: 31px;
+        height: 31px;
+        border-radius: 9px;
+      }
+      .rail-item {
+        margin-bottom: 6px;
+        border-radius: 9px;
+        padding: 10px 11px;
+        color: #6d655d;
+        font-size: 13px;
+        font-weight: 650;
+      }
+      .rail-item.active {
+        color: var(--brand-dark);
+        background: var(--brand-soft);
+      }
+      .option-main {
+        position: absolute;
+        inset: 52px 0 0 170px;
+        padding: 22px 24px;
+      }
+      .option-title {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin-bottom: 14px;
+      }
+      .option-title h2 {
+        margin: 0;
+        font-size: 24px;
+      }
+      .option-title span {
+        color: #7a7168;
+        font-size: 13px;
+      }
+      .tool-grid {
+        display: grid;
+        grid-template-columns: 245px 1fr 280px;
+        gap: 15px;
+      }
+      .panel-card {
+        border: 1px solid #ddd5cc;
+        border-radius: 14px;
+        padding: 14px;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 6px 18px rgba(56, 42, 30, 0.05);
+      }
+      .panel-card h3 {
+        margin: 0 0 10px;
+        font-size: 14px;
+      }
+      .tool-row {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        margin-bottom: 6px;
+        border: 1px solid #e6ded5;
+        border-radius: 8px;
+        padding: 8px 9px;
+        color: #5b544d;
+        background: #fff;
+        font-size: 13px;
+        font-weight: 650;
+      }
+      .tool-row::before {
+        content: '⋮⋮';
+        color: #a49b91;
+        font-size: 10px;
+        letter-spacing: -3px;
+      }
+      .tool-row.custom {
+        border-color: #d88a65;
+        color: var(--brand-dark);
+        background: #fff5ef;
+        box-shadow: inset 0 0 0 1px #e8b89e;
+      }
+      .add-tool {
+        display: flex;
+        justify-content: center;
+        margin-top: 9px;
+        border: 1.5px dashed #c67b58;
+        border-radius: 8px;
+        padding: 9px;
+        color: var(--brand-dark);
+        background: #fffaf7;
+        font-size: 14px;
+        font-weight: 800;
+      }
+      .field {
+        margin-bottom: 10px;
+      }
+      .field label {
+        display: block;
+        margin-bottom: 5px;
+        color: #655d55;
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .input {
+        min-height: 34px;
+        border: 1px solid #d9d1c8;
+        border-radius: 8px;
+        padding: 8px 9px;
+        color: #3f3934;
+        background: #fff;
+        font-size: 13px;
+      }
+      .autosave {
+        color: var(--brand-dark);
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .prompt {
+        min-height: 145px;
+        border: 1px solid #d9d1c8;
+        border-radius: 9px;
+        padding: 10px;
+        color: #4a433d;
+        background: #fcfbf9;
+        font:
+          12px/1.58 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+      }
+      .token {
+        display: inline-block;
+        border-radius: 5px;
+        padding: 1px 5px;
+        color: var(--brand-dark);
+        background: var(--brand-soft);
+        font-weight: 750;
+      }
+      .variable {
+        margin-bottom: 10px;
+        border: 1px solid #e3c0ac;
+        border-radius: 10px;
+        padding: 11px;
+        background: #fffaf7;
+      }
+      .variable code {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--brand-dark);
+        font-size: 17px;
+        font-weight: 800;
+      }
+      .variable p {
+        margin: 0;
+        color: #625a53;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .variable-summary {
+        border-radius: 10px;
+        padding: 10px 11px;
+        color: #fff;
+        background: var(--brand);
+        font-size: 11px;
+        line-height: 1.45;
+        font-weight: 680;
+      }
+      .feature-strip {
+        position: absolute;
+        left: 437px;
+        bottom: 18px;
+        display: flex;
+        gap: 7px;
+      }
+
+      /* 05 */
+      #poster-05 .browser {
+        top: 195px;
+        height: 531px;
+      }
+      #poster-05 .article {
+        padding: 28px 42px;
+      }
+      #poster-05 .article h2 {
+        font-size: 31px;
+      }
+      #poster-05 .article p {
+        max-width: 500px;
+        font-size: 17px;
+      }
+      #poster-05 .popover {
+        left: 545px;
+        top: 96px;
+        width: 585px;
+        height: 384px;
+      }
+      #poster-05 .english-card {
+        padding: 15px 18px;
+      }
+      .word {
+        margin-bottom: 4px;
+        color: var(--brand);
+        font-size: 25px;
+        font-weight: 850;
+        letter-spacing: 0.02em;
+      }
+      .pos {
+        margin-bottom: 12px;
+        color: #655e57;
+        font-size: 13px;
+      }
+      .english-section {
+        margin-bottom: 10px;
+      }
+      .english-section strong {
+        display: block;
+        margin-bottom: 3px;
+        color: #2f2a26;
+        font-size: 14px;
+      }
+      .english-section p {
+        margin: 0;
+        color: #403a35;
+        font-size: 14.5px;
+        line-height: 1.48;
+      }
+      .translation {
+        margin: 10px 0;
+        border-left: 4px solid var(--brand);
+        border-radius: 6px;
+        padding: 8px 10px;
+        color: var(--brand-dark);
+        background: #fff0e7;
+        font-size: 14px;
+        font-weight: 760;
+      }
+      #poster-05 .proof-note.one {
+        left: 1008px;
+        top: 346px;
+      }
+      #poster-05 .proof-note.two {
+        left: 988px;
+        top: 404px;
+      }
+    </style>
+  </head>
+  <body>
+    <svg class="icon-sprite" aria-hidden="true">
+      <symbol id="icon-copy" viewBox="0 0 24 24">
+        <rect x="8" y="8" width="12" height="12" rx="2"></rect>
+        <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path>
+      </symbol>
+      <symbol id="icon-chat" viewBox="0 0 24 24">
+        <path
+          d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v8a2.5 2.5 0 0 1-2.5 2.5H9.5L5 20.5v-3.9A2.5 2.5 0 0 1 4 14z"
+        ></path>
+        <path d="M8 10h.01M12 10h.01M16 10h.01" stroke-width="2.6"></path>
+      </symbol>
+      <symbol id="icon-expand" viewBox="0 0 24 24">
+        <path d="M9 6V3H3v6M15 6V3h6v6M9 18v3H3v-6M21 15v6h-6"></path>
+      </symbol>
+      <symbol id="icon-panel" viewBox="0 0 24 24">
+        <rect x="4" y="4" width="16" height="16" rx="2.5"></rect>
+        <path d="M14 4v16"></path>
+      </symbol>
+      <symbol id="icon-close" viewBox="0 0 24 24">
+        <path d="M6 6l12 12M18 6L6 18"></path>
+      </symbol>
+    </svg>
+    <section class="poster" id="poster-01" data-file="chrome-store-screenshot-01-context.png">
+      <span class="series">01 / 05</span>
+      <h1 class="headline">划词即懂</h1>
+      <p class="subhead">选中英文，点知读懂当前上下文，只给最贴切的释义。</p>
+      <div class="browser">
+        <div class="browser-bar">
+          <div class="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+          <div class="address">
+            <i class="lock"></i>example.com/articles/the-future-of-urban-living
+          </div>
+        </div>
+        <article class="article">
+          <h2>The future of urban living</h2>
+          <p>
+            Cities around the world are evolving rapidly. To build resilient communities, innovators
+            must <mark>break new ground</mark> together.
+          </p>
+          <p>Progress depends on collaboration, experimentation, and bold ideas.</p>
+          <div class="muted-line"></div>
+          <div class="muted-line short"></div>
+          <span class="selection-tip">筛掉无关词义，把注意力留在阅读里</span>
+        </article>
+        <i class="anchor-line"></i>
+        <div class="popover">
+          <div class="p-head">
+            <img class="p-logo" src="../public/logo-128.png" />
+            <div class="tabs">
+              <span class="tab active">语境<span class="tab-index">1</span></span
+              ><span class="tab">同义词<span class="tab-index">2</span></span
+              ><span class="tab">翻译<span class="tab-index">3</span></span
+              ><span class="tab">词典<span class="tab-index">4</span></span
+              ><span class="tab">英英释义<span class="tab-index">5</span></span>
+            </div>
+            <div class="actions">
+              <span class="action" aria-label="复制"
+                ><svg><use href="#icon-copy"></use></svg></span
+              ><span class="action" aria-label="继续提问"
+                ><svg><use href="#icon-chat"></use></svg></span
+              ><span class="action" aria-label="放大"
+                ><svg><use href="#icon-expand"></use></svg></span
+              ><span class="action" aria-label="侧边栏"
+                ><svg><use href="#icon-panel"></use></svg></span
+              ><span class="action close" aria-label="关闭"
+                ><svg><use href="#icon-close"></use></svg
+              ></span>
+            </div>
+          </div>
+          <div class="p-body">
+            <div class="context-label">在当前语境中</div>
+            <div class="result">开创新局面</div>
+            <p class="explain">
+              这里的
+              <strong>break new ground</strong>
+              是指在理念或实践上开创先例，而不是字面上的“开辟土地”。
+            </p>
+          </div>
+        </div>
+      </div>
+      <div class="signature"><img src="../public/logo-128.png" />点知 · Dianzhi</div>
+    </section>
+
+    <section
+      class="poster"
+      id="poster-02"
+      data-file="chrome-store-screenshot-02-context-contrast.png"
+    >
+      <span class="series">02 / 05</span>
+      <h1 class="headline">不只翻译，更懂语境</h1>
+      <p class="subhead">同一个词，语境不同，得到的准确释义也不同。</p>
+      <div class="browser">
+        <div class="browser-bar">
+          <div class="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+          <div class="address"><i class="lock"></i>example.com/articles/context-matters</div>
+        </div>
+        <div class="split">
+          <section class="half">
+            <p class="sentence">The hotel will <mark>charge</mark> a small fee.</p>
+            <div class="popover mini-pop">
+              <div class="p-head">
+                <img class="p-logo" src="../public/logo-128.png" />
+                <div class="tabs">
+                  <span class="tab active">语境<span class="tab-index">1</span></span
+                  ><span class="tab">同义词<span class="tab-index">2</span></span
+                  ><span class="tab">翻译<span class="tab-index">3</span></span
+                  ><span class="tab">词典<span class="tab-index">4</span></span
+                  ><span class="tab">英英释义<span class="tab-index">5</span></span>
+                </div>
+                <div class="actions">
+                  <span class="action" aria-label="复制"
+                    ><svg><use href="#icon-copy"></use></svg></span
+                  ><span class="action" aria-label="继续提问"
+                    ><svg><use href="#icon-chat"></use></svg></span
+                  ><span class="action" aria-label="放大"
+                    ><svg><use href="#icon-expand"></use></svg></span
+                  ><span class="action" aria-label="侧边栏"
+                    ><svg><use href="#icon-panel"></use></svg></span
+                  ><span class="action close" aria-label="关闭"
+                    ><svg><use href="#icon-close"></use></svg
+                  ></span>
+                </div>
+              </div>
+              <div class="p-body">
+                <div class="context-label">在当前语境中</div>
+                <div class="result">收费</div>
+                <p class="explain">这里指酒店向客人<strong>收取费用</strong>。</p>
+              </div>
+            </div>
+          </section>
+          <section class="half">
+            <p class="sentence">The soldiers began to <mark>charge</mark>.</p>
+            <div class="popover mini-pop">
+              <div class="p-head">
+                <img class="p-logo" src="../public/logo-128.png" />
+                <div class="tabs">
+                  <span class="tab active">语境<span class="tab-index">1</span></span
+                  ><span class="tab">同义词<span class="tab-index">2</span></span
+                  ><span class="tab">翻译<span class="tab-index">3</span></span
+                  ><span class="tab">词典<span class="tab-index">4</span></span
+                  ><span class="tab">英英释义<span class="tab-index">5</span></span>
+                </div>
+                <div class="actions">
+                  <span class="action" aria-label="复制"
+                    ><svg><use href="#icon-copy"></use></svg></span
+                  ><span class="action" aria-label="继续提问"
+                    ><svg><use href="#icon-chat"></use></svg></span
+                  ><span class="action" aria-label="放大"
+                    ><svg><use href="#icon-expand"></use></svg></span
+                  ><span class="action" aria-label="侧边栏"
+                    ><svg><use href="#icon-panel"></use></svg></span
+                  ><span class="action close" aria-label="关闭"
+                    ><svg><use href="#icon-close"></use></svg
+                  ></span>
+                </div>
+              </div>
+              <div class="p-body">
+                <div class="context-label">在当前语境中</div>
+                <div class="result">冲锋</div>
+                <p class="explain">这里指士兵突然<strong>向前进攻</strong>。</p>
+              </div>
+            </div>
+          </section>
+          <div class="proof-note">上下文决定词义</div>
+        </div>
+      </div>
+      <div class="signature"><img src="../public/logo-128.png" />点知 · Dianzhi</div>
+    </section>
+
+    <section class="poster" id="poster-03" data-file="chrome-store-screenshot-03-side-panel.png">
+      <span class="series">03 / 05</span>
+      <h1 class="headline">不懂就接着问</h1>
+      <p class="subhead">围绕当前选中的内容，带着上下文继续与 AI 深入探讨。</p>
+      <div class="browser">
+        <div class="browser-bar">
+          <div class="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+          <div class="address">
+            <i class="lock"></i>example.com/articles/managing-projects-effectively
+          </div>
+        </div>
+        <article class="article">
+          <h2>Managing Projects Effectively</h2>
+          <p>
+            One of the biggest challenges teams face is <mark>scope creep</mark>—when additional
+            features are continually added without adjusting goals, timelines, or resources.
+          </p>
+          <p>This can lead to delays, budget overruns, and frustrated stakeholders.</p>
+          <div class="muted-line"></div>
+          <div class="muted-line short"></div>
+        </article>
+        <aside class="sidepanel">
+          <div class="p-head">
+            <img class="p-logo" src="../public/logo-128.png" />
+            <div class="tabs">
+              <span class="tab active">语境<span class="tab-index">1</span></span
+              ><span class="tab">同义词<span class="tab-index">2</span></span
+              ><span class="tab">翻译<span class="tab-index">3</span></span
+              ><span class="tab">词典<span class="tab-index">4</span></span
+              ><span class="tab">英英释义<span class="tab-index">5</span></span>
+            </div>
+            <div class="actions">
+              <span class="action" aria-label="复制"
+                ><svg><use href="#icon-copy"></use></svg></span
+              ><span class="action" aria-label="继续提问"
+                ><svg><use href="#icon-chat"></use></svg></span
+              ><span class="action" aria-label="放大"
+                ><svg><use href="#icon-expand"></use></svg></span
+              ><span class="action" aria-label="侧边栏"
+                ><svg><use href="#icon-panel"></use></svg></span
+              ><span class="action close" aria-label="关闭"
+                ><svg><use href="#icon-close"></use></svg
+              ></span>
+            </div>
+          </div>
+          <div class="chat">
+            <div class="assistant-card">
+              <strong>范围蔓延</strong
+              >指项目在没有同步调整目标、时间或资源的情况下，不断增加额外功能或变更。
+            </div>
+            <div class="user-card">这里为什么带有负面含义？</div>
+            <div class="assistant-card">
+              因为原文紧接着提到 <b>delays、budget overruns</b> 和
+              <b>frustrated stakeholders</b>，说明这些新增需求会带来延期、超支和相关方不满。
+            </div>
+          </div>
+          <div class="composer">围绕原文继续追问…<span class="send">➤</span></div>
+        </aside>
+        <div class="proof-note">无需复制原文</div>
+      </div>
+      <div class="signature"><img src="../public/logo-128.png" />点知 · Dianzhi</div>
+    </section>
+
+    <section
+      class="poster"
+      id="poster-04"
+      data-file="chrome-store-screenshot-04-custom-prompts.png"
+    >
+      <span class="series">05 / 05</span>
+      <h1 class="headline">想要什么 AI 工具，就自己添加</h1>
+      <p class="subhead">内置工具不够用？那就创建一个真正适合自己的。</p>
+      <div class="browser">
+        <div class="browser-bar">
+          <div class="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+          <div class="address"><i class="lock"></i>点知设置 / 查询工具</div>
+        </div>
+        <aside class="option-rail">
+          <div class="rail-brand"><img src="../public/logo-128.png" />点知</div>
+          <div class="rail-item">AI 服务</div>
+          <div class="rail-item active">查询工具</div>
+          <div class="rail-item">交互与快捷键</div>
+          <div class="rail-item">使用指南</div>
+          <div class="rail-item">关于</div>
+        </aside>
+        <main class="option-main">
+          <div class="option-title">
+            <h2>查询工具</h2>
+            <span>选择一个工具进行配置，修改会自动保存</span>
+          </div>
+          <div class="tool-grid">
+            <section class="panel-card">
+              <h3>共 6 个工具</h3>
+              <div class="tool-row">语境</div>
+              <div class="tool-row">同义词</div>
+              <div class="tool-row">翻译</div>
+              <div class="tool-row">词典</div>
+              <div class="tool-row">英英释义</div>
+              <div class="tool-row custom">学术长句拆解</div>
+              <div class="add-tool">＋ 新建工具</div>
+            </section>
+            <section class="panel-card">
+              <h3>工具配置 <span class="autosave">已保存</span></h3>
+              <div class="field">
+                <label>名称</label>
+                <div class="input">学术长句拆解</div>
+              </div>
+              <div class="field">
+                <label>提示词</label>
+                <div class="prompt">
+                  你是一位学术英语阅读助手。<br /><br />分析对象：<span class="token"
+                    >{{selected}}</span
+                  ><br />参考原文：<span class="token">{{context}}</span
+                  ><br /><br />请拆解句子结构，并说明它在当前语境中的含义。
+                </div>
+              </div>
+            </section>
+            <section>
+              <div class="variable">
+                <code>{{selected}}</code>
+                <p>当前选中的英文</p>
+              </div>
+              <div class="variable">
+                <code>{{context}}</code>
+                <p>包含选区标记的前后原文</p>
+              </div>
+              <div class="variable-summary">告诉 AI“你选中了什么”，以及“它出现在什么语境中”。</div>
+            </section>
+          </div>
+          <div class="feature-strip">
+            <span class="pill">可新增工具</span><span class="pill">可修改提示词</span
+            ><span class="pill">自动保存</span>
+          </div>
+        </main>
+      </div>
+      <div class="signature"><img src="../public/logo-128.png" />点知 · Dianzhi</div>
+    </section>
+
+    <section
+      class="poster"
+      id="poster-05"
+      data-file="chrome-store-screenshot-05-english-immersion.png"
+    >
+      <span class="series">04 / 05</span>
+      <h1 class="headline">用英语理解英语</h1>
+      <p class="subhead">英文解释为主，沉浸英语思维；一行中文校准，又不至于难懂。</p>
+      <div class="browser">
+        <div class="browser-bar">
+          <div class="dots"><i class="dot"></i><i class="dot"></i><i class="dot"></i></div>
+          <div class="address">
+            <i class="lock"></i>doc.rust-lang.org/book/references-and-borrowing
+          </div>
+        </div>
+        <article class="article">
+          <h2>References and Borrowing</h2>
+          <p>
+            In Rust, a reference is a way to let you use a value without taking ownership of it.
+          </p>
+          <p>A <mark>mutable</mark> reference allows us to modify the borrowed value.</p>
+          <p>
+            Mutable references have one important restriction: you can have only one mutable
+            reference to a particular piece of data in a particular scope.
+          </p>
+        </article>
+        <div class="popover">
+          <div class="p-head">
+            <img class="p-logo" src="../public/logo-128.png" />
+            <div class="tabs">
+              <span class="tab active">英英释义<span class="tab-index">1</span></span
+              ><span class="tab">翻译<span class="tab-index">2</span></span
+              ><span class="tab">同义词<span class="tab-index">3</span></span
+              ><span class="tab">语境<span class="tab-index">4</span></span
+              ><span class="tab">词典<span class="tab-index">5</span></span>
+            </div>
+            <div class="actions">
+              <span class="action" aria-label="复制"
+                ><svg><use href="#icon-copy"></use></svg></span
+              ><span class="action" aria-label="继续提问"
+                ><svg><use href="#icon-chat"></use></svg></span
+              ><span class="action" aria-label="放大"
+                ><svg><use href="#icon-expand"></use></svg></span
+              ><span class="action" aria-label="侧边栏"
+                ><svg><use href="#icon-panel"></use></svg></span
+              ><span class="action close" aria-label="关闭"
+                ><svg><use href="#icon-close"></use></svg
+              ></span>
+            </div>
+          </div>
+          <div class="english-card">
+            <div class="word">mutable</div>
+            <div class="pos">adjective</div>
+            <section class="english-section">
+              <strong>In this context</strong>
+              <p>“Mutable” describes a reference whose borrowed value may still be modified.</p>
+            </section>
+            <section class="english-section">
+              <strong>Definition</strong>
+              <p>able to be changed or modified</p>
+            </section>
+            <div class="translation">Translation: 可变的</div>
+            <section class="english-section">
+              <strong>Grammar</strong>
+              <p>An adjective modifying “reference”.</p>
+            </section>
+          </div>
+        </div>
+        <div class="proof-note one">保持英语思维</div>
+        <div class="proof-note two">一行中文校准</div>
+      </div>
+      <div class="signature"><img src="../public/logo-128.png" />点知 · Dianzhi</div>
+    </section>
+  </body>
+</html>

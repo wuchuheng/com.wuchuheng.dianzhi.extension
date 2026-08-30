@@ -121,7 +121,49 @@
   CS-only restore bookmark.
 - **Status:** planning complete; no product code changed.
 
+## 2026-08-31
+
+### Chrome Web Store screenshot revision
+
+- **Status:** complete.
+- Reviewed all five existing PNG files at original resolution.
+- User approved the consolidated revisions, including real-product UI, larger text, a clearer
+  Side Panel benefit, explicit custom-tool creation, and corrected English-immersion typography.
+- Re-checked current official Chrome Web Store screenshot guidance and recorded the 640x400
+  downscale constraint.
+- Initial `pnpm run build` was blocked before compilation because tsx could not create its IPC
+  pipe in the sandbox (`listen EPERM`); the retry must use the approved unsandboxed build path.
+- Added a deterministic HTML/CSS poster source and Playwright renderer. The first render attempt
+  failed before launch because only `@playwright/test` is installed; the renderer now imports its
+  Chromium export from that package.
+- The corrected renderer reached browser launch, but Chromium was terminated by the managed
+  sandbox (`sandbox_host_linux.cc: Operation not permitted`); no PNG was changed by that attempt.
+- Exported all five final posters from the deterministic source and inspected each at 1280x800.
+- Generated temporary 640x400 copies to verify current Chrome Web Store downscale readability.
+- Corrected clipped callouts on posters 03 and 05, added the missing sixth tool row on poster 04,
+  and increased poster 04/05 critical copy sizes after the thumbnail review.
+- Verified every final file is 1280x800, 8-bit RGB PNG with no alpha channel.
+- The first final gate found only Prettier drift in the new HTML/renderer and the accumulated
+  task plan; image dimensions, color mode, and `git diff --check` were already clean.
+
 ### Planning error log
 
 - A combined self-review patch mixed design-file and plan-file contexts and was rejected before
   any partial edit. Reapplied the corrections as small file-specific patches.
+
+### Chrome Web Store poster header fidelity follow-up
+
+- **Status:** complete.
+- User approved the five final subtitles and requested the missing copy, chat, expand, Side Panel,
+  and close controls be restored in every poster product header.
+- Reconfirmed the exact built-in tool names, shortcut marker placement, and SVG paths from the
+  current product source before editing the deterministic poster source.
+- Replaced the five subtitles, restored all full tab labels and shortcut indices, and replaced
+  placeholder glyphs with the real product SVGs for all five header controls.
+- Re-exported all five PNGs and reviewed a 640x400 contact sheet plus the full-size context
+  comparison. No label, control, or headline clipping is visible.
+- Completed full-size review of the context, Side Panel, custom-tool, and English-immersion
+  posters. The product header remains one line and the settings poster stays faithful to its
+  separate surface.
+- Final checks passed: renderer syntax, Prettier, `git diff --check`, five occurrences of every
+  required toolbar icon, and all five outputs at 1280x800 RGB24 with no alpha channel.

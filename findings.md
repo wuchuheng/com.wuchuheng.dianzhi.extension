@@ -206,3 +206,50 @@
   The repaired success state is unambiguous: Side Panel rendered, Content destroyed,
   `sidePanelAppeared = true`, `contentUIAppeared = false`, `latestUI = sidePanel`, and no
   `contentRestore`. Content survives only during the pre-acknowledgement safety window.
+
+## 2026-08-31 Chrome Web Store screenshot revision
+
+- Five 1280x800 screenshots exist under `public/`; their editorial cream and terracotta campaign
+  is visually consistent, but the internal browser scenes are conceptual rather than verified
+  captures of the current extension.
+- Chrome Web Store guidance says screenshots should demonstrate the current actual user experience
+  and are downscaled to 640x400, so small explanatory copy and dense UI must not carry the message.
+- Approved upload narrative: core selection flow, context differentiation, continued questioning,
+  English immersion, then advanced custom-tool creation.
+- Screenshot 4 currently proves prompt editing but does not prove that users can add a new custom
+  tool. The revision must show an add action, tool naming, template editing, and a saved custom tool.
+- Screenshot 5 contains generated IPA typography that is not reliable enough for a store asset;
+  it must be typeset deterministically or removed.
+- Final implementation uses a deterministic HTML/CSS source and Playwright element screenshots,
+  keeping exact Chinese, English, prompt variables, one-line product headers, and brand tokens.
+- Upload order is encoded visually as 01 context, 02 contrast, 03 Side Panel, 04 English
+  immersion, 05 custom tools; the historical filenames for images 04 and 05 remain unchanged.
+- The custom-tools composition shows all five built-ins, one created custom tool, the new-tool
+  control, tool configuration, exact template variables, and autosave state.
+- The English-immersion composition omits IPA rather than risking a wrong store asset and retains
+  exactly one Chinese translation line inside the English explanation content.
+
+## 2026-08-31 poster header fidelity follow-up
+
+- The approved final subtitles now describe the learner outcome directly: one context-specific
+  meaning, different meanings across contexts, contextual follow-up dialogue, user-created tools,
+  and English-first immersion with one Chinese calibration line.
+- The current poster mockups use placeholder square glyphs and omit toolbar controls. The real
+  product header exposes copy, chat, expand, native Side Panel, and close as five consistent
+  16px outline SVG icons.
+- All five built-in labels must remain visible in poster headers: 语境, 同义词, 翻译, 词典,
+  and 英英释义. Their small numeric shortcut markers sit at the lower-right of each tab.
+- The local icon-design lookup had no result for a combined compact-toolbar query; a narrower
+  lookup confirmed outline copy and close semantics. Exact product SVGs remain the authoritative
+  source for every toolbar icon.
+- The first re-export keeps all five labels and all five controls visible in one header row at
+  both full resolution and the 640x400 store-preview size. The two-column context comparison
+  remains immediately scannable after the added controls.
+- The settings poster correctly remains a settings screen rather than inventing a popover toolbar;
+  the other four product surfaces now use the complete authentic toolbar.
+- Full-size review of posters 01 and 03 confirms the one-line header remains visually subordinate
+  to the explanation/conversation content while preserving every tool and action. Widening the
+  Side Panel to 535px prevents toolbar compression without obscuring the selected source phrase.
+- Full-size review of posters 04 and 05 confirms the custom-tool variables remain prominent and
+  the English-first explanation retains only one Chinese translation line. The longer approved
+  subtitles fit on one line without competing with the headline.

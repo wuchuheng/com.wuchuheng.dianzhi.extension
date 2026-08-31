@@ -123,6 +123,9 @@
 .dz-messages.is-card .dz-message-role {
   display: none;
 }
+.dz-markdown {
+  white-space: pre-wrap;
+}
 .dz-markdown table {
   margin: 0 0 8px;
   border-collapse: collapse;

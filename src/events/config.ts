@@ -10,6 +10,7 @@ import type {
   ConversationCommand,
   ConversationCommandResult,
   ConversationUpdate,
+  SidePanelConversationRequest,
   SettingsCommand,
   ToolsCommand,
 } from '@/dianzhi/domain/protocol'
@@ -39,7 +40,7 @@ export const contentConversationCommand = events.cs2bg<
 >('dianzhi:conversation-command')
 
 export const extensionConversationCommand = events.ep2bg<
-  ConversationCommand,
+  SidePanelConversationRequest,
   ConversationCommandResult
 >('dianzhi:conversation-command')
 

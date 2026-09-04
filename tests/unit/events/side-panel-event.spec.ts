@@ -48,14 +48,18 @@ function fakePort(
     port,
     postMessage,
     bind: (panelInstanceId = `panel-${binding.windowId}`) =>
-      messages.emit({ ...binding, panelInstanceId }),
+      messages.emit({ type: 'bind', ...binding, panelSessionId: panelInstanceId }),
+    emitMessage: (message: unknown) => messages.emit(message),
     acknowledge(data: true) {
       const message = postMessage.mock.calls.at(-1)?.[0] as { messageId: string } | undefined
       if (!message) throw new Error('No message is pending acknowledgement.')
       messages.emit({ messageId: message.messageId, data })
     },
     respondAt(index: number, data: true) {
-      const message = postMessage.mock.calls.at(index)?.[0] as { messageId: string } | undefined
+      const requests = postMessage.mock.calls
+        .map(([value]) => value as { messageId?: string })
+        .filter((value): value is { messageId: string } => typeof value.messageId === 'string')
+      const message = requests.at(index)
       if (!message) throw new Error(`No message exists at index ${index}.`)
       messages.emit({ messageId: message.messageId, data })
     },
@@ -129,11 +133,12 @@ describe('bg2sp', () => {
       ),
     ]
 
-    expect(panel.postMessage.mock.calls.map(([value]) => value.args.type)).toEqual([
-      'conversation.sync',
-      'stream.delta',
-      'stream.done',
-    ])
+    expect(
+      panel.postMessage.mock.calls
+        .map(([value]) => value)
+        .filter((value) => value.messageId)
+        .map((value) => value.args.type)
+    ).toEqual(['conversation.sync', 'stream.delta', 'stream.done'])
     panel.respondAt(0, true)
     panel.respondAt(1, true)
     panel.respondAt(2, true)
@@ -165,7 +170,7 @@ describe('bg2sp', () => {
     right.bind()
 
     const result = event.dispatch({ type: 'clear' }, 20)
-    expect(left.postMessage).not.toHaveBeenCalled()
+    expect(left.postMessage.mock.calls.some(([value]) => value.messageId)).toBe(false)
     right.acknowledge(true)
     await expect(result).resolves.toBe(true)
   })
@@ -221,6 +226,101 @@ describe('bg2sp', () => {
 
     left.acknowledge(true)
     await expect(result).resolves.toBe(true)
+  })
+
+  it('uses a caller-provided session identity and waits for a binding acknowledgement', () => {
+    const event = bg2sp<SidePanelCommand, true>('dianzhi:side-panel-command')
+    const panel = fakePort({ tabId: 9, windowId: 19 })
+    const onStatus = vi.fn()
+    ;(globalThis as typeof globalThis & { chrome?: unknown }).chrome = {
+      runtime: { connect: vi.fn(() => panel.port) },
+    }
+
+    const handle = event.handle({ tabId: 9, windowId: 19 }, async () => true, {
+      panelSessionId: 'panel-session-19',
+      onStatus,
+    })
+
+    expect(handle.panelSessionId).toBe('panel-session-19')
+    expect(panel.postMessage).toHaveBeenCalledWith({
+      type: 'bind',
+      tabId: 9,
+      windowId: 19,
+      panelSessionId: 'panel-session-19',
+    })
+    expect(onStatus).not.toHaveBeenCalledWith('bound')
+
+    panel.emitMessage({ type: 'bound', panelSessionId: 'panel-session-19' })
+    expect(onStatus).toHaveBeenLastCalledWith('bound')
+  })
+
+  it('reports validated background binding lifecycle', () => {
+    const event = bg2sp<SidePanelCommand, true>('dianzhi:side-panel-command')
+    const panel = fakePort({ tabId: 9, windowId: 19 })
+    const observe = vi.fn()
+    event.observeLifecycle(observe)
+    event.accept(panel.port)
+
+    panel.bind('panel-session-19')
+    expect(observe).toHaveBeenCalledWith({
+      type: 'bound',
+      panelSessionId: 'panel-session-19',
+      binding: { tabId: 9, windowId: 19 },
+    })
+    expect(panel.postMessage).toHaveBeenCalledWith({
+      type: 'bound',
+      panelSessionId: 'panel-session-19',
+    })
+
+    panel.disconnect()
+    expect(observe).toHaveBeenLastCalledWith({
+      type: 'disconnected',
+      panelSessionId: 'panel-session-19',
+      binding: { tabId: 9, windowId: 19 },
+    })
+  })
+
+  it('reconnects after an unexpected disconnect and stops reconnecting after cancel', async () => {
+    vi.useFakeTimers()
+    try {
+      const event = bg2sp<SidePanelCommand, true>('dianzhi:side-panel-command')
+      const first = fakePort({ tabId: 9, windowId: 19 })
+      const second = fakePort({ tabId: 9, windowId: 19 })
+      const third = fakePort({ tabId: 9, windowId: 19 })
+      const connect = vi
+        .fn()
+        .mockReturnValueOnce(first.port)
+        .mockReturnValueOnce(second.port)
+        .mockReturnValueOnce(third.port)
+      ;(globalThis as typeof globalThis & { chrome?: unknown }).chrome = { runtime: { connect } }
+
+      const onStatus = vi.fn()
+      const handle = event.handle({ tabId: 9, windowId: 19 }, async () => true, {
+        panelSessionId: 'panel-session-19',
+        reconnect: true,
+        retryDelaysMs: [100, 250],
+        onStatus,
+      })
+      first.emitMessage({ type: 'bound', panelSessionId: 'panel-session-19' })
+      first.disconnect()
+      expect(onStatus).toHaveBeenLastCalledWith('disconnected')
+
+      await vi.advanceTimersByTimeAsync(100)
+      expect(connect).toHaveBeenCalledTimes(2)
+      expect(second.postMessage).toHaveBeenCalledWith({
+        type: 'bind',
+        tabId: 9,
+        windowId: 19,
+        panelSessionId: 'panel-session-19',
+      })
+
+      handle.cancel()
+      second.disconnect()
+      await vi.runAllTimersAsync()
+      expect(connect).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

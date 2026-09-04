@@ -23,6 +23,7 @@ import type {
   SurfaceStatusResponse,
 } from '@/dianzhi/domain/ui-session-protocol'
 import type { TargetedSidePanelEvent } from '@/events/sidePanel/sidePanel'
+import { createSidePanelSessionRegistry } from '@/background/side-panel-session-registry'
 
 const at = '2026-08-27T00:00:00.000Z'
 const PAGE = 'https://example.com/docs/rust?chapter=1#intro'
@@ -159,9 +160,27 @@ function fakeChromeRuntime(options: { panelContexts?: chrome.runtime.ExtensionCo
 function stubSidePanelEvent(): TargetedSidePanelEvent<SidePanelCommand, true> {
   return {
     dispatch: vi.fn(async () => true as const),
+    waitForWindow: vi.fn(async () => undefined),
+    connectedWindows: vi.fn(() => new Set<number>()),
+    bindingFor: vi.fn(() => null),
+    observeLifecycle: vi.fn(() => () => undefined),
     accept: vi.fn(() => false),
-    handle: vi.fn(() => () => undefined),
+    handle: vi.fn(() => ({
+      cancel: () => undefined,
+      panelInstanceId: 'panel-19',
+      panelSessionId: 'panel-19',
+    })),
   }
+}
+
+function lifecycleSidePanelEvent() {
+  let listener: Parameters<TargetedSidePanelEvent<SidePanelCommand, true>['observeLifecycle']>[0]
+  const event = stubSidePanelEvent()
+  vi.mocked(event.observeLifecycle).mockImplementation((next) => {
+    listener = next
+    return () => undefined
+  })
+  return { event, emit: (value: Parameters<typeof listener>[0]) => listener(value) }
 }
 
 function statusResponse(): SurfaceStatusResponse {
@@ -200,6 +219,8 @@ function mockCoordinator(): UiSessionCoordinator {
     onTabRemoved: vi.fn(async () => undefined),
     onPanelOpened: vi.fn(async () => undefined),
     onPanelClosed: vi.fn(async () => undefined),
+    attachPanelSession: vi.fn(async () => undefined),
+    disconnectPanelSession: vi.fn(async () => undefined),
   }
   return coordinator
 }
@@ -210,6 +231,45 @@ const SNAPSHOT_UPDATE: ConversationUpdate = {
 }
 
 describe('ui-session-runtime: Chrome event routing', () => {
+  it('waits for runtime restoration before attaching a reconnected panel session', async () => {
+    let release!: () => void
+    const runtimeReady = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { chrome } = fakeChromeRuntime()
+    const coordinator = mockCoordinator()
+    const command = lifecycleSidePanelEvent()
+    const update = lifecycleSidePanelEvent()
+    const onPanelSessionReady = vi.fn(async () => undefined)
+    registerUiSessionRuntime({
+      chromeApi: chrome,
+      coordinator,
+      sidePanelCommand: command.event,
+      sidePanelConversationUpdate: update.event,
+      runtimeReady,
+      panelSessions: createSidePanelSessionRegistry(),
+      onPanelSessionReady,
+    })
+
+    const lifecycle = {
+      type: 'bound' as const,
+      panelSessionId: 'panel-19',
+      binding: { tabId: 8, windowId: 19 },
+    }
+    command.emit(lifecycle)
+    update.emit(lifecycle)
+    await Promise.resolve()
+    expect(coordinator.attachPanelSession).not.toHaveBeenCalled()
+
+    release()
+    await vi.waitFor(() => expect(coordinator.attachPanelSession).toHaveBeenCalled())
+    expect(coordinator.attachPanelSession).toHaveBeenCalledWith(
+      expect.objectContaining({ panelSessionId: 'panel-19', tabId: 9, windowId: 19 })
+    )
+    expect(onPanelSessionReady).toHaveBeenCalledWith(
+      expect.objectContaining({ panelSessionId: 'panel-19', tabId: 9 })
+    )
+  })
   it('routes tab activation and committed URL changes to the coordinator', async () => {
     const { chrome, tabs } = fakeChromeRuntime()
     const coordinator = mockCoordinator()

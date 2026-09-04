@@ -19,6 +19,7 @@ import type { AnchorRect } from '@/content/popover/placement'
 import type { DianzhiSettings } from '@/dianzhi/domain/types'
 import { log, logError, Scope } from '@/events/logger'
 import type { UiConversationGateway } from './conversation-manager'
+import type { ReadyPanelSession, SidePanelChannel } from './side-panel-session-registry'
 
 export interface TabSessionState {
   tabId: number
@@ -71,7 +72,10 @@ export interface UiSessionCoordinatorDependencies {
 
 type StoredStates = Record<string, TabSessionState>
 
-type DeliveryRoute = { to: 'contentScript' } | { to: 'sidePanel'; windowId: number }
+type DeliveryRoute =
+  | { to: 'contentScript' }
+  | { to: 'sidePanel'; windowId: number; panelSessionId?: string }
+  | { to: 'sidePanelRecovering'; windowId: number; panelSessionId: string }
 
 export function normalizePageUrl(input: string): string {
   const url = new URL(input)
@@ -153,6 +157,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   const currentPages = new Map<number, string>()
   // The panel owns only each window's current active tab; this gates panelOwnsTab.
   const panelActiveTab = new Map<number, number>()
+  const panelSessions = new Map<number, ReadyPanelSession>()
   // Streaming delivery is independent from persisted UI ownership while a
   // surface handoff is in progress. This route changes only after the panel's
   // ordered conversation port has accepted the authoritative sync.
@@ -437,7 +442,11 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     state.latestUI = 'sidePanel'
     state.selectionSessionId = snapshot?.selectionSession.id ?? state.selectionSessionId
     delete state.contentRestore
-    deliveryRoutes.set(state.tabId, { to: 'sidePanel', windowId: state.windowId })
+    deliveryRoutes.set(state.tabId, {
+      to: 'sidePanel',
+      windowId: state.windowId,
+      panelSessionId: panelSessions.get(state.windowId)?.panelSessionId,
+    })
     await persist()
   }
 
@@ -639,6 +648,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     const stored = await dependencies.sessionStore.load()
     tabStates.clear()
     panelWindows.clear()
+    panelSessions.clear()
     deliveryRoutes.clear()
     handoffEpochs.clear()
     for (const [tabId, value] of Object.entries(stored)) {
@@ -964,6 +974,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
       await dependencies.content.publish(tabId, update)
       return true
     }
+    if (route?.to === 'sidePanelRecovering') return true
     if (panelOwnsTab(state)) {
       await dependencies.sidePanel.publish(state.windowId, update)
       return true
@@ -1005,7 +1016,11 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
       } else {
         await deliverPanel(state, { type: 'clear' }, { stage: 'tab-activated', expectedUrl })
       }
-      deliveryRoutes.set(tabId, { to: 'sidePanel', windowId })
+      deliveryRoutes.set(tabId, {
+        to: 'sidePanel',
+        windowId,
+        panelSessionId: panelSessions.get(windowId)?.panelSessionId,
+      })
       if (state.contentUIAppeared) {
         await dependencies.content.destroy(tabId)
         state.contentUIAppeared = false
@@ -1040,7 +1055,10 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     handoffEpochs.delete(tabId)
     currentPages.delete(tabId)
     for (const [windowId, activeTabId] of panelActiveTab) {
-      if (activeTabId === tabId) panelActiveTab.delete(windowId)
+      if (activeTabId === tabId) {
+        panelActiveTab.delete(windowId)
+        panelSessions.delete(windowId)
+      }
     }
     const state = tabStates.get(tabId)
     tabStates.delete(tabId)
@@ -1062,6 +1080,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   async function onPanelClosed(windowId: number): Promise<void> {
     panelWindows.delete(windowId)
     panelActiveTab.delete(windowId)
+    panelSessions.delete(windowId)
     for (const state of tabStates.values()) {
       if (state.windowId !== windowId) continue
       state.sidePanelAppeared = false
@@ -1073,6 +1092,79 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
       }
     }
     await persist()
+  }
+
+  async function attachPanelSession(session: ReadyPanelSession): Promise<void> {
+    await runForTab(session.tabId, async () => {
+      const tab = await dependencies.tabs.get(session.tabId)
+      if (tab.windowId !== session.windowId || !tab.url) throw stale(session.tabId)
+      const pageUrl = normalizePageUrl(tab.url)
+      const state =
+        tabStates.get(session.tabId) ?? freshState(session.tabId, session.windowId, pageUrl)
+      state.windowId = session.windowId
+      await resetForNavigation(state, pageUrl)
+      checkOpen(session.tabId)
+      tabStates.set(session.tabId, state)
+      currentPages.set(session.tabId, pageUrl)
+      panelWindows.add(session.windowId)
+      panelActiveTab.set(session.windowId, session.tabId)
+      panelSessions.set(session.windowId, { ...session })
+
+      if (state.sidePanelAppeared && !state.contentUIAppeared) {
+        const snapshot = await loadSnapshot(state)
+        const synchronized = snapshot
+          ? dependencies.sidePanel.publish(session.windowId, {
+              type: 'conversation.sync',
+              snapshot,
+            })
+          : dependencies.sidePanel
+              .command(session.windowId, { type: 'clear' })
+              .then(() => undefined)
+        deliveryRoutes.set(session.tabId, {
+          to: 'sidePanel',
+          windowId: session.windowId,
+          panelSessionId: session.panelSessionId,
+        })
+        await synchronized
+        const current = panelSessions.get(session.windowId)
+        if (
+          current?.panelSessionId !== session.panelSessionId ||
+          current.generation !== session.generation
+        ) {
+          throw stale(session.tabId)
+        }
+        assertPage(session.tabId, pageUrl)
+        state.latestUI = 'sidePanel'
+        state.selectionSessionId = snapshot?.selectionSession.id ?? state.selectionSessionId
+      }
+      await persist()
+    })
+  }
+
+  async function disconnectPanelSession(input: {
+    panelSessionId: string
+    windowId: number
+    generation: number
+    channel: SidePanelChannel
+  }): Promise<void> {
+    const current = panelSessions.get(input.windowId)
+    if (
+      !current ||
+      current.panelSessionId !== input.panelSessionId ||
+      input.generation < current.generation
+    ) {
+      return
+    }
+    panelSessions.set(input.windowId, { ...current, generation: input.generation })
+    if (input.channel !== 'update') return
+    const route = deliveryRoutes.get(current.tabId)
+    if (route?.to === 'sidePanel' && route.panelSessionId === input.panelSessionId) {
+      deliveryRoutes.set(current.tabId, {
+        to: 'sidePanelRecovering',
+        windowId: input.windowId,
+        panelSessionId: input.panelSessionId,
+      })
+    }
   }
 
   return {
@@ -1090,5 +1182,7 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     onTabRemoved,
     onPanelOpened,
     onPanelClosed,
+    attachPanelSession,
+    disconnectPanelSession,
   }
 }

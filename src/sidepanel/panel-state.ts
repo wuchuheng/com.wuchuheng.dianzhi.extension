@@ -13,7 +13,7 @@ export interface PanelState {
 }
 
 export const INITIAL_PANEL_STATE: PanelState = {
-  connected: true,
+  connected: false,
   snapshot: null,
   error: null,
 }

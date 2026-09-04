@@ -99,6 +99,38 @@ function createManager(
 }
 
 describe('ConversationManager session gateway', () => {
+  it('rejects a Side Panel command authorized for a different active tab', async () => {
+    const root = conversation(22, { selectionSessionId: 10, tabId: 9, toolId: 1 })
+    const database = {
+      request: vi.fn(async (operation: string) => {
+        if (operation === 'getConversation') {
+          return storedSnapshot({
+            selectionSessionId: 10,
+            activeConversationId: 22,
+            conversation: root,
+          })
+        }
+        throw new Error(`Unexpected database operation: ${operation}`)
+      }),
+    } as unknown as OffscreenClient
+    const { manager, providerRunner } = createManager(database)
+
+    await expect(
+      manager.handle(
+        {
+          type: 'conversation.followup',
+          requestId: 'wrong-panel-tab',
+          payload: { conversationId: 22, content: 'Why?' },
+        },
+        {} as chrome.runtime.MessageSender,
+        'extension',
+        10
+      )
+    ).rejects.toThrow('does not belong')
+    expect(database.request).not.toHaveBeenCalledWith('appendTurn', expect.anything())
+    expect(providerRunner.start).not.toHaveBeenCalled()
+  })
+
   it('creates one session, appends one assistant, and starts one run', async () => {
     const root = conversation(22, { selectionSessionId: 10, tabId: 9, toolId: 1 })
     const assistant = message(102, 22, { sequence: 2, role: 'assistant' })
@@ -296,6 +328,49 @@ describe('ConversationManager session gateway', () => {
     loaded.messages[1].content = 'mutated by caller'
     const loadedAgain = await manager.loadSelectionSession(10)
     expect(loadedAgain.messages[1].content).toBe('stored live')
+  })
+
+  it('finalizes an orphaned streaming row when restoring a selection session after restart', async () => {
+    const root = conversation(22, { selectionSessionId: 10, tabId: 9, toolId: 1 })
+    const orphaned = {
+      ...message(102, 22, { sequence: 2, role: 'assistant' }),
+      content: 'persisted checkpoint',
+    }
+    const stopped = {
+      ...orphaned,
+      status: 'stopped' as const,
+      errorMessage: 'The background service restarted during generation.',
+    }
+    const database = {
+      request: vi.fn(async (operation: string) => {
+        if (operation === 'getSelectionSession') {
+          return storedSnapshot({
+            selectionSessionId: 10,
+            activeConversationId: 22,
+            conversation: root,
+            messages: [orphaned],
+          })
+        }
+        if (operation === 'finalizeAssistant') return stopped
+        throw new Error(`Unexpected database operation: ${operation}`)
+      }),
+    } as unknown as OffscreenClient
+    const { manager } = createManager(database)
+
+    const result = await manager.loadSelectionSession(10)
+
+    expect(database.request).toHaveBeenCalledWith('finalizeAssistant', {
+      messageId: 102,
+      input: {
+        status: 'stopped',
+        content: 'persisted checkpoint',
+        reasoningContent: '',
+        estimatedThroughputTps: null,
+        errorCode: null,
+        errorMessage: 'The background service restarted during generation.',
+      },
+    })
+    expect(result.messages[0]).toMatchObject({ id: 102, status: 'stopped' })
   })
 
   it('stops every live run in a selection session before deleting it', async () => {

@@ -16,6 +16,7 @@ import type {
 } from '@/dianzhi/domain/ui-session-protocol'
 import { log, logError, Scope } from '@/events/logger'
 import type { TargetedSidePanelEvent } from '@/events/sidePanel/sidePanel'
+import type { ReadyPanelSession, SidePanelSessionRegistry } from './side-panel-session-registry'
 import {
   normalizePageUrl,
   type PanelBinding,
@@ -71,6 +72,13 @@ export interface UiSessionCoordinator {
   onTabRemoved(tabId: number, windowId: number): Promise<void>
   onPanelOpened(windowId: number): Promise<void>
   onPanelClosed(windowId: number): Promise<void>
+  attachPanelSession(session: ReadyPanelSession): Promise<void>
+  disconnectPanelSession(input: {
+    panelSessionId: string
+    windowId: number
+    generation: number
+    channel: 'command' | 'update'
+  }): Promise<void>
 }
 
 export interface UiSessionEventHandlers {
@@ -135,12 +143,20 @@ function executeToolShortcut(
 ): Promise<ToolShortcutResult> {
   if (request.payload.action === 'select') {
     return coordinator.selectTool(
-      { requestId: request.requestId, type: 'shortcut.selectTool', payload: { index: request.payload.value } },
+      {
+        requestId: request.requestId,
+        type: 'shortcut.selectTool',
+        payload: { index: request.payload.value },
+      },
       source
     )
   }
   return coordinator.cycleTool(
-    { requestId: request.requestId, type: 'shortcut.cycleTool', payload: { direction: request.payload.value } },
+    {
+      requestId: request.requestId,
+      type: 'shortcut.cycleTool',
+      payload: { direction: request.payload.value },
+    },
     source
   )
 }
@@ -462,12 +478,17 @@ async function runPanelRequest<P extends { requestId: string }, R>(input: {
 export function createUiSessionEventHandlers(deps: {
   chromeApi: typeof chrome
   coordinator: UiSessionCoordinator
+  runtimeReady?: Promise<void>
   /** Live panel windows from the bg2sp port bindings, used to disambiguate panel senders. */
   connectedPanelWindows?: () => ReadonlySet<number>
   /** Trusted Side Panel binding from a live opaque port capability. */
   panelBindingFor?: (panelInstanceId: string) => PanelBinding | null
 }): UiSessionEventHandlers {
-  const { chromeApi, coordinator, connectedPanelWindows, panelBindingFor } = deps
+  const { chromeApi, coordinator, runtimeReady, connectedPanelWindows, panelBindingFor } = deps
+  const afterRestore = async <T>(operation: () => Promise<T>): Promise<T> => {
+    await runtimeReady
+    return operation()
+  }
 
   function snapshotIds(result: {
     snapshot?: { selectionSession?: { id?: number }; conversation?: { id?: number } } | null
@@ -486,7 +507,9 @@ export function createUiSessionEventHandlers(deps: {
         sender,
         parse: parseSurfaceStatus,
         execute: (request, source) =>
-          coordinator.reportContentStatus(request, contentSenderFromSource(source)),
+          afterRestore(() =>
+            coordinator.reportContentStatus(request, contentSenderFromSource(source))
+          ),
         commit: (_request, result) => ({
           currentUI: result.currentUI,
           selectionSessionId: result.selectionSessionId,
@@ -505,10 +528,12 @@ export function createUiSessionEventHandlers(deps: {
             ? (panelBindingFor?.(request.payload.panelInstanceId) ?? null)
             : null,
         execute: (request, source) =>
-          coordinator.reportPanelStatus(request, {
-            tabId: source.tabId,
-            windowId: source.windowId,
-          }),
+          afterRestore(() =>
+            coordinator.reportPanelStatus(request, {
+              tabId: source.tabId,
+              windowId: source.windowId,
+            })
+          ),
         commit: (_request, result) => ({
           currentUI: result.currentUI,
           selectionSessionId: result.selectionSessionId,
@@ -522,7 +547,7 @@ export function createUiSessionEventHandlers(deps: {
         sender,
         parse: parseSelectionRoute,
         execute: (request, source) =>
-          coordinator.routeSelection(request, contentSenderFromSource(source)),
+          afterRestore(() => coordinator.routeSelection(request, contentSenderFromSource(source))),
         commit: (_request, result) => ({
           target: result.target,
           ...snapshotIds(result),
@@ -548,7 +573,7 @@ export function createUiSessionEventHandlers(deps: {
             request.payload.contentUIAppeared
           )
         },
-        execute: (request, source) => coordinator.togglePanel(request, source),
+        execute: (request, source) => afterRestore(() => coordinator.togglePanel(request, source)),
         commit: (_request, result) => ({
           currentUI: result.currentUI,
           action: result.action,
@@ -567,7 +592,7 @@ export function createUiSessionEventHandlers(deps: {
           request.payload.origin === 'sidePanel'
             ? (panelBindingFor?.(request.payload.panelInstanceId) ?? null)
             : null,
-        execute: (request, source) => coordinator.togglePanel(request, source),
+        execute: (request, source) => afterRestore(() => coordinator.togglePanel(request, source)),
         commit: (_request, result) => ({
           currentUI: result.currentUI,
           action: result.action,
@@ -577,17 +602,28 @@ export function createUiSessionEventHandlers(deps: {
     },
     onContentToolShortcut(value, sender) {
       return runContentRequest({
-        stage: 'shortcut.tool', value, sender, parse: parseToolShortcutRequest,
-        execute: (request, source) => executeToolShortcut(coordinator, request, source),
+        stage: 'shortcut.tool',
+        value,
+        sender,
+        parse: parseToolShortcutRequest,
+        execute: (request, source) =>
+          afterRestore(() => executeToolShortcut(coordinator, request, source)),
         commit: (_request, result) => toolResultContext(result),
       })
     },
     onPanelToolShortcut(value, sender) {
       return runPanelRequest({
-        chromeApi, stage: 'shortcut.tool', value, sender, parse: parseToolShortcutRequest,
-        bindingForRequest: (request) => request.payload.origin === 'sidePanel'
-          ? (panelBindingFor?.(request.payload.panelInstanceId) ?? null) : null,
-        execute: (request, source) => executeToolShortcut(coordinator, request, source),
+        chromeApi,
+        stage: 'shortcut.tool',
+        value,
+        sender,
+        parse: parseToolShortcutRequest,
+        bindingForRequest: (request) =>
+          request.payload.origin === 'sidePanel'
+            ? (panelBindingFor?.(request.payload.panelInstanceId) ?? null)
+            : null,
+        execute: (request, source) =>
+          afterRestore(() => executeToolShortcut(coordinator, request, source)),
         commit: (_request, result) => toolResultContext(result),
       })
     },
@@ -601,7 +637,7 @@ export function createUiSessionEventHandlers(deps: {
           if (request.type !== 'shortcut.selectTool') {
             throw invalid('The tool shortcut type does not match its event channel.')
           }
-          return coordinator.selectTool(request, source)
+          return afterRestore(() => coordinator.selectTool(request, source))
         },
         commit: (_request, result) => toolResultContext(result),
       })
@@ -618,7 +654,7 @@ export function createUiSessionEventHandlers(deps: {
           if (request.type !== 'shortcut.selectTool') {
             throw invalid('The tool shortcut type does not match its event channel.')
           }
-          return coordinator.selectTool(request, source)
+          return afterRestore(() => coordinator.selectTool(request, source))
         },
         commit: (_request, result) => toolResultContext(result),
       })
@@ -633,7 +669,7 @@ export function createUiSessionEventHandlers(deps: {
           if (request.type !== 'shortcut.cycleTool') {
             throw invalid('The tool shortcut type does not match its event channel.')
           }
-          return coordinator.cycleTool(request, source)
+          return afterRestore(() => coordinator.cycleTool(request, source))
         },
         commit: (_request, result) => toolResultContext(result),
       })
@@ -650,7 +686,7 @@ export function createUiSessionEventHandlers(deps: {
           if (request.type !== 'shortcut.cycleTool') {
             throw invalid('The tool shortcut type does not match its event channel.')
           }
-          return coordinator.cycleTool(request, source)
+          return afterRestore(() => coordinator.cycleTool(request, source))
         },
         commit: (_request, result) => toolResultContext(result),
       })
@@ -698,9 +734,22 @@ export function registerUiSessionRuntime(input: {
   coordinator: UiSessionCoordinator
   sidePanelCommand: TargetedSidePanelEvent<SidePanelCommand, true>
   sidePanelConversationUpdate: TargetedSidePanelEvent<ConversationUpdate, true>
+  runtimeReady?: Promise<void>
+  panelSessions?: SidePanelSessionRegistry
+  onPanelSessionReady?(session: ReadyPanelSession): Promise<void>
 }): () => void {
-  const { chromeApi, coordinator, sidePanelCommand, sidePanelConversationUpdate } = input
+  const {
+    chromeApi,
+    coordinator,
+    sidePanelCommand,
+    sidePanelConversationUpdate,
+    runtimeReady,
+    panelSessions,
+    onPanelSessionReady,
+  } = input
   const disposers: Array<() => void> = []
+  const afterRuntimeRestore = <T>(operation: () => Promise<T>): Promise<T> =>
+    runtimeReady ? runtimeReady.then(operation) : operation()
 
   const onTabActivated = (activeInfo: chrome.tabs.OnActivatedInfo): void => {
     trace('tab activated', {
@@ -709,16 +758,16 @@ export function registerUiSessionRuntime(input: {
       windowId: activeInfo.windowId,
       outcome: 'received',
     })
-    void coordinator
-      .onTabActivated(activeInfo.tabId, activeInfo.windowId)
-      .catch((error: unknown) => {
-        traceError('tab activation handling failed', error, {
-          stage: 'tabs.onActivated',
-          tabId: activeInfo.tabId,
-          windowId: activeInfo.windowId,
-          outcome: 'failed',
-        })
+    void afterRuntimeRestore(() =>
+      coordinator.onTabActivated(activeInfo.tabId, activeInfo.windowId)
+    ).catch((error: unknown) => {
+      traceError('tab activation handling failed', error, {
+        stage: 'tabs.onActivated',
+        tabId: activeInfo.tabId,
+        windowId: activeInfo.windowId,
+        outcome: 'failed',
       })
+    })
   }
   chromeApi.tabs.onActivated.addListener(onTabActivated)
   disposers.push(() => chromeApi.tabs.onActivated.removeListener(onTabActivated))
@@ -742,7 +791,9 @@ export function registerUiSessionRuntime(input: {
       pageUrl: normalizedForLog(changeInfo.url),
       outcome: 'received',
     })
-    void coordinator.onTabUpdated(tabId, tab.windowId, changeInfo.url).catch((error: unknown) => {
+    void afterRuntimeRestore(() =>
+      coordinator.onTabUpdated(tabId, tab.windowId, changeInfo.url!)
+    ).catch((error: unknown) => {
       traceError('tab update handling failed', error, {
         stage: 'tabs.onUpdated',
         tabId,
@@ -761,14 +812,16 @@ export function registerUiSessionRuntime(input: {
       windowId: removeInfo.windowId,
       outcome: 'received',
     })
-    void coordinator.onTabRemoved(tabId, removeInfo.windowId).catch((error: unknown) => {
-      traceError('tab removal handling failed', error, {
-        stage: 'tabs.onRemoved',
-        tabId,
-        windowId: removeInfo.windowId,
-        outcome: 'failed',
-      })
-    })
+    void afterRuntimeRestore(() => coordinator.onTabRemoved(tabId, removeInfo.windowId)).catch(
+      (error: unknown) => {
+        traceError('tab removal handling failed', error, {
+          stage: 'tabs.onRemoved',
+          tabId,
+          windowId: removeInfo.windowId,
+          outcome: 'failed',
+        })
+      }
+    )
   }
   chromeApi.tabs.onRemoved.addListener(onTabRemoved)
   disposers.push(() => chromeApi.tabs.onRemoved.removeListener(onTabRemoved))
@@ -781,13 +834,15 @@ export function registerUiSessionRuntime(input: {
       windowId: info.windowId,
       outcome: 'received',
     })
-    void coordinator.onPanelOpened(info.windowId).catch((error: unknown) => {
-      traceError('side panel open handling failed', error, {
-        stage: 'sidePanel.onOpened',
-        windowId: info.windowId,
-        outcome: 'failed',
-      })
-    })
+    void afterRuntimeRestore(() => coordinator.onPanelOpened(info.windowId)).catch(
+      (error: unknown) => {
+        traceError('side panel open handling failed', error, {
+          stage: 'sidePanel.onOpened',
+          windowId: info.windowId,
+          outcome: 'failed',
+        })
+      }
+    )
   }
   chromeApi.sidePanel.onOpened.addListener(onSidePanelOpened)
   disposers.push(() => chromeApi.sidePanel.onOpened.removeListener(onSidePanelOpened))
@@ -800,13 +855,16 @@ export function registerUiSessionRuntime(input: {
       windowId: info.windowId,
       outcome: 'received',
     })
-    void coordinator.onPanelClosed(info.windowId).catch((error: unknown) => {
-      traceError('side panel close handling failed', error, {
-        stage: 'sidePanel.onClosed',
-        windowId: info.windowId,
-        outcome: 'failed',
-      })
-    })
+    panelSessions?.removeWindow(info.windowId)
+    void afterRuntimeRestore(() => coordinator.onPanelClosed(info.windowId)).catch(
+      (error: unknown) => {
+        traceError('side panel close handling failed', error, {
+          stage: 'sidePanel.onClosed',
+          windowId: info.windowId,
+          outcome: 'failed',
+        })
+      }
+    )
   }
   const panelClosedEvent = sidePanelClosedEvent(chromeApi)
   if (panelClosedEvent) {
@@ -826,6 +884,64 @@ export function registerUiSessionRuntime(input: {
   }
   chromeApi.runtime.onConnect.addListener(onConnect)
   disposers.push(() => chromeApi.runtime.onConnect.removeListener(onConnect))
+
+  if (panelSessions) {
+    disposers.push(
+      sidePanelCommand.observeLifecycle((event) => panelSessions.apply('command', event)),
+      sidePanelConversationUpdate.observeLifecycle((event) => panelSessions.apply('update', event)),
+      panelSessions.observe((change) => {
+        if (change.type === 'channels-ready') {
+          void (runtimeReady ?? Promise.resolve())
+            .then(async () => {
+              const activeTabs = await chromeApi.tabs.query({
+                active: true,
+                windowId: change.windowId,
+              })
+              const activeTab = activeTabs.find((tab) => isPositiveInteger(tab.id))
+              if (!activeTab?.id) throw invalid('The Side Panel window has no active tab.')
+              const session = panelSessions.beginSynchronization(change.panelSessionId, {
+                tabId: activeTab.id,
+                windowId: change.windowId,
+              })
+              if (!session) return
+              await coordinator.attachPanelSession(session)
+              if (
+                !panelSessions.completeSynchronization(session.panelSessionId, session.generation)
+              ) {
+                return
+              }
+              await onPanelSessionReady?.(session)
+            })
+            .catch((error: unknown) =>
+              traceError('side panel session recovery failed', error, {
+                stage: 'panel-session.attach',
+                windowId: change.windowId,
+                outcome: 'failed',
+              })
+            )
+          return
+        }
+        if (change.type === 'command-disconnected' || change.type === 'update-disconnected') {
+          void (runtimeReady ?? Promise.resolve())
+            .then(() =>
+              coordinator.disconnectPanelSession({
+                panelSessionId: change.panelSessionId,
+                windowId: change.windowId,
+                generation: change.generation,
+                channel: change.type === 'command-disconnected' ? 'command' : 'update',
+              })
+            )
+            .catch((error: unknown) =>
+              traceError('side panel session disconnect handling failed', error, {
+                stage: 'panel-session.disconnect',
+                windowId: change.windowId,
+                outcome: 'failed',
+              })
+            )
+        }
+      })
+    )
+  }
 
   return () => {
     for (const dispose of disposers) dispose()

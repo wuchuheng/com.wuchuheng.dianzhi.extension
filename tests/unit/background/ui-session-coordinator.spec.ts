@@ -1127,3 +1127,61 @@ describe('UiSessionCoordinator latestUI restore semantics', () => {
     expect(saved()['9'].selectionSessionId).toBeNull()
   })
 })
+
+describe('UiSessionCoordinator worker recovery', () => {
+  const panelSession = {
+    panelSessionId: 'panel-session-19',
+    tabId: 9,
+    windowId: 19,
+    generation: 3,
+  }
+
+  it('replays the authoritative snapshot and routes racing updates behind it', async () => {
+    const synchronized = deferred<void>()
+    const events: ConversationUpdate[] = []
+    const { coordinator, sidePanel } = coordinatorWith(panelState(), {
+      sidePanel: {
+        publish: vi.fn(async (_windowId, update) => {
+          events.push(update)
+          if (update.type === 'conversation.sync') await synchronized.promise
+        }),
+      },
+    })
+    await coordinator.initialize()
+
+    const attaching = coordinator.attachPanelSession(panelSession)
+    await vi.waitFor(() => expect(events[0]?.type).toBe('conversation.sync'))
+    await coordinator.publish(9, streamDelta)
+    expect(events.map(({ type }) => type)).toEqual(['conversation.sync', 'stream.delta'])
+
+    synchronized.resolve(undefined)
+    await attaching
+    expect(sidePanel.publish).toHaveBeenCalledTimes(2)
+  })
+
+  it('retains updates for replay while the update channel is recovering', async () => {
+    const { coordinator, content, sidePanel } = coordinatorWith(panelState())
+    await coordinator.initialize()
+    await coordinator.attachPanelSession(panelSession)
+    vi.mocked(sidePanel.publish).mockClear()
+
+    await coordinator.disconnectPanelSession({ ...panelSession, channel: 'update' })
+    const retained = await coordinator.publish(9, streamDelta)
+
+    expect(retained).toBe(true)
+    expect(sidePanel.publish).not.toHaveBeenCalled()
+    expect(content.publish).not.toHaveBeenCalled()
+  })
+
+  it('keeps live delivery when only the command channel disconnects', async () => {
+    const { coordinator, sidePanel } = coordinatorWith(panelState())
+    await coordinator.initialize()
+    await coordinator.attachPanelSession(panelSession)
+    vi.mocked(sidePanel.publish).mockClear()
+
+    await coordinator.disconnectPanelSession({ ...panelSession, channel: 'command' })
+    await coordinator.publish(9, streamDelta)
+
+    expect(sidePanel.publish).toHaveBeenCalledWith(19, streamDelta)
+  })
+})

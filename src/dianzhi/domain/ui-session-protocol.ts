@@ -97,6 +97,7 @@ export type SidePanelCommand =
   | { type: 'render'; snapshot: ConversationSnapshot }
   | { type: 'clear' }
   | { type: 'selectTool'; snapshot: ConversationSnapshot }
+  | { type: 'session.ready'; panelSessionId: string }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -154,9 +155,7 @@ export function parseSurfaceStatus(value: unknown): ParseResult<SurfaceStatusReq
 
   if (
     payload.origin === 'contentScript' &&
-    Object.keys(payload).every((key) =>
-      ['origin', 'status', 'selectionSessionId'].includes(key)
-    )
+    Object.keys(payload).every((key) => ['origin', 'status', 'selectionSessionId'].includes(key))
   ) {
     return {
       ok: true,
@@ -346,11 +345,34 @@ export function parseToolShortcutRequest(value: unknown): ParseResult<ToolShortc
   const validOrigin = origin === 'contentScript' || origin === 'sidePanel'
   const validAction = action === 'select' || action === 'cycle'
   if (!validOrigin || !validAction) return invalid('Tool shortcut request is invalid.')
-  const expected = origin === 'sidePanel' ? ['origin', 'panelInstanceId', 'action', 'value'] : ['origin', 'action', 'value']
-  if (!Object.keys(payload).every((key) => expected.includes(key))) return invalid('Tool shortcut request is invalid.')
-  if (origin === 'sidePanel' && (typeof payload.panelInstanceId !== 'string' || !payload.panelInstanceId.trim())) return invalid('Tool shortcut request is invalid.')
-  if (action === 'select' && !isPositiveInteger(payload.value)) return invalid('Tool shortcut index is invalid.')
-  if (action === 'cycle' && payload.value !== 'left' && payload.value !== 'right') return invalid('Tool shortcut direction is invalid.')
-  const caller = origin === 'sidePanel' ? { origin, panelInstanceId: payload.panelInstanceId as string } : { origin }
-  return { ok: true, value: { requestId: parsed.value.requestId, type: 'shortcut.tool', payload: action === 'select' ? { ...caller, action, value: payload.value as number } : { ...caller, action, value: payload.value as 'left' | 'right' } } as ToolShortcutRequest }
+  const expected =
+    origin === 'sidePanel'
+      ? ['origin', 'panelInstanceId', 'action', 'value']
+      : ['origin', 'action', 'value']
+  if (!Object.keys(payload).every((key) => expected.includes(key)))
+    return invalid('Tool shortcut request is invalid.')
+  if (
+    origin === 'sidePanel' &&
+    (typeof payload.panelInstanceId !== 'string' || !payload.panelInstanceId.trim())
+  )
+    return invalid('Tool shortcut request is invalid.')
+  if (action === 'select' && !isPositiveInteger(payload.value))
+    return invalid('Tool shortcut index is invalid.')
+  if (action === 'cycle' && payload.value !== 'left' && payload.value !== 'right')
+    return invalid('Tool shortcut direction is invalid.')
+  const caller =
+    origin === 'sidePanel'
+      ? { origin, panelInstanceId: payload.panelInstanceId as string }
+      : { origin }
+  return {
+    ok: true,
+    value: {
+      requestId: parsed.value.requestId,
+      type: 'shortcut.tool',
+      payload:
+        action === 'select'
+          ? { ...caller, action, value: payload.value as number }
+          : { ...caller, action, value: payload.value as 'left' | 'right' },
+    } as ToolShortcutRequest,
+  }
 }

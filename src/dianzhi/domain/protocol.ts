@@ -85,6 +85,11 @@ export interface ConversationCommandResult {
   snapshot: ConversationSnapshot | null
 }
 
+export interface SidePanelConversationRequest {
+  panelSessionId: string
+  command: ConversationCommand
+}
+
 export type ConversationUpdate =
   | { type: 'conversation.sync'; snapshot: ConversationSnapshot }
   | { type: 'conversation.toolChanged'; snapshot: ConversationSnapshot }
@@ -243,6 +248,26 @@ export function parseConversationCommand(value: unknown): ParseResult<Conversati
       }
     default:
       return invalid('Conversation command type is invalid.')
+  }
+}
+
+/** Parses a Side Panel command together with its live logical-session capability. */
+export function parseSidePanelConversationRequest(
+  value: unknown
+): ParseResult<SidePanelConversationRequest> {
+  if (
+    !isRecord(value) ||
+    Object.keys(value).some((key) => key !== 'panelSessionId' && key !== 'command') ||
+    typeof value.panelSessionId !== 'string' ||
+    !value.panelSessionId.trim()
+  ) {
+    return invalid('Side Panel conversation request is invalid.')
+  }
+  const command = parseConversationCommand(value.command)
+  if (!command.ok) return command
+  return {
+    ok: true,
+    value: { panelSessionId: value.panelSessionId, command: command.value },
   }
 }
 

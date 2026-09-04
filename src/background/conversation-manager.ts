@@ -174,6 +174,28 @@ export function createConversationManager(dependencies: ConversationManagerDepen
       .map(({ role, content }) => ({ role, content }))
   }
 
+  async function recoverOrphanedMessages(
+    messages: readonly Readonly<MessageRecord>[]
+  ): Promise<MessageRecord[]> {
+    return Promise.all(
+      messages.map((message) =>
+        message.status === 'streaming'
+          ? dependencies.database.request('finalizeAssistant', {
+              messageId: message.id,
+              input: {
+                status: 'stopped',
+                content: message.content,
+                reasoningContent: message.reasoningContent,
+                estimatedThroughputTps: null,
+                errorCode: null,
+                errorMessage: 'The background service restarted during generation.',
+              },
+            })
+          : Promise.resolve({ ...message })
+      )
+    )
+  }
+
   async function startProvider(
     snapshot: ConversationSnapshot,
     settings: DianzhiSettings,
@@ -225,23 +247,7 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     const normalized = await normalizeStoredSnapshot(stored)
     const live = liveSnapshots.get(normalized.conversation.id)
     if (live) return cloneSnapshot(live)
-    const recoveredMessages = await Promise.all(
-      normalized.messages.map((message) =>
-        message.status === 'streaming'
-          ? dependencies.database.request('finalizeAssistant', {
-              messageId: message.id,
-              input: {
-                status: 'stopped',
-                content: message.content,
-                reasoningContent: message.reasoningContent,
-                estimatedThroughputTps: null,
-                errorCode: null,
-                errorMessage: 'The background service restarted during generation.',
-              },
-            })
-          : Promise.resolve(message)
-      )
-    )
+    const recoveredMessages = await recoverOrphanedMessages(normalized.messages)
     const snapshot = await snapshotFromStored(
       { ...normalized, messages: recoveredMessages },
       settings
@@ -265,8 +271,12 @@ export function createConversationManager(dependencies: ConversationManagerDepen
     const snapshot = await snapshotFromStored(stored, settings)
     const live = liveSnapshots.get(snapshot.conversation.id)
     if (live) return cloneSnapshot(live)
-    liveSnapshots.set(snapshot.conversation.id, cloneSnapshot(snapshot))
-    return cloneSnapshot(snapshot)
+    const recovered = {
+      ...snapshot,
+      messages: await recoverOrphanedMessages(snapshot.messages),
+    }
+    liveSnapshots.set(recovered.conversation.id, cloneSnapshot(recovered))
+    return cloneSnapshot(recovered)
   }
 
   async function createSelection(
@@ -379,23 +389,27 @@ export function createConversationManager(dependencies: ConversationManagerDepen
   async function handle(
     command: ConversationCommand,
     sender: chrome.runtime.MessageSender,
-    source: 'content' | 'extension' = sender.tab?.id ? 'content' : 'extension'
+    source: 'content' | 'extension' = sender.tab?.id ? 'content' : 'extension',
+    authorizedTabId?: number
   ): Promise<ConversationCommandResult> {
     const settings = await dependencies.loadSettings()
 
+    const assertAuthorized = (snapshot: ConversationSnapshot) => {
+      const expectedTabId = source === 'content' ? sender.tab?.id : authorizedTabId
+      if (expectedTabId === undefined || snapshot.conversation.tabId !== expectedTabId) {
+        throw invalid('The conversation does not belong to the authorized tab.')
+      }
+    }
+
     if (command.type === 'conversation.sync') {
       const snapshot = await loadSnapshot(command.payload.conversationId, settings)
-      if (source === 'content' && snapshot.conversation.tabId !== sender.tab?.id) {
-        throw invalid('The conversation does not belong to the sender tab.')
-      }
+      assertAuthorized(snapshot)
       return { accepted: true, snapshot }
     }
 
     if (command.type === 'stream.stop') {
       const snapshot = await loadSnapshot(command.payload.conversationId, settings)
-      if (source === 'content' && snapshot.conversation.tabId !== sender.tab?.id) {
-        throw invalid('The conversation does not belong to the sender tab.')
-      }
+      assertAuthorized(snapshot)
       const conversationId = snapshot.conversation.id
       liveRuns.get(conversationId)?.stop()
       dependencies.providerRunner.stop?.(conversationId)
@@ -404,9 +418,7 @@ export function createConversationManager(dependencies: ConversationManagerDepen
 
     if (command.type === 'conversation.followup') {
       const snapshot = await loadSnapshot(command.payload.conversationId, settings)
-      if (source === 'content' && snapshot.conversation.tabId !== sender.tab?.id) {
-        throw invalid('The conversation does not belong to the sender tab.')
-      }
+      assertAuthorized(snapshot)
       const conversationId = snapshot.conversation.id
       const previous = liveRuns.get(conversationId)
       if (previous) {
@@ -429,9 +441,7 @@ export function createConversationManager(dependencies: ConversationManagerDepen
 
     if (command.type === 'conversation.retry') {
       const snapshot = await loadSnapshot(command.payload.conversationId, settings)
-      if (source === 'content' && snapshot.conversation.tabId !== sender.tab?.id) {
-        throw invalid('The conversation does not belong to the sender tab.')
-      }
+      assertAuthorized(snapshot)
       const lastAssistant = [...snapshot.messages]
         .reverse()
         .find((message) => message.role === 'assistant')

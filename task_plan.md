@@ -6,7 +6,7 @@ Track completed provider/settings work and restore lossless live-message deliver
 
 ## Current Phase
 
-Phase 13 — complete
+Phase 16 — in progress
 
 ## Phases
 
@@ -106,6 +106,35 @@ Phase 13 — complete
 - [x] Re-export and inspect all five posters at 1280x800 and the 640x400 store-preview size.
 - **Status:** complete
 
+### Phase 14: Audit the complete runtime lifecycle for Side Panel follow-ups
+
+- [x] Inventory entry points, event transports, durable/transient state, provider execution, persistence, and UI reducers.
+- [x] Trace cold-start, warm handoff, worker suspension/restart, port disconnect/reconnect, follow-up, stop, and terminal delivery.
+- [x] Compare implementation, tests, prior designs, and Chrome MV3 lifecycle requirements.
+- [x] Confirm the root cause and identify every affected contract without changing runtime code.
+- **Status:** complete
+
+### Phase 15: Design and plan the lifecycle-safe repair
+
+- [x] Present repair approaches and trade-offs for user review.
+- [x] Obtain approval for the architectural design before writing the specification.
+- [x] Write and self-review the approved design specification.
+- [x] Obtain user review of the written specification.
+- [x] Produce a detailed TDD implementation plan using the writing-plans workflow.
+- **Status:** complete
+
+### Phase 16: Implement and verify the lifecycle-safe repair
+
+- [x] Recover orphaned selection-session streams.
+- [x] Add reconnectable shared-identity Side Panel ports.
+- [x] Join both ports into a generation-safe logical session.
+- [x] Add recovering routes and ordered panel attachment.
+- [x] Gate Background commands on restored, ready sessions.
+- [x] Expose real readiness in the Side Panel UI.
+- [x] Prove the restart-follow-up path through composed recovery, admission, and UI tests.
+- [ ] Add real Chromium lifecycle acceptance and run final verification.
+- **Status:** in_progress
+
 ## Decisions Made
 
 | Decision                                                        | Rationale                                                                            |
@@ -121,6 +150,8 @@ Phase 13 — complete
 | Log terminal lifecycle metadata without generated text          | Gives actionable diagnostics without leaking prompts, responses, or credentials.     |
 | Use one ordered Side Panel delivery channel                     | Snapshot render and later deltas need one FIFO boundary to avoid gaps or duplicates. |
 | Keep Content until panel render acknowledgement                 | A failed open or render must leave the active conversation usable.                   |
+| Recover normal MV3 worker suspension, not an in-flight network request after full restart | An open Side Panel must self-heal after Background wake; browser/extension restart restores persisted terminal state and treats interrupted work as stopped. |
+| Reconnect the existing two ports as one logical panel session | Preserves the ordered conversation channel while adding shared identity, readiness, replay, and lifecycle recovery with less regression risk than a universal-port migration. |
 
 ## Errors Encountered
 
@@ -137,3 +168,5 @@ Phase 13 — complete
 | Playwright Chromium was terminated by the managed sandbox       |       1 | Re-run only the renderer outside the sandbox with its isolated temporary profile.      |
 | Final source-format check reported three unformatted files      |       1 | Apply project Prettier, re-render, and repeat image and source verification.           |
 | One combined HTML patch targeted the same file twice            |       1 | Split the no-op rejected patch into small CSS and markup patches.                      |
+| Combined Phase 14 planning patch used the template progress heading | 1 | Inspect the project-specific heading and apply small file-specific patches.         |
+| Combined Phase 15 tracking patch assumed completed checkboxes | 1 | Inspect the exact current phase text and apply an exact-context patch; no partial edit occurred. |

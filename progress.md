@@ -1,5 +1,35 @@
 # Progress Log: Provider settings UX refinement
 
+## 2026-09-04
+
+### Phase 14: Audit the complete runtime lifecycle for Side Panel follow-ups
+
+- **Status:** complete
+- Classified the expanded request as architectural planning.
+- Reused the prior handoff diagnosis and began a full repository/runtime-contract audit.
+- Confirmed that no Chrome DevTools browser is currently reachable on port 9222.
+- Ran 77 focused existing tests across coordinator, manager, Side Panel, and port transport; all passed, but the restart-follow-up scenario is absent.
+- Extended `task_plan.md`, `findings.md`, and `progress.md`; no runtime code changed.
+- A combined planning patch was rejected before any partial edit because this file has a project-specific heading; reapplied as exact file-specific patches.
+- Completed the source, transport, persistence, documentation, test, and Chrome-lifecycle audit; no runtime code changed.
+- Full baseline: 42 Vitest files / 296 tests passed and TypeScript passed. Format check remains red in four pre-existing committed files plus `task_plan.md`.
+- Root cause confirmed as a coupled reconnect, route-reconstruction, and Background-startup-readiness failure. Phase 15 is now awaiting the recovery-scope decision before design options are finalized.
+- Phase 15 scope selected: self-heal an open Side Panel after normal MV3 worker suspension; do not attempt impossible continuation of the original provider connection across full browser/extension restart.
+- User approved the reconnectable logical-session architecture and requested implementation.
+- Wrote and self-reviewed `docs/superpowers/specs/2026-09-04-side-panel-worker-recovery-design.md`.
+- Self-review corrected an important recovery distinction: a transport-only disconnect replays in-memory deltas, while actual worker termination restores the SQLite checkpoint as `stopped` and never claims the original provider request continued.
+- A combined Phase 15 tracking patch expected already-completed checklist text and was rejected before any partial edit; reapplied against the exact file state.
+- Committed only the approved design specification as `b6171cc` (`docs(sidepanel): specify service-worker recovery`); audit tracking files remain uncommitted.
+- Awaiting the required written-spec review before invoking the writing-plans workflow and changing runtime code.
+- User approved the written specification.
+- Created and self-reviewed the eight-task TDD implementation plan at `docs/superpowers/plans/2026-09-04-side-panel-worker-recovery.md`; no production code has changed yet.
+- Began inline execution on `main`, honoring the repository's recorded user preference. Baseline remains 296 passing tests and a passing typecheck.
+- Task 1 RED confirmed that `loadSelectionSession()` never finalized an orphaned `streaming` assistant; GREEN centralized recovery across both snapshot-loading paths. Focused result: 11/11 Conversation Manager tests passed.
+- Task 2 RED covered shared identity, explicit bind acknowledgement, lifecycle observation, and reconnect/cancel behavior. GREEN result: 14/14 transport tests and TypeScript passed; the existing FIFO/window tests remain intact.
+- TypeScript caught Task 1's recovery helper accepting mutable rows while stored rows are readonly. The helper now accepts readonly records and clones already-terminal rows; both focused suites pass together (25/25).
+- Task 3 RED first failed at the missing registry boundary, then at an explicit not-implemented stub. GREEN adds the generation-safe logical session registry and stable not-ready code; 5/5 registry tests and TypeScript pass.
+- Task 4 RED proved the coordinator had no reattach/disconnect lifecycle. GREEN adds ordered authoritative replay, `sidePanelRecovering`, command-only continuity, and runtime activation after readiness; 81/81 focused tests and TypeScript pass.
+
 ## 2026-08-22
 
 ### Phase 1: Discovery

@@ -12,14 +12,29 @@ const hoisted = vi.hoisted(() => {
     capture?: (value: unknown) => Promise<unknown>
   } = {}
   const sidePanelCommandHandle = vi.fn(
-    (_binding: unknown, callback: (value: unknown) => Promise<unknown>) => {
+    (
+      _binding: unknown,
+      callback: (value: unknown) => Promise<unknown>,
+      options?: { panelSessionId?: string; onStatus?: (status: string) => void }
+    ) => {
       commandConsumer.capture = callback
-      return { cancel: vi.fn(), panelInstanceId: 'panel-instance-19' }
+      options?.onStatus?.('bound')
+      void callback({ type: 'session.ready', panelSessionId: options?.panelSessionId ?? 'test' })
+      return {
+        cancel: vi.fn(),
+        panelInstanceId: 'panel-instance-19',
+        panelSessionId: options?.panelSessionId ?? 'test',
+      }
     }
   )
   const sidePanelConversationUpdateHandle = vi.fn(
-    (_binding: unknown, callback: (value: unknown) => Promise<unknown>) => {
+    (
+      _binding: unknown,
+      callback: (value: unknown) => Promise<unknown>,
+      options?: { onStatus?: (status: string) => void }
+    ) => {
       updateConsumer.capture = callback
+      options?.onStatus?.('bound')
       return { cancel: vi.fn(), panelInstanceId: 'panel-update-instance-19' }
     }
   )
@@ -177,7 +192,7 @@ describe('Side Panel dock shortcut', () => {
     expect(panelToggleDispatch).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'shortcut.panelToggle',
-        payload: { origin: 'sidePanel', panelInstanceId: 'panel-instance-19' },
+        payload: { origin: 'sidePanel', panelInstanceId: expect.any(String) },
       })
     )
   })
@@ -323,7 +338,13 @@ describe('Side Panel message toolbar', () => {
       host?.querySelector<HTMLButtonElement>('[aria-label="重新生成"]')?.click()
     })
     expect(conversationDispatch).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'conversation.retry', payload: { conversationId: 22 } })
+      expect.objectContaining({
+        panelSessionId: expect.any(String),
+        command: expect.objectContaining({
+          type: 'conversation.retry',
+          payload: { conversationId: 22 },
+        }),
+      })
     )
   })
 })

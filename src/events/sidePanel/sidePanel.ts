@@ -11,18 +11,36 @@ export interface TargetedSidePanelEvent<Args, Return> {
   connectedWindows(): ReadonlySet<number>
   /** Resolves a live opaque panel capability to its trusted port binding. */
   bindingFor(panelInstanceId: string): { tabId: number; windowId: number } | null
+  observeLifecycle(listener: (event: SidePanelPortLifecycle) => void): Cancel
   accept(port: chrome.runtime.Port): boolean
   handle(
     binding: { tabId: number; windowId: number },
-    callback: (args: Args) => Promise<Return>
-  ): { cancel: Cancel; panelInstanceId: string }
+    callback: (args: Args) => Promise<Return>,
+    options?: SidePanelHandleOptions
+  ): { cancel: Cancel; panelInstanceId: string; panelSessionId: string }
+}
+
+export type SidePanelPortStatus = 'connecting' | 'bound' | 'disconnected'
+
+export interface SidePanelPortLifecycle {
+  type: 'bound' | 'disconnected'
+  panelSessionId: string
+  binding: { tabId: number; windowId: number }
+}
+
+export interface SidePanelHandleOptions {
+  panelSessionId?: string
+  reconnect?: boolean
+  retryDelaysMs?: readonly number[]
+  onStatus?(status: SidePanelPortStatus): void
 }
 
 /** Matches the pre-coordinator Side Panel ready timeout. */
 export const DEFAULT_SIDE_PANEL_READY_TIMEOUT_MS = 5_000
 
 type Binding = { tabId: number; windowId: number }
-type BindingMessage = Binding & { panelInstanceId: string }
+type BindingMessage = Binding & { type: 'bind'; panelSessionId: string }
+type BoundMessage = { type: 'bound'; panelSessionId: string }
 type RequestMessage<Args> = { messageId: string; args: Args }
 type ResponseMessage<Return> = { messageId: string; data?: Return; error?: ErrorResponse }
 type PendingRequest<Return> = {
@@ -41,9 +59,16 @@ function isBinding(value: unknown): value is BindingMessage {
     typeof binding.windowId === 'number' &&
     Number.isSafeInteger(binding.windowId) &&
     binding.windowId >= 0 &&
-    typeof binding.panelInstanceId === 'string' &&
-    binding.panelInstanceId.trim().length > 0
+    binding.type === 'bind' &&
+    typeof binding.panelSessionId === 'string' &&
+    binding.panelSessionId.trim().length > 0
   )
+}
+
+function isBound(value: unknown, panelSessionId: string): value is BoundMessage {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const message = value as Partial<BoundMessage>
+  return message.type === 'bound' && message.panelSessionId === panelSessionId
 }
 
 function isResponse<Return>(value: unknown): value is ResponseMessage<Return> {
@@ -82,7 +107,12 @@ export function bg2sp<Args, Return>(name: string): TargetedSidePanelEvent<Args, 
     timer: ReturnType<typeof setTimeout>
   }
   const waitersByWindow = new Map<number, WindowWaiter[]>()
+  const lifecycleListeners = new Set<(event: SidePanelPortLifecycle) => void>()
   let messageSequence = 0
+
+  const emitLifecycle = (event: SidePanelPortLifecycle) => {
+    for (const listener of lifecycleListeners) listener(event)
+  }
 
   const rejectPendingForPort = (port: chrome.runtime.Port, error: Error) => {
     for (const [messageId, pending] of pendingByMessageId) {
@@ -163,6 +193,10 @@ export function bg2sp<Args, Return>(name: string): TargetedSidePanelEvent<Args, 
       const entry = bindingByPanelInstanceId.get(panelInstanceId)
       return entry ? { ...entry.binding } : null
     },
+    observeLifecycle(listener) {
+      lifecycleListeners.add(listener)
+      return () => lifecycleListeners.delete(listener)
+    },
     accept(port) {
       if (port.name !== eventName) return false
 
@@ -181,12 +215,21 @@ export function bg2sp<Args, Return>(name: string): TargetedSidePanelEvent<Args, 
           windowByPort.set(port, message.windowId)
           const previousPanelInstanceId = panelInstanceIdByPort.get(port)
           if (previousPanelInstanceId) bindingByPanelInstanceId.delete(previousPanelInstanceId)
-          bindingByPanelInstanceId.set(message.panelInstanceId, {
+          bindingByPanelInstanceId.set(message.panelSessionId, {
             binding: { tabId: message.tabId, windowId: message.windowId },
             port,
           })
-          panelInstanceIdByPort.set(port, message.panelInstanceId)
+          panelInstanceIdByPort.set(port, message.panelSessionId)
+          port.postMessage({
+            type: 'bound',
+            panelSessionId: message.panelSessionId,
+          } satisfies BoundMessage)
           resolveWaiters(message.windowId)
+          emitLifecycle({
+            type: 'bound',
+            panelSessionId: message.panelSessionId,
+            binding: { tabId: message.tabId, windowId: message.windowId },
+          })
           return
         }
 
@@ -204,38 +247,108 @@ export function bg2sp<Args, Return>(name: string): TargetedSidePanelEvent<Args, 
       port.onDisconnect.addListener(() => {
         const windowId = windowByPort.get(port)
         if (windowId === undefined) return
+        const panelSessionId = panelInstanceIdByPort.get(port)
+        const binding = panelSessionId
+          ? bindingByPanelInstanceId.get(panelSessionId)?.binding
+          : undefined
         if (portsByWindow.get(windowId) === port) portsByWindow.delete(windowId)
         rejectPendingForPort(port, deliveryError('SIDE_PANEL_READY_TIMEOUT', windowId))
         rejectWaiters(windowId, deliveryError('SIDE_PANEL_READY_TIMEOUT', windowId))
         removePortBinding(port)
         windowByPort.delete(port)
+        if (panelSessionId && binding) {
+          emitLifecycle({ type: 'disconnected', panelSessionId, binding: { ...binding } })
+        }
       })
 
       return true
     },
-    handle(binding, callback) {
-      const port = chrome.runtime.connect({ name: eventName })
-      const panelInstanceId = crypto.randomUUID()
-      const listener = async (message: unknown) => {
-        if (!message || typeof message !== 'object' || Array.isArray(message)) return
-        const request = message as Partial<RequestMessage<Args>>
-        if (typeof request.messageId !== 'string') return
+    handle(binding, callback, options = {}) {
+      const panelSessionId = options.panelSessionId ?? crypto.randomUUID()
+      const retryDelays = options.retryDelaysMs?.length
+        ? options.retryDelaysMs
+        : [100, 250, 500, 1_000, 2_000]
+      let port: chrome.runtime.Port | null = null
+      let retryTimer: ReturnType<typeof setTimeout> | null = null
+      let retryIndex = 0
+      let disposed = false
 
-        const response: ResponseMessage<Return> = { messageId: request.messageId }
-        try {
-          response.data = await callback(request.args as Args)
-        } catch (error) {
-          response.error = errorToResponse(error)
-        }
-        port.postMessage(response)
+      const terminalContextError = (error: unknown): boolean =>
+        error instanceof Error &&
+        /extension context|context invalidated|receiving end does not exist/i.test(error.message)
+      const scheduleRetry = () => {
+        if (disposed || !options.reconnect) return
+        const delay = retryDelays[Math.min(retryIndex, retryDelays.length - 1)] ?? 2_000
+        retryIndex += 1
+        retryTimer = setTimeout(connect, delay)
       }
-      port.onMessage.addListener(listener)
-      port.postMessage({ ...binding, panelInstanceId } satisfies BindingMessage)
+
+      const connect = () => {
+        if (disposed) return
+        options.onStatus?.('connecting')
+        let nextPort: chrome.runtime.Port
+        try {
+          nextPort = chrome.runtime.connect({ name: eventName })
+        } catch (error) {
+          options.onStatus?.('disconnected')
+          if (!terminalContextError(error)) scheduleRetry()
+          return
+        }
+        port = nextPort
+        const listener = async (message: unknown) => {
+          if (isBound(message, panelSessionId)) {
+            retryIndex = 0
+            options.onStatus?.('bound')
+            return
+          }
+          if (!message || typeof message !== 'object' || Array.isArray(message)) return
+          const request = message as Partial<RequestMessage<Args>>
+          if (typeof request.messageId !== 'string') return
+
+          const response: ResponseMessage<Return> = { messageId: request.messageId }
+          try {
+            response.data = await callback(request.args as Args)
+          } catch (error) {
+            response.error = errorToResponse(error)
+          }
+          try {
+            nextPort.postMessage(response)
+          } catch {
+            // Disconnect handling owns retry and pending-request cleanup.
+          }
+        }
+        const onDisconnect = () => {
+          nextPort.onMessage.removeListener(listener)
+          nextPort.onDisconnect.removeListener(onDisconnect)
+          if (port === nextPort) port = null
+          if (disposed) return
+          options.onStatus?.('disconnected')
+          if (!options.reconnect) return
+          scheduleRetry()
+        }
+        nextPort.onMessage.addListener(listener)
+        nextPort.onDisconnect.addListener(onDisconnect)
+        try {
+          nextPort.postMessage({
+            type: 'bind',
+            ...binding,
+            panelSessionId,
+          } satisfies BindingMessage)
+        } catch (error) {
+          nextPort.disconnect()
+          if (terminalContextError(error)) disposed = true
+        }
+      }
+
+      connect()
       return {
-        panelInstanceId,
+        panelInstanceId: panelSessionId,
+        panelSessionId,
         cancel: () => {
-        port.onMessage.removeListener(listener)
-        port.disconnect()
+          disposed = true
+          if (retryTimer !== null) clearTimeout(retryTimer)
+          port?.disconnect()
+          port = null
         },
       }
     },

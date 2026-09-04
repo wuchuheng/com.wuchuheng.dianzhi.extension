@@ -48,6 +48,8 @@ import {
   registerUiSessionRuntime,
   type UiSessionCoordinator,
 } from './ui-session-runtime'
+import { createSidePanelSessionRegistry } from './side-panel-session-registry'
+import { createSidePanelConversationHandler } from './side-panel-conversation-handler'
 
 const SETTINGS_KEY = 'dianzhi.settings'
 const UI_SESSION_KEY = 'dianzhi.ui-tab-sessions'
@@ -179,15 +181,45 @@ const coordinator = createUiSessionCoordinator({
 })
 coordinatorRef.current = coordinator
 
+const runtimeReady = (async () => {
+  try {
+    await reconcileUiSessionState({
+      sessionStore: uiSessionStore,
+      getTab: async (tabId) => normalizeTabForCoordinator(await chrome.tabs.get(tabId)),
+      deleteSelectionSession: (selectionSessionId) =>
+        database.request('deleteSelectionSession', { id: selectionSessionId }),
+    })
+  } catch (error) {
+    logError(Scope.BACKGROUND, 'Failed to reconcile Dianzhi UI tab sessions', error)
+  }
+  await coordinator.initialize()
+  await manager.initialize()
+  log(Scope.BACKGROUND, 'Dianzhi UI session runtime is ready')
+})()
+void runtimeReady.catch((error: unknown) => {
+  logError(Scope.BACKGROUND, 'Failed to restore Dianzhi session state', error)
+})
+
+const panelSessions = createSidePanelSessionRegistry()
+
 registerUiSessionRuntime({
   chromeApi: chrome,
   coordinator,
   sidePanelCommand,
   sidePanelConversationUpdate,
+  runtimeReady,
+  panelSessions,
+  onPanelSessionReady: async (session) => {
+    await sidePanelCommand.dispatch(
+      { type: 'session.ready', panelSessionId: session.panelSessionId },
+      session.windowId
+    )
+  },
 })
 const uiSessionHandlers = createUiSessionEventHandlers({
   chromeApi: chrome,
   coordinator,
+  runtimeReady,
   connectedPanelWindows: () => sidePanelCommand.connectedWindows(),
   panelBindingFor: (panelInstanceId) => sidePanelCommand.bindingFor(panelInstanceId),
 })
@@ -200,13 +232,14 @@ panelPanelToggle.handleWithSender(uiSessionHandlers.onPanelPanelToggle)
 panelToolShortcut.handleWithSender(uiSessionHandlers.onPanelToolShortcut)
 const optionsTestRunner = createOptionsToolTestRunner()
 
-function handleConversationCommand(
+async function handleConversationCommand(
   value: unknown,
   sender: chrome.runtime.MessageSender,
   source: 'content' | 'extension'
 ) {
   const parsed = parseConversationCommand(value)
   if (!parsed.ok) throw new DianzhiError(parsed.error)
+  await runtimeReady
   return manager.handle(parsed.value, sender, source)
 }
 
@@ -219,12 +252,18 @@ contentConversationCommand.handleWithSender((value, sender) => {
   void run.catch((error: unknown) => logCommandFailure('content', error))
   return run
 })
+const handleSidePanelConversation = createSidePanelConversationHandler({
+  runtimeReady,
+  panelSessions,
+  manager,
+})
 extensionConversationCommand.handleWithSender((value, sender) => {
-  const run = handleConversationCommand(value, sender, 'extension')
+  const run = handleSidePanelConversation(value, sender)
   void run.catch((error: unknown) => logCommandFailure('extension', error))
   return run
 })
 settingsCommand.handle(async (value) => {
+  await runtimeReady
   const command = parseSettingsCommand(value)
   if (command.type === 'settings.get') return loadSettings()
   const row = mergeSettings(command.settings)
@@ -302,12 +341,14 @@ function dispatchToolsCommand(command: ToolsCommand, db: OffscreenClient): Promi
 }
 
 toolsCommand.handle(async (value) => {
+  await runtimeReady
   const parsed = parseToolsCommand(value)
   if (!parsed.ok) throw new DianzhiError(parsed.error)
   await migrationCoordinator.ensureMigrated()
   return dispatchToolsCommand(parsed.value, database)
 })
 contentSettingsCommand.handle(async (value) => {
+  await runtimeReady
   const command = parseSettingsCommand(value)
   if (command.type !== 'settings.get') {
     throw new DianzhiError({
@@ -320,20 +361,3 @@ contentSettingsCommand.handle(async (value) => {
 
 chrome.runtime.onConnect.addListener((port) => optionsTestRunner.connect(port))
 relayService()
-void (async () => {
-  try {
-    await reconcileUiSessionState({
-      sessionStore: uiSessionStore,
-      getTab: async (tabId) => normalizeTabForCoordinator(await chrome.tabs.get(tabId)),
-      deleteSelectionSession: (selectionSessionId) =>
-        database.request('deleteSelectionSession', { id: selectionSessionId }),
-    })
-  } catch (error) {
-    logError(Scope.BACKGROUND, 'Failed to reconcile Dianzhi UI tab sessions', error)
-  }
-  await coordinator.initialize()
-  await manager.initialize()
-  log(Scope.BACKGROUND, 'Dianzhi UI session runtime is ready')
-})().catch((error: unknown) => {
-  logError(Scope.BACKGROUND, 'Failed to restore Dianzhi session state', error)
-})

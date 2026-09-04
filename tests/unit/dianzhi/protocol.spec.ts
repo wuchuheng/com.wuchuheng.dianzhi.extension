@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { parseConversationCommand, parseToolsCommand } from '@/dianzhi/domain/protocol'
+import {
+  parseConversationCommand,
+  parseSidePanelConversationRequest,
+  parseToolsCommand,
+} from '@/dianzhi/domain/protocol'
 import {
   parsePanelToggle,
   parseSelectionRoute,
@@ -47,6 +51,41 @@ describe('parseConversationCommand: legacy panel and selection commands are reje
   it('rejects the panel lifecycle commands', () => {
     for (const type of ['panel.open', 'panel.toggle', 'panel.rendered', 'panel.close']) {
       expect(parseConversationCommand(legacyCommand(type, { conversationId: 1 })).ok).toBe(false)
+    }
+  })
+})
+
+describe('parseSidePanelConversationRequest', () => {
+  const followup = {
+    type: 'conversation.followup',
+    requestId: 'followup-1',
+    payload: { conversationId: 22, content: 'Why?' },
+  }
+
+  it('accepts a conversation command under a logical panel session', () => {
+    expect(
+      parseSidePanelConversationRequest({
+        panelSessionId: 'panel-session-19',
+        command: followup,
+      })
+    ).toEqual({
+      ok: true,
+      value: { panelSessionId: 'panel-session-19', command: followup },
+    })
+  })
+
+  it('rejects invalid sessions, nested commands, browser identity, and extra fields', () => {
+    for (const value of [
+      { panelSessionId: '', command: followup },
+      { panelSessionId: 'panel-session-19' },
+      { panelSessionId: 'panel-session-19', command: { ...followup, payload: {} } },
+      {
+        panelSessionId: 'panel-session-19',
+        command: { ...followup, payload: { ...followup.payload, tabId: 9 } },
+      },
+      { panelSessionId: 'panel-session-19', command: followup, tabId: 9 },
+    ]) {
+      expect(parseSidePanelConversationRequest(value).ok).toBe(false)
     }
   })
 })
@@ -136,7 +175,12 @@ describe('UI session request parsers', () => {
       parseSurfaceStatus({
         requestId: 'status-panel',
         type: 'ui.surfaceStatus',
-        payload: { status: 'appeared', selectionSessionId: null, origin: 'sidePanel', panelInstanceId: 'panel-instance-1' },
+        payload: {
+          status: 'appeared',
+          selectionSessionId: null,
+          origin: 'sidePanel',
+          panelInstanceId: 'panel-instance-1',
+        },
       }).ok
     ).toBe(true)
     expect(

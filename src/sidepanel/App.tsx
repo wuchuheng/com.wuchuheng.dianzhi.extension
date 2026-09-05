@@ -65,11 +65,10 @@ export function SidePanelView({
   const viewKey = `${snapshot?.conversation.id ?? ''}:${snapshot?.activeToolId ?? ''}`
 
   useEffect(() => {
-    // Focus the chat input once a conversation is attached; `streaming` flips
-    // stay in the deps so focus returns to the input right after a send.
+    // Focus the chat input when a conversation or active tool is attached.
     if (!hasSnapshot) return
     composerRef.current?.focus()
-  }, [viewKey, streaming, hasSnapshot])
+  }, [viewKey, hasSnapshot])
 
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   const { onScroll: onHistoryScroll, onStreamingHeightDelta } = useScrollFollow(historyRef, {

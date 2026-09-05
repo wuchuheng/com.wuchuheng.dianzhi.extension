@@ -227,6 +227,44 @@ describe('Side Panel dock shortcut', () => {
 })
 
 describe('Side Panel composer while streaming', () => {
+  it('does not refocus the composer when streaming status changes', async () => {
+    const focus = vi.spyOn(HTMLTextAreaElement.prototype, 'focus')
+    await renderApp()
+
+    const initial = snapshot()
+    await act(async () => {
+      await emitMessage({ type: 'conversation.sync', snapshot: initial })
+      await Promise.resolve()
+    })
+    focus.mockClear()
+
+    const streaming = snapshot()
+    streaming.messages = [
+      {
+        id: 1,
+        conversationId: 22,
+        sequence: 1,
+        role: 'assistant',
+        content: 'working…',
+        reasoningContent: '',
+        estimatedThroughputTps: null,
+        status: 'streaming',
+        errorCode: null,
+        errorMessage: null,
+        createdAt: '2026-08-22T00:00:00.000Z',
+        updatedAt: '2026-08-22T00:00:00.000Z',
+      },
+    ]
+
+    await act(async () => {
+      await emitMessage({ type: 'conversation.sync', snapshot: streaming })
+      await Promise.resolve()
+    })
+
+    expect(focus).not.toHaveBeenCalled()
+    focus.mockRestore()
+  })
+
   it('keeps the chat input editable while a reply is streaming', async () => {
     await renderApp()
     const streaming = snapshot()

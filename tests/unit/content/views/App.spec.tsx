@@ -59,14 +59,14 @@ function visibleState(): ConversationViewState {
   }
 }
 
-async function render(onOpenSettings = vi.fn(), bodyScrollable = false) {
+async function render(onOpenSettings = vi.fn(), bodyScrollable = false, state = visibleState()) {
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
   await act(async () => {
     root.render(
       <ContentApp
-        state={visibleState()}
+        state={state}
         placement={placement}
         reasoningEnabled={false}
         shortcuts={DEFAULT_SETTINGS.shortcuts}
@@ -277,4 +277,17 @@ describe('ContentApp provider setup', () => {
     // Dismissed after a successful save.
     expect(host?.querySelector('.dz-provider-setup')).toBeNull()
   })
+})
+
+it('shows routing failure without the understanding placeholder', async () => {
+  await render(vi.fn(), false, {
+    ...visibleState(),
+    snapshot: null,
+    error: {
+      code: 'UI_SESSION_STALE',
+      message: 'The tab session changed before the UI operation completed.',
+    },
+  })
+  expect(host?.querySelector('[role="alert"]')?.textContent).toContain('The tab session changed')
+  expect(host?.textContent).not.toContain('正在理解所选内容')
 })

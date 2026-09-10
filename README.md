@@ -41,6 +41,8 @@ pnpm run build
 
 扩展需要 `http://*/*` 和 `https://*/*` 主机权限，以便后台访问用户配置的 AI 服务；内容脚本本身只注入 HTTPS 页面。API Key 保存在 `chrome.storage.sync`，不会写入 SQLite 或日志。
 
+`webNavigation` 权限用于校验划词消息是否来自标签页当前文档：单页应用切换路由后，Chrome 的消息来源 URL 可能仍是文档最初的 URL。后台核对文档 ID 后使用当前路由，并在会话缓存过期时重新同步；旧文档的请求仍返回 `UI_SESSION_STALE`。
+
 ## 快捷键
 
 默认值可在设置中修改：

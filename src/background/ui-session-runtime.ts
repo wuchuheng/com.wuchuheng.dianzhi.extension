@@ -309,6 +309,7 @@ export function panelSourceFromBinding(
 }
 
 async function runContentRequest<P extends { requestId: string }, R>(input: {
+  chromeApi: typeof chrome
   stage: string
   value: unknown
   sender: chrome.runtime.MessageSender
@@ -320,7 +321,7 @@ async function runContentRequest<P extends { requestId: string }, R>(input: {
    * `sidePanel.open()` inside the user-gesture window. */
   onSource?: (request: P, source: UiEventSource) => void
 }): Promise<R> {
-  const { stage, value, sender, parse, execute, commit, onSource } = input
+  const { chromeApi, stage, value, sender, parse, execute, commit, onSource } = input
   trace('ui content request received', {
     requestId: extractRequestId(value) ?? null,
     stage,
@@ -338,6 +339,25 @@ async function runContentRequest<P extends { requestId: string }, R>(input: {
     requestId = request.requestId
     source = resolveContentSource(sender, request.requestId)
     onSource?.(request, source)
+    if (sender.tab?.url && normalizePageUrl(sender.tab.url) !== normalizePageUrl(source.pageUrl)) {
+      const staleSource = new DianzhiError({
+        code: 'UI_SESSION_STALE',
+        message: 'The tab session changed before the UI operation completed.',
+        context: { tabId: source.tabId },
+      })
+      if (sender.frameId !== 0 || !sender.documentId) throw staleSource
+      const frame = await chromeApi.webNavigation
+        .getFrame({ tabId: source.tabId, frameId: 0 })
+        .catch(() => null)
+      if (
+        !frame ||
+        frame.documentId !== sender.documentId ||
+        normalizePageUrl(frame.url) !== normalizePageUrl(sender.tab.url)
+      ) {
+        throw staleSource
+      }
+      source = { ...source, pageUrl: sender.tab.url }
+    }
     trace('ui content request validated', {
       requestId: request.requestId,
       stage,
@@ -502,6 +522,7 @@ export function createUiSessionEventHandlers(deps: {
   return {
     onContentSurfaceStatus(value, sender) {
       return runContentRequest({
+        chromeApi,
         stage: 'ui.surfaceStatus',
         value,
         sender,
@@ -542,6 +563,7 @@ export function createUiSessionEventHandlers(deps: {
     },
     onSelectionRoute(value, sender) {
       return runContentRequest({
+        chromeApi,
         stage: 'selection.route',
         value,
         sender,
@@ -556,6 +578,7 @@ export function createUiSessionEventHandlers(deps: {
     },
     onContentPanelToggle(value, sender) {
       return runContentRequest({
+        chromeApi,
         stage: 'shortcut.panelToggle',
         value,
         sender,
@@ -602,6 +625,7 @@ export function createUiSessionEventHandlers(deps: {
     },
     onContentToolShortcut(value, sender) {
       return runContentRequest({
+        chromeApi,
         stage: 'shortcut.tool',
         value,
         sender,
@@ -629,6 +653,7 @@ export function createUiSessionEventHandlers(deps: {
     },
     onContentSelectToolShortcut(value, sender) {
       return runContentRequest({
+        chromeApi,
         stage: 'shortcut.selectTool',
         value,
         sender,
@@ -661,6 +686,7 @@ export function createUiSessionEventHandlers(deps: {
     },
     onContentCycleToolShortcut(value, sender) {
       return runContentRequest({
+        chromeApi,
         stage: 'shortcut.cycleTool',
         value,
         sender,
@@ -777,12 +803,7 @@ export function registerUiSessionRuntime(input: {
     changeInfo: chrome.tabs.OnUpdatedInfo,
     tab: chrome.tabs.Tab
   ): void => {
-    // Only committed top-level navigations surface status 'loading' together with
-    // the next URL; subframe and pending updates are ignored as lifecycle evidence.
-    // Same-document SPA route changes (pushState) do not flip status, so their
-    // identity resync relies on the coordinator's cached-source revalidation
-    // rejecting stale work instead of this event.
-    if (changeInfo.status !== 'loading' || typeof changeInfo.url !== 'string') return
+    if (typeof changeInfo.url !== 'string') return
     if (!isPositiveInteger(tab.windowId)) return
     trace('tab navigation committed', {
       stage: 'tabs.onUpdated',

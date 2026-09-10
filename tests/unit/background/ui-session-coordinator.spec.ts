@@ -846,8 +846,95 @@ describe('UiSessionCoordinator routing and ownership', () => {
 })
 
 describe('UiSessionCoordinator stale identity revalidation', () => {
+  it('recovers a selection when Chrome confirms the request URL and the cache is outdated', async () => {
+    const { coordinator, tabs, saved, conversations } = coordinatorWith(contentState())
+    tabs.get.mockResolvedValue({ id: 9, windowId: 19, url: OTHER_PAGE })
+    await coordinator.initialize()
+    await expect(
+      coordinator.routeSelection(selectionRequest(), sender(9, 19, OTHER_PAGE))
+    ).resolves.toMatchObject({ target: 'contentScript', display: true })
+    expect(saved()['9'].pageUrl).toBe(OTHER_PAGE)
+    expect(conversations.deleteSelectionSession).toHaveBeenCalledWith(10)
+  })
+
+  it('recovers a surface report when Chrome confirms the new URL', async () => {
+    const { coordinator, tabs, saved } = coordinatorWith(contentState())
+    tabs.get.mockResolvedValue({ id: 9, windowId: 19, url: OTHER_PAGE })
+    await coordinator.initialize()
+    await expect(
+      coordinator.reportContentStatus(statusRequest('destroyed', null), sender(9, 19, OTHER_PAGE))
+    ).resolves.toMatchObject({ currentUI: 'none' })
+    expect(saved()['9'].pageUrl).toBe(OTHER_PAGE)
+  })
+
+  it('rejects a mismatched request that Chrome does not confirm', async () => {
+    const { coordinator, saved, conversations } = coordinatorWith(contentState())
+    await coordinator.initialize()
+    await expect(
+      coordinator.routeSelection(selectionRequest(), sender(9, 19, OTHER_PAGE))
+    ).rejects.toMatchObject({ code: 'UI_SESSION_STALE' })
+    expect(saved()['9'].pageUrl).toBe(PAGE_NORMALIZED)
+    expect(conversations.createSelection).not.toHaveBeenCalled()
+  })
+
+  it('cleans up the session if the tab disappeared during recovery', async () => {
+    const { coordinator, tabs, saved, conversations } = coordinatorWith(contentState())
+    tabs.get.mockRejectedValue(new Error('No tab with id: 9'))
+    await coordinator.initialize()
+    await expect(
+      coordinator.routeSelection(selectionRequest(), sender(9, 19, OTHER_PAGE))
+    ).rejects.toMatchObject({ code: 'UI_SESSION_STALE' })
+    expect(saved()['9']).toBeUndefined()
+    expect(conversations.deleteSelectionSession).toHaveBeenCalledWith(10)
+    expect(conversations.createSelection).not.toHaveBeenCalled()
+  })
+
+  it('does not rewind the latest URL while recovery deletes the old session', async () => {
+    const stopping = deferred<void>()
+    const { coordinator, tabs, saved, conversations } = coordinatorWith(contentState())
+    tabs.get.mockResolvedValue({ id: 9, windowId: 19, url: OTHER_PAGE })
+    conversations.stopSelectionSession.mockImplementationOnce(() => stopping.promise)
+    await coordinator.initialize()
+    const pending = coordinator.routeSelection(selectionRequest(), sender(9, 19, OTHER_PAGE))
+    void pending.catch(() => undefined)
+    await vi.waitFor(() => expect(conversations.stopSelectionSession).toHaveBeenCalled())
+    const navigation = coordinator.onTabUpdated(9, 19, 'https://example.com/third')
+    stopping.resolve()
+    await expect(pending).rejects.toMatchObject({ code: 'UI_SESSION_STALE' })
+    await navigation
+    expect(saved()['9'].pageUrl).toBe('https://example.com/third')
+    expect(conversations.createSelection).not.toHaveBeenCalled()
+  })
+
+  it('does not overwrite navigation that occurs during recovery lookup', async () => {
+    const lookup = deferred<{ id: number; windowId: number; url: string }>()
+    const { coordinator, tabs, saved, conversations } = coordinatorWith(contentState())
+    tabs.get.mockImplementation(() => lookup.promise)
+    await coordinator.initialize()
+    const pending = coordinator.routeSelection(selectionRequest(), sender(9, 19, OTHER_PAGE))
+    void pending.catch(() => undefined)
+    await vi.waitFor(() => expect(tabs.get).toHaveBeenCalled())
+    const navigation = coordinator.onTabUpdated(9, 19, 'https://example.com/third')
+    lookup.resolve({ id: 9, windowId: 19, url: OTHER_PAGE })
+    await expect(pending).rejects.toMatchObject({ code: 'UI_SESSION_STALE' })
+    await navigation
+    expect(saved()['9'].pageUrl).toBe('https://example.com/third')
+    expect(conversations.createSelection).not.toHaveBeenCalled()
+  })
+
+  it('keeps the current session on a hash-only navigation', async () => {
+    const { coordinator, saved, conversations, content } = coordinatorWith(contentState())
+    await coordinator.initialize()
+    await coordinator.onTabUpdated(9, 19, PAGE_NORMALIZED + '#other')
+    expect(saved()['9'].selectionSessionId).toBe(10)
+    expect(conversations.deleteSelectionSession).not.toHaveBeenCalled()
+    await coordinator.publish(9, streamDelta)
+    expect(content.publish).toHaveBeenCalledWith(9, streamDelta)
+  })
+
   it('rejects a queued selection whose page identity is outdated', async () => {
-    const { coordinator, conversations } = coordinatorWith(contentState())
+    const { coordinator, conversations, tabs } = coordinatorWith(contentState())
+    tabs.get.mockResolvedValue({ id: 9, windowId: 19, url: OTHER_PAGE })
     await coordinator.initialize()
     await coordinator.onTabUpdated(9, 19, OTHER_PAGE)
 
@@ -861,7 +948,8 @@ describe('UiSessionCoordinator stale identity revalidation', () => {
   })
 
   it('rejects a queued toggle whose page identity is outdated', async () => {
-    const { coordinator, sidePanel } = coordinatorWith(contentState())
+    const { coordinator, sidePanel, tabs } = coordinatorWith(contentState())
+    tabs.get.mockResolvedValue({ id: 9, windowId: 19, url: OTHER_PAGE })
     await coordinator.initialize()
     await coordinator.onTabUpdated(9, 19, OTHER_PAGE)
 

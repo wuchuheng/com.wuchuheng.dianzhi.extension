@@ -10,6 +10,7 @@ export interface MessageListProps {
   messages: readonly MessageRecord[]
   mode: 'card' | 'chat'
   reasoningEnabled: boolean
+  showEmptyState?: boolean
   /** Render the time plus plain-text and Markdown copy actions on every message bubble. */
   showMeta?: boolean
   latestAssistantId?: number
@@ -208,6 +209,7 @@ export function MessageList({
   mode,
   reasoningEnabled,
   showMeta,
+  showEmptyState = true,
   latestAssistantId,
   onRetryMessage,
   smoothStreamingGrowth = false,
@@ -219,6 +221,7 @@ export function MessageList({
       ? messages.filter((message) => message.role === 'assistant').slice(-1)
       : messages
   if (visible.length === 0) {
+    if (!showEmptyState) return null
     return <div className="dz-empty">正在理解所选内容…</div>
   }
   const visibleLatestAssistantId = [...visible]

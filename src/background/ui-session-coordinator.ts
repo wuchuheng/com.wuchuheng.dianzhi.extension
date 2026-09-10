@@ -297,10 +297,38 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
 
   async function getOrCreateState(source: UiEventSource): Promise<TabSessionState> {
     const pageUrl = normalizePageUrl(source.pageUrl)
+    checkOpen(source.tabId)
+    const cachedPage = currentPages.get(source.tabId)
+    if (cachedPage !== undefined && cachedPage !== pageUrl) {
+      const epoch = handoffEpochs.get(source.tabId)
+      let tab: Awaited<ReturnType<UiSessionCoordinatorDependencies['tabs']['get']>>
+      try {
+        tab = await dependencies.tabs.get(source.tabId)
+      } catch {
+        await onTabRemoved(source.tabId, source.windowId)
+        throw stale(source.tabId)
+      }
+      checkOpen(source.tabId)
+      if (
+        currentPages.get(source.tabId) !== cachedPage ||
+        handoffEpochs.get(source.tabId) !== epoch ||
+        tab.id !== source.tabId ||
+        tab.windowId !== source.windowId ||
+        !tab.url ||
+        normalizePageUrl(tab.url) !== pageUrl
+      ) {
+        throw stale(source.tabId)
+      }
+      currentPages.set(source.tabId, pageUrl)
+      invalidateHandoff(source.tabId)
+      deliveryRoutes.delete(source.tabId)
+    }
+    assertSourceFresh(source)
     const existing = tabStates.get(source.tabId)
     const state = existing ?? freshState(source.tabId, source.windowId, pageUrl)
     state.windowId = source.windowId
     await resetForNavigation(state, pageUrl)
+    assertSourceFresh(source)
     tabStates.set(source.tabId, state)
     currentPages.set(source.tabId, pageUrl)
     return state
@@ -609,7 +637,6 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     source: UiEventSource
   ): Promise<ToolShortcutResult> {
     return runForTab(source.tabId, async () => {
-      assertSourceFresh(source)
       const state = await getOrCreateState(source)
       const target: UiSurface | null = panelOwnsTab(state)
         ? 'sidePanel'
@@ -679,7 +706,6 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   ): Promise<SurfaceStatusResponse> {
     const source = resolveContentSource(sender, request.requestId)
     return runForTab(source.tabId, async () => {
-      assertSourceFresh(source)
       const state = await getOrCreateState(source)
       if (request.payload.status === 'appeared') {
         state.contentUIAppeared = true
@@ -712,7 +738,6 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   ): Promise<SurfaceStatusResponse> {
     const source = await sourceFromPanel(panelBinding, request.requestId)
     return runForTab(source.tabId, async () => {
-      assertSourceFresh(source)
       const state = await getOrCreateState(source)
       if (request.payload.status === 'appeared') {
         panelWindows.add(state.windowId)
@@ -760,7 +785,6 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   ): Promise<SelectionRouteResult> {
     const source = resolveContentSource(sender, request.requestId)
     return runForTab(source.tabId, async () => {
-      assertSourceFresh(source)
       const state = await getOrCreateState(source)
       const target: UiSurface = panelOwnsTab(state) ? 'sidePanel' : 'contentScript'
       const expectedUrl = normalizePageUrl(source.pageUrl)
@@ -852,7 +876,6 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
     source: UiEventSource
   ): Promise<PanelToggleResult> {
     return runForTab(source.tabId, async () => {
-      assertSourceFresh(source)
       const state = await getOrCreateState(source)
       const expectedUrl = normalizePageUrl(source.pageUrl)
       if (windowHasPanel(state.windowId)) {
@@ -1033,16 +1056,17 @@ export function createUiSessionCoordinator(dependencies: UiSessionCoordinatorDep
   async function onTabUpdated(tabId: number, windowId: number, url: string): Promise<void> {
     // Invalidate an in-flight handoff before waiting for this tab's serialized work.
     const pageUrl = normalizePageUrl(url)
+    if (currentPages.get(tabId) === pageUrl) return
     currentPages.set(tabId, pageUrl)
     invalidateHandoff(tabId)
     deliveryRoutes.delete(tabId)
     await runForTab(tabId, async () => {
+      assertPage(tabId, pageUrl)
       const state = tabStates.get(tabId) ?? freshState(tabId, windowId, pageUrl)
       state.windowId = windowId
       await resetForNavigation(state, pageUrl)
       // A removed tab must reject without resurrecting its shared-maps entries.
-      checkOpen(tabId)
-      currentPages.set(tabId, pageUrl)
+      assertPage(tabId, pageUrl)
       tabStates.set(tabId, state)
       await persist()
     })

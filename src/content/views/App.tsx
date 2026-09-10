@@ -292,6 +292,7 @@ export function ContentApp({
             messages={snapshot?.messages ?? []}
             mode={state.mode}
             reasoningEnabled={reasoningEnabled}
+            showEmptyState={!state.error && !latestAssistant?.errorMessage}
           />
           {showSetup ? (
             <ProviderSetup

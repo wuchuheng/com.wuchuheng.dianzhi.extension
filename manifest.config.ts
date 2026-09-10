@@ -28,7 +28,7 @@ const crxManifest = defineManifest({
     page: 'src/options/index.html',
     open_in_tab: true,
   },
-  permissions: ['storage', 'offscreen', 'sidePanel'],
+  permissions: ['storage', 'offscreen', 'sidePanel', 'webNavigation'],
   host_permissions: ['http://*/*', 'https://*/*'],
   background: {
     service_worker: 'src/background/index.ts',

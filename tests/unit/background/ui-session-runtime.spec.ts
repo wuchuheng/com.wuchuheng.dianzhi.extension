@@ -285,6 +285,20 @@ describe('ui-session-runtime: Chrome event routing', () => {
     expect(coordinator.onTabUpdated).toHaveBeenCalledWith(9, 19, PAGE_2)
   })
 
+  it('routes URL-only navigation to the coordinator', () => {
+    const { chrome, tabs } = fakeChromeRuntime()
+    const coordinator = mockCoordinator()
+    const stop = registerUiSessionRuntime({
+      chromeApi: chrome,
+      coordinator,
+      sidePanelCommand: stubSidePanelEvent(),
+      sidePanelConversationUpdate: stubSidePanelEvent(),
+    })
+    tabs.onUpdated.emit(9, { url: PAGE_2 }, tab(9, 19, PAGE_2))
+    expect(coordinator.onTabUpdated).toHaveBeenCalledWith(9, 19, PAGE_2)
+    stop()
+  })
+
   it('routes tab removal with its window to the coordinator', async () => {
     const { chrome, tabs } = fakeChromeRuntime()
     const coordinator = mockCoordinator()
@@ -298,7 +312,7 @@ describe('ui-session-runtime: Chrome event routing', () => {
     expect(coordinator.onTabRemoved).toHaveBeenCalledWith(9, 19)
   })
 
-  it('ignores noncommitted and subframe updates', () => {
+  it('ignores updates without a URL', () => {
     const { chrome, tabs } = fakeChromeRuntime()
     const coordinator = mockCoordinator()
     registerUiSessionRuntime({
@@ -307,7 +321,7 @@ describe('ui-session-runtime: Chrome event routing', () => {
       sidePanelCommand: stubSidePanelEvent(),
       sidePanelConversationUpdate: stubSidePanelEvent(),
     })
-    tabs.onUpdated.emit(9, { status: 'complete', url: PAGE_2 }, tab(9, 19, PAGE_2))
+    tabs.onUpdated.emit(9, { status: 'complete' }, tab(9, 19, PAGE_2))
     tabs.onUpdated.emit(9, { title: 'title changed' }, tab(9, 19, PAGE))
     expect(coordinator.onTabUpdated).not.toHaveBeenCalled()
   })
@@ -535,6 +549,52 @@ describe('ui-session-runtime: panel sender to window resolution', () => {
 })
 
 describe('ui-session-runtime: typed request handlers', () => {
+  it('uses the current route for a verified same-document sender after SPA navigation', async () => {
+    const { chrome } = fakeChromeRuntime()
+    const getFrame = vi.fn(async () => ({ documentId: 'live-document', url: PAGE_2 }))
+    const chromeApi = { ...chrome, webNavigation: { getFrame } } as unknown as typeof chrome
+    const coordinator = mockCoordinator()
+    const handlers = createUiSessionEventHandlers({ chromeApi, coordinator })
+    await handlers.onSelectionRoute(
+      {
+        requestId: 'spa-route',
+        type: 'selection.route',
+        payload: { selectedText: 'selected', contextText: 'context' },
+      },
+      { ...sender(9, 19, PAGE_2), url: PAGE, frameId: 0, documentId: 'live-document' }
+    )
+    expect(coordinator.routeSelection).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ url: PAGE_2 })
+    )
+    expect(getFrame).toHaveBeenCalledWith({ tabId: 9, frameId: 0 })
+  })
+
+  it.each([
+    { documentId: 'new-document', url: PAGE_2 },
+    { documentId: 'old-document', url: 'https://example.com/third' },
+    null,
+  ])('rejects an outdated sender instead of borrowing the current tab URL: %j', async (frame) => {
+    const { chrome } = fakeChromeRuntime()
+    const chromeApi = {
+      ...chrome,
+      webNavigation: { getFrame: vi.fn(async () => frame) },
+    } as unknown as typeof chrome
+    const coordinator = mockCoordinator()
+    const handlers = createUiSessionEventHandlers({ chromeApi, coordinator })
+    await expect(
+      handlers.onSelectionRoute(
+        {
+          requestId: 'stale-route',
+          type: 'selection.route',
+          payload: { selectedText: 'selected', contextText: 'context' },
+        },
+        { ...sender(9, 19, PAGE_2), url: PAGE, frameId: 0, documentId: 'old-document' }
+      )
+    ).rejects.toMatchObject({ code: 'UI_SESSION_STALE' })
+    expect(coordinator.routeSelection).not.toHaveBeenCalled()
+  })
+
   it('parses content requests before calling content routes', async () => {
     const { chrome } = fakeChromeRuntime()
     const coordinator = mockCoordinator()
